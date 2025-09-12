@@ -1,0 +1,29 @@
+# Build directories
+build/
+cmake-build-*/
+*.o
+*.so
+*.a
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+*.log
+
+# Docker volumes
+postgres_data/
+redis_data/
+rabbitmq_data/
+
+# Dependencies
+node_modules/
+vendor/

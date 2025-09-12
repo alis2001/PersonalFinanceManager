@@ -1,0 +1,309 @@
+version: '3.8'
+
+services:
+  # Database Services
+  postgres:
+    image: postgres:15-alpine
+    container_name: finance-postgres
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${DB_EXTERNAL_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/database/init:/docker-entrypoint-initdb.d
+    networks:
+      - finance-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: finance-redis
+    env_file:
+      - .env
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - finance-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: finance-rabbitmq
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - finance-network
+    restart: unless-stopped
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+  # API Gateway (Node.js)
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    container_name: finance-gateway
+    env_file:
+      - .env
+    ports:
+      - "${GATEWAY_PORT}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_started
+      expense:
+        condition: service_started
+      income:
+        condition: service_started
+    environment:
+      - NODE_ENV=${APP_ENV}
+      - PORT=3000
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL}
+      - EXPENSE_SERVICE_URL=${EXPENSE_SERVICE_URL}
+      - INCOME_SERVICE_URL=${INCOME_SERVICE_URL}
+      - CATEGORY_SERVICE_URL=${CATEGORY_SERVICE_URL}
+      - ANALYTICS_ENGINE_URL=${ANALYTICS_ENGINE_URL}
+      - REPORTING_ENGINE_URL=${REPORTING_ENGINE_URL}
+      - ML_ENGINE_URL=${ML_ENGINE_URL}
+      - ENABLE_CORS=${ENABLE_CORS}
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW}
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS}
+    networks:
+      - finance-network
+    restart: unless-stopped
+
+  # Node.js Microservices
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    container_name: finance-auth
+    env_file:
+      - .env
+    ports:
+      - "${AUTH_SERVICE_PORT}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=${APP_ENV}
+      - PORT=3000
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRY=${JWT_EXPIRY}
+      - BCRYPT_ROUNDS=${BCRYPT_ROUNDS}
+      - SESSION_TIMEOUT=${SESSION_TIMEOUT}
+    networks:
+      - finance-network
+    restart: unless-stopped
+
+  expense:
+    build:
+      context: ./services/expense
+      dockerfile: Dockerfile
+    container_name: finance-expense
+    env_file:
+      - .env
+    ports:
+      - "${EXPENSE_SERVICE_PORT}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=${APP_ENV}
+      - PORT=3000
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+    networks:
+      - finance-network
+    restart: unless-stopped
+
+  income:
+    build:
+      context: ./services/income
+      dockerfile: Dockerfile
+    container_name: finance-income
+    env_file:
+      - .env
+    ports:
+      - "${INCOME_SERVICE_PORT}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=${APP_ENV}
+      - PORT=3000
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+    networks:
+      - finance-network
+    restart: unless-stopped
+
+  category:
+    build:
+      context: ./services/category
+      dockerfile: Dockerfile
+    container_name: finance-category
+    env_file:
+      - .env
+    ports:
+      - "${CATEGORY_SERVICE_PORT}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=${APP_ENV}
+      - PORT=3000
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    networks:
+      - finance-network
+    restart: unless-stopped
+
+  # C++ Engines
+  analytics-engine:
+    build:
+      context: ./services/analytics-engine
+      dockerfile: Dockerfile
+    container_name: finance-analytics
+    env_file:
+      - .env
+    ports:
+      - "${ANALYTICS_ENGINE_PORT}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - APP_ENV=${APP_ENV}
+    networks:
+      - finance-network
+    restart: unless-stopped
+
+  reporting-engine:
+    build:
+      context: ./services/reporting-engine
+      dockerfile: Dockerfile
+    container_name: finance-reporting
+    env_file:
+      - .env
+    ports:
+      - "${REPORTING_ENGINE_PORT}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - APP_ENV=${APP_ENV}
+    networks:
+      - finance-network
+    restart: unless-stopped
+
+  ml-engine:
+    build:
+      context: ./services/ml-engine
+      dockerfile: Dockerfile
+    container_name: finance-ml
+    env_file:
+      - .env
+    ports:
+      - "${ML_ENGINE_PORT}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - APP_ENV=${APP_ENV}
+    networks:
+      - finance-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+
+networks:
+  finance-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
