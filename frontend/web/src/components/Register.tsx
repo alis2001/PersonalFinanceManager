@@ -3,33 +3,101 @@ import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import '../styles/Register.css';
 
+interface RegisterFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  accountType: 'personal' | 'business';
+  companyName: string;
+  acceptTerms: boolean;
+}
+
 const Register: React.FC = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<RegisterFormData>({
     firstName: '',
     lastName: '',
     email: '',
     password: '',
+    confirmPassword: '',
+    accountType: 'personal',
+    companyName: '',
+    acceptTerms: false
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
+    
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: type === 'checkbox' ? checked : value,
     });
+  };
+
+  const validateForm = (): string | null => {
+    if (formData.password !== formData.confirmPassword) {
+      return 'Passwords do not match';
+    }
+    
+    if (formData.password.length < 8) {
+      return 'Password must be at least 8 characters long';
+    }
+    
+    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])/.test(formData.password)) {
+      return 'Password must contain uppercase, lowercase, number and special character';
+    }
+    
+    if (formData.accountType === 'business' && !formData.companyName.trim()) {
+      return 'Company name is required for business accounts';
+    }
+    
+    if (!formData.acceptTerms) {
+      return 'You must accept the terms and conditions';
+    }
+    
+    return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
 
-    const result = await authService.register(formData);
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setLoading(true);
+
+    const result = await authService.register({
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      email: formData.email,
+      password: formData.password,
+      confirmPassword: formData.confirmPassword,
+      accountType: formData.accountType,
+      companyName: formData.accountType === 'business' ? formData.companyName : undefined,
+      acceptTerms: formData.acceptTerms,
+      marketingConsent: false
+    });
     
     if (result.success) {
-      navigate('/dashboard');
+      if (result.requiresVerification) {
+        navigate('/verify-email', { 
+          state: { 
+            email: formData.email,
+            message: 'Please check your email for verification instructions.'
+          }
+        });
+      } else {
+        navigate('/dashboard');
+      }
     } else {
       setError(result.error || 'Registration failed');
     }
@@ -47,6 +115,37 @@ const Register: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="register-form">
           {error && <div className="error-message">{error}</div>}
+          
+          {/* Account Type Selection */}
+          <div className="form-group">
+            <label htmlFor="accountType">Account Type</label>
+            <select
+              id="accountType"
+              name="accountType"
+              value={formData.accountType}
+              onChange={handleChange}
+              required
+              disabled={loading}
+            >
+              <option value="personal">Personal Account</option>
+              <option value="business">Business Account</option>
+            </select>
+          </div>
+
+          {/* Company Name - Only for business accounts */}
+          {formData.accountType === 'business' && (
+            <div className="form-group">
+              <input
+                type="text"
+                name="companyName"
+                placeholder="Company Name"
+                value={formData.companyName}
+                onChange={handleChange}
+                required
+                disabled={loading}
+              />
+            </div>
+          )}
           
           <div className="form-row">
             <div className="form-group">
@@ -96,6 +195,34 @@ const Register: React.FC = () => {
               disabled={loading}
               minLength={8}
             />
+          </div>
+
+          <div className="form-group">
+            <input
+              type="password"
+              name="confirmPassword"
+              placeholder="Confirm Password"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              required
+              disabled={loading}
+            />
+          </div>
+
+          {/* Terms and Conditions */}
+          <div className="form-group checkbox-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                name="acceptTerms"
+                checked={formData.acceptTerms}
+                onChange={handleChange}
+                required
+                disabled={loading}
+              />
+              <span className="checkmark"></span>
+              I accept the <a href="/terms" target="_blank">Terms and Conditions</a>
+            </label>
           </div>
 
           <button 

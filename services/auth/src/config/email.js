@@ -1,4 +1,3 @@
-const nodemailer = require('nodemailer');
 const winston = require('winston');
 
 const logger = winston.createLogger({
@@ -12,9 +11,7 @@ const logger = winston.createLogger({
 
 class EmailConfig {
   constructor() {
-    this.transporter = null;
     this.config = this.getEmailConfig();
-    this.initializeTransporter();
   }
 
   getEmailConfig() {
@@ -40,56 +37,122 @@ class EmailConfig {
         loginVerificationExpiry: parseInt(process.env.LOGIN_VERIFICATION_EXPIRY_MINUTES) || 10,
         passwordResetExpiry: parseInt(process.env.PASSWORD_RESET_EXPIRY_HOURS) || 2,
         maxRetries: parseInt(process.env.EMAIL_MAX_RETRIES) || 3,
-        retryDelay: parseInt(process.env.EMAIL_RETRY_DELAY) || 5000
+        retryDelay: parseInt(process.env.EMAIL_RETRY_DELAY) || 5000,
+        rateLimitWindow: parseInt(process.env.EMAIL_RATE_LIMIT_WINDOW) || 60,
+        rateLimitMax: parseInt(process.env.EMAIL_RATE_LIMIT_MAX) || 10
       },
       urls: {
         frontend: process.env.FRONTEND_URL || 'http://localhost:3000',
         api: process.env.API_URL || 'http://localhost:8080'
+      },
+      branding: {
+        appName: process.env.APP_NAME || 'Finance Tracker',
+        companyName: process.env.COMPANY_NAME || 'Finance Tracker Inc',
+        supportEmail: process.env.SUPPORT_EMAIL || process.env.SMTP_USERNAME,
+        brandColor: process.env.BRAND_COLOR || '#1a1a1a',
+        logoUrl: process.env.LOGO_URL || null
       }
     };
   }
 
-  async initializeTransporter() {
-    try {
-      this.transporter = nodemailer.createTransporter(this.config.smtp);
-      logger.info('Email transporter initialized successfully');
-      
-      // Test connection
-      await this.verifyConnection();
-    } catch (error) {
-      logger.error('Failed to initialize email transporter:', error);
-      throw new Error('Email service initialization failed');
-    }
-  }
+  validateConfiguration() {
+    const errors = [];
 
-  async verifyConnection() {
-    try {
-      if (!this.transporter) {
-        throw new Error('Transporter not initialized');
-      }
-
-      await this.transporter.verify();
-      logger.info('SMTP connection verified successfully');
-      return true;
-    } catch (error) {
-      logger.error('SMTP connection verification failed:', error);
-      return false;
+    if (!this.config.smtp.auth.user) {
+      errors.push('SMTP_USERNAME is required');
     }
-  }
 
-  getTransporter() {
-    if (!this.transporter) {
-      throw new Error('Email transporter not initialized');
+    if (!this.config.smtp.auth.pass) {
+      errors.push('SMTP_PASSWORD is required');
     }
-    return this.transporter;
+
+    if (!this.config.urls.frontend) {
+      errors.push('FRONTEND_URL is required for email verification links');
+    }
+
+    if (errors.length > 0) {
+      logger.error('Email configuration validation failed:', errors);
+      throw new Error(`Email configuration errors: ${errors.join(', ')}`);
+    }
+
+    return true;
   }
 
   getConfig() {
     return this.config;
   }
 
+  getSmtpConfig() {
+    return this.config.smtp;
+  }
+
   getFromAddress() {
     return `"${this.config.from.name}" <${this.config.from.email}>`;
+  }
+
+  getBrandingConfig() {
+    return this.config.branding;
+  }
+
+  getUrlConfig() {
+    return this.config.urls;
+  }
+
+  getSettingsConfig() {
+    return this.config.settings;
+  }
+
+  // Helper methods for common email operations
+  getVerificationUrl(token) {
+    return `${this.config.urls.frontend}/verify-email?token=${token}`;
+  }
+
+  getPasswordResetUrl(token) {
+    return `${this.config.urls.frontend}/reset-password?token=${token}`;
+  }
+
+  getDashboardUrl() {
+    return `${this.config.urls.frontend}/dashboard`;
+  }
+
+  getLoginUrl() {
+    return `${this.config.urls.frontend}/login`;
+  }
+
+  // Rate limiting configuration
+  getEmailRateLimit(emailType) {
+    const rateLimits = {
+      email_verification: {
+        window: this.config.settings.rateLimitWindow,
+        max: 3 // Max 3 verification emails per window
+      },
+      password_reset: {
+        window: this.config.settings.rateLimitWindow,
+        max: 3 // Max 3 password reset emails per window
+      },
+      welcome: {
+        window: this.config.settings.rateLimitWindow,
+        max: 1 // Only 1 welcome email per window
+      },
+      default: {
+        window: this.config.settings.rateLimitWindow,
+        max: this.config.settings.rateLimitMax
+      }
+    };
+
+    return rateLimits[emailType] || rateLimits.default;
+  }
+
+  // Email type priority configuration
+  getEmailPriority(emailType) {
+    const highPriorityTypes = [
+      'email_verification',
+      'password_reset',
+      'login_verification',
+      'security_alert'
+    ];
+
+    return highPriorityTypes.includes(emailType) ? 'high' : 'normal';
   }
 }
 
