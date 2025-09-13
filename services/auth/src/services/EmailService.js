@@ -25,6 +25,15 @@ class EmailService {
         return false;
       }
 
+      // Debug SMTP configuration
+      logger.info('SMTP Configuration:', {
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT,
+        secure: process.env.SMTP_SECURE === 'true',
+        user: process.env.SMTP_USERNAME,
+        passwordLength: process.env.SMTP_PASSWORD.length
+      });
+
       this.transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.SMTP_PORT) || 587,
@@ -43,7 +52,15 @@ class EmailService {
       logger.info('Email service initialized successfully');
       return true;
     } catch (error) {
-      logger.error('Failed to initialize email service:', error.message);
+      // ENHANCED ERROR LOGGING
+      logger.error('Failed to initialize email service:', {
+        message: error.message,
+        code: error.code,
+        command: error.command,
+        response: error.response,
+        responseCode: error.responseCode,
+        stack: error.stack
+      });
       this.initialized = false;
       return false;
     }
@@ -55,11 +72,18 @@ class EmailService {
     }
     
     try {
+      logger.info('Verifying SMTP connection...');
       await this.transporter.verify();
       logger.info('SMTP connection verified successfully');
       return true;
     } catch (error) {
-      logger.error('SMTP connection verification failed:', error.message);
+      logger.error('SMTP connection verification failed:', {
+        message: error.message,
+        code: error.code,
+        command: error.command,
+        response: error.response,
+        responseCode: error.responseCode
+      });
       throw error;
     }
   }
@@ -304,12 +328,14 @@ class EmailService {
         text
       };
 
+      logger.info('Attempting to send email:', { to, subject });
       const result = await this.transporter.sendMail(mailOptions);
       
       logger.info('Email sent successfully', {
         to,
         subject,
-        messageId: result.messageId
+        messageId: result.messageId,
+        response: result.response
       });
 
       return {
@@ -317,7 +343,15 @@ class EmailService {
         messageId: result.messageId
       };
     } catch (error) {
-      logger.error('Failed to send email:', error);
+      logger.error('Failed to send email:', {
+        to,
+        subject,
+        message: error.message,
+        code: error.code,
+        command: error.command,
+        response: error.response,
+        responseCode: error.responseCode
+      });
       return {
         success: false,
         error: error.message

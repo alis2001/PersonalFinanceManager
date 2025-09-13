@@ -1,109 +1,386 @@
+/* Clean Professional Welcome Page - Permanent Popup */
 .welcome {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #fafafa;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
   padding: 20px;
+  position: relative;
+  overflow: hidden;
 }
 
-.welcome-content {
+/* Permanent Popup Overlay */
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(135deg, #1a1a1a 0%, #333333 50%, #1a1a1a 100%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+}
+
+/* Popup Content */
+.popup-content {
   text-align: center;
-  max-width: 600px;
-  background: #ffffff;
-  padding: 80px 60px;
-  border-radius: 2px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border: 1px solid #f0f0f0;
+  color: #ffffff;
+  max-width: 900px;
+  padding: 80px;
+  position: relative;
+  opacity: 1;
+  transform: scale(1);
 }
 
-.logo {
+/* Popup Header */
+.popup-header {
   margin-bottom: 50px;
 }
 
-.logo-icon {
-  font-size: 2.5rem;
-  margin-bottom: 15px;
-  display: block;
-  color: #1a1a1a;
+.logo-popup {
+  margin-bottom: 60px;
+  opacity: 0;
+  animation: elementFadeIn 1s ease-out 0.5s forwards;
 }
 
-.logo h1 {
-  color: #1a1a1a;
-  font-size: 2.8rem;
-  font-weight: 300;
-  margin: 0;
-  letter-spacing: -0.01em;
+.popup-title {
+  font-size: 4rem;
+  font-weight: 200;
+  margin: 0 0 20px 0;
+  background: linear-gradient(45deg, #ffffff, #f0f0f0, #ffffff);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientShift 4s ease-in-out infinite;
+  letter-spacing: -0.02em;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 
-.tagline {
-  color: #666666;
-  font-size: 1.1rem;
-  margin-bottom: 60px;
-  font-weight: 400;
+.title-underline {
+  width: 100px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #ffffff, transparent);
+  margin: 0 auto;
+  opacity: 0;
+  animation: underlineGrow 1s ease-out 1s forwards;
+}
+
+/* Slogans */
+.slogan-container {
+  margin: 70px 0;
+}
+
+.main-slogan {
+  font-size: 2.2rem;
+  font-weight: 300;
+  color: #ffffff;
+  margin-bottom: 50px;
+  opacity: 0;
+  animation: elementFadeIn 1s ease-out 1.5s forwards;
+  text-shadow: 0 2px 20px rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.02em;
+}
+
+.sub-slogans {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  margin: 40px 0;
+}
+
+.sub-slogan {
+  font-size: 1.2rem;
+  color: #cccccc;
+  font-weight: 300;
+  opacity: 0;
+  transform: translateY(30px);
+  margin: 0;
+  font-style: normal;
   letter-spacing: 0.01em;
 }
 
-.features {
+.sub-slogan.delay-1 {
+  animation: slideUpFadeIn 0.8s ease-out 2.2s forwards;
+}
+
+.sub-slogan.delay-2 {
+  animation: slideUpFadeIn 0.8s ease-out 2.7s forwards;
+}
+
+.sub-slogan.delay-3 {
+  animation: slideUpFadeIn 0.8s ease-out 3.2s forwards;
+}
+
+/* Popup Features */
+.popup-features {
   display: flex;
   justify-content: center;
-  margin-bottom: 50px;
-  gap: 60px;
+  gap: 80px;
+  margin: 60px 0;
+  flex-wrap: wrap;
 }
 
-.feature {
-  flex: none;
-  padding: 20px 0;
-  max-width: 120px;
-}
-
-.feature span {
-  font-size: 1.5rem;
-  display: block;
-  margin-bottom: 15px;
-  color: #333333;
-}
-
-.feature h3 {
-  color: #1a1a1a;
-  font-size: 0.95rem;
-  font-weight: 500;
-  margin: 0;
-  letter-spacing: 0.01em;
-}
-
-.btn-primary {
-  background: #1a1a1a;
+.popup-feature {
+  opacity: 0;
+  transform: translateY(20px);
   color: #ffffff;
-  border: none;
-  padding: 18px 40px;
+}
+
+.popup-feature.delay-4 {
+  animation: slideUpFadeIn 0.6s ease-out 3.7s forwards;
+}
+
+.popup-feature.delay-5 {
+  animation: slideUpFadeIn 0.6s ease-out 4s forwards;
+}
+
+.popup-feature.delay-6 {
+  animation: slideUpFadeIn 0.6s ease-out 4.3s forwards;
+}
+
+.feature-box {
+  padding: 20px 30px;
+  border: 1px solid #444444;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.feature-box:hover {
+  border-color: #666666;
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+.feature-box h4 {
+  margin: 0;
+  font-weight: 400;
   font-size: 1rem;
-  font-weight: 500;
-  border-radius: 2px;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+}
+
+/* Loading Indicator */
+.loading-indicator {
+  margin: 60px 0 40px 0;
+  opacity: 0;
+}
+
+.loading-indicator.delay-7 {
+  animation: elementFadeIn 0.8s ease-out 4.8s forwards;
+}
+
+.loading-text {
+  font-size: 1rem;
+  color: #aaaaaa;
+  margin-bottom: 20px;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+}
+
+.progress-bar {
+  width: 300px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 auto;
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffffff, #f0f0f0);
+  width: 0;
+  border-radius: 1px;
+  animation: progressFill 1.5s ease-out 5s forwards;
+}
+
+/* Beautiful Action Buttons in Popup - Delicate Design */
+.popup-action-buttons {
+  display: flex;
+  gap: 40px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 50px;
+  opacity: 0;
+}
+
+.popup-action-buttons.delay-8 {
+  animation: slideUpFadeIn 0.8s ease-out 6.5s forwards;
+}
+
+.btn-primary, .btn-secondary {
+  padding: 25px 35px;
+  font-size: 1rem;
+  font-weight: 400;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  letter-spacing: 0.01em;
-  text-transform: none;
+  transition: all 0.3s ease;
+  letter-spacing: 0.5px;
+  min-width: 160px;
+  font-family: inherit;
+  position: relative;
+  color: #ffffff;
+  border: 1px solid #444444;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
 }
 
 .btn-primary:hover {
-  background: #333333;
-  transform: translateY(-0.5px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-color: #666666;
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
 }
 
+.btn-secondary {
+  color: #ffffff;
+  border: 1px solid #444444;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+}
+
+.btn-secondary:hover {
+  border-color: #666666;
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+/* Animations */
+@keyframes elementFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUpFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes underlineGrow {
+  from {
+    opacity: 0;
+    width: 0;
+  }
+  to {
+    opacity: 1;
+    width: 100px;
+  }
+}
+
+@keyframes progressFill {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Mobile Responsive */
 @media (max-width: 768px) {
-  .welcome-content {
-    padding: 60px 40px;
-    margin: 10px;
+  .popup-content {
+    padding: 50px 30px;
   }
   
-  .features {
+  .popup-title {
+    font-size: 2.8rem;
+  }
+  
+  .main-slogan {
+    font-size: 1.8rem;
+  }
+  
+  .sub-slogan {
+    font-size: 1rem;
+  }
+  
+  .popup-features {
     gap: 40px;
+    flex-direction: column;
+    align-items: center;
   }
   
-  .logo h1 {
+  .feature-box {
+    padding: 15px 25px;
+  }
+  
+  .progress-bar {
+    width: 250px;
+  }
+  
+  .popup-action-buttons {
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  
+  .btn-primary, .btn-secondary {
+    width: 250px;
+  }
+}
+
+@media (max-width: 480px) {
+  .popup-title {
     font-size: 2.2rem;
+  }
+  
+  .main-slogan {
+    font-size: 1.5rem;
+  }
+  
+  .sub-slogan {
+    font-size: 0.95rem;
+  }
+  
+  .popup-features {
+    gap: 30px;
+  }
+  
+  .progress-bar {
+    width: 200px;
+  }
+  
+  .popup-content {
+    padding: 40px 25px;
+  }
+  
+  .popup-action-buttons {
+    gap: 20px;
+  }
+  
+  .btn-primary, .btn-secondary {
+    width: 130px;
+    padding: 16px 25px;
+    font-size: 0.9rem;
   }
 }

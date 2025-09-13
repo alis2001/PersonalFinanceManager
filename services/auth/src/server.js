@@ -34,11 +34,15 @@ const initializeConnections = async () => {
     await connectRedis();
     logger.info('Database and Redis connections established');
 
-    // Initialize email service (don't fail if it doesn't work)
+    // FIXED EMAIL SERVICE INITIALIZATION
     logger.info('Initializing email service...');
     try {
-      await emailService.initialize();
-      logger.info('Email service initialized successfully');
+      const emailInitialized = await emailService.initialize();
+      if (emailInitialized) {
+        logger.info('Email service initialized successfully');
+      } else {
+        logger.warn('Email service initialization failed, continuing without email functionality');
+      }
     } catch (error) {
       logger.warn('Email service initialization failed, continuing without email functionality:', error.message);
     }
