@@ -277,6 +277,57 @@ class AuthService {
     }
   }
 
+  // MISSING METHOD - Added to fix controller calls
+  async findUserByResetToken(token) {
+    try {
+      const result = await db.query(
+        'SELECT * FROM users WHERE verification_token = $1 AND email_verification_expires > NOW()',
+        [token]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      logger.error('Error finding user by reset token:', error);
+      throw new Error('Database error');
+    }
+  }
+
+  // MISSING METHOD - Added to fix controller calls
+  async resetPassword(userId, newPassword) {
+    const client = await db.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Hash the new password
+      const passwordHash = await hashPassword(newPassword);
+
+      // Update password and clear reset tokens
+      await client.query(
+        `UPDATE users SET 
+         password_hash = $1,
+         verification_token = NULL,
+         email_verification_expires = NULL,
+         failed_login_attempts = 0,
+         locked_until = NULL,
+         updated_at = NOW()
+         WHERE id = $2`,
+        [passwordHash, userId]
+      );
+
+      await client.query('COMMIT');
+
+      logger.info('Password reset successfully', { userId });
+
+      return { success: true };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Password reset failed:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   // Resend verification email
   async resendVerificationEmail(email) {
     const normalizedEmail = normalizeEmail(email);

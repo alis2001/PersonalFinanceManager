@@ -15,12 +15,22 @@ const Login: React.FC = () => {
     setLoading(true);
     setError('');
 
-    const result = await authService.login(email, password);
+    const result = await authService.login({ email, password });
     
     if (result.success) {
       navigate('/dashboard');
     } else {
-      setError(result.error || 'Login failed');
+      // Handle email verification required
+      if (result.requiresVerification) {
+        navigate('/verify-email', { 
+          state: { 
+            email: email,
+            message: result.message || 'Please verify your email address before logging in.'
+          }
+        });
+      } else {
+        setError(result.error || 'Login failed');
+      }
     }
     
     setLoading(false);
