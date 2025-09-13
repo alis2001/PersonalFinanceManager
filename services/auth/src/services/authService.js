@@ -93,8 +93,13 @@ class AuthService {
 
       await client.query('COMMIT');
 
-      // Send verification email (async)
-      this.sendVerificationEmailAsync(user, emailVerificationToken, emailVerificationCode);
+      // Send verification email (async, non-blocking)
+      setImmediate(() => {
+        this.sendVerificationEmailAsync(user, emailVerificationToken, emailVerificationCode)
+          .catch(error => {
+            logger.error('Background email sending failed:', error);
+          });
+      });
 
       logger.info('User registered successfully', {
         userId: user.id,
@@ -328,7 +333,6 @@ class AuthService {
     }
   }
 
-  // Resend verification email
   async resendVerificationEmail(email) {
     const normalizedEmail = normalizeEmail(email);
 
@@ -336,12 +340,6 @@ class AuthService {
       const user = await this.findUserByEmail(normalizedEmail);
       if (!user || user.email_verified) {
         throw new Error('User not found or already verified');
-      }
-
-      // Check rate limiting
-      const rateLimit = await this.checkEmailVerificationRateLimit(user.id);
-      if (rateLimit.isLimitExceeded) {
-        throw new Error('Verification emails are limited. Please try again later.');
       }
 
       // Generate new tokens
@@ -352,28 +350,33 @@ class AuthService {
       // Update verification token
       await db.query(
         `UPDATE users SET 
-         email_verification_token = $1, 
-         email_verification_expires = $2,
-         updated_at = NOW()
-         WHERE id = $3`,
+        email_verification_token = $1, 
+        email_verification_expires = $2,
+        updated_at = NOW()
+        WHERE id = $3`,
         [emailVerificationToken, expiresAt, user.id]
       );
 
       // Update verification record
       await db.query(
         `UPDATE email_verifications SET 
-         verification_token = $1, 
-         expires_at = $2,
-         attempts = attempts + 1,
-         updated_at = NOW()
-         WHERE user_id = $3 AND verification_type = $4 AND verified_at IS NULL`,
+        verification_token = $1, 
+        expires_at = $2,
+        attempts = attempts + 1,
+        updated_at = NOW()
+        WHERE user_id = $3 AND verification_type = $4 AND verified_at IS NULL`,
         [emailVerificationCode, expiresAt, user.id, VERIFICATION_TYPES.EMAIL_VERIFICATION]
       );
 
-      // Send verification email (async)
-      this.sendVerificationEmailAsync(user, emailVerificationToken, emailVerificationCode);
+      // Send verification email (async, non-blocking)
+      setImmediate(() => {
+        this.sendVerificationEmailAsync(user, emailVerificationToken, emailVerificationCode)
+          .catch(error => {
+            logger.error('Background resend email failed:', error);
+          });
+      });
 
-      logger.info('Verification email resent', {
+      logger.info('Verification email resend initiated', {
         userId: user.id,
         email: normalizedEmail
       });
@@ -392,80 +395,85 @@ class AuthService {
   // Async email sending methods
   async sendVerificationEmailAsync(user, token, code) {
     try {
-      // Log email attempt
-      const emailLogId = await emailLogger.logEmailAttempt(
-        user.id, 
-        user.email, 
-        emailLogger.getEmailTypes().EMAIL_VERIFICATION,
-        'Email Verification Required'
-      );
+      logger.info('Attempting to send verification email', { 
+        userId: user.id, 
+        email: user.email 
+      });
 
-      // Check rate limit
-      const rateLimit = emailConfig.getEmailRateLimit('email_verification');
-      const rateLimitCheck = await emailLogger.checkEmailRateLimit(
-        user.id, 
-        emailLogger.getEmailTypes().EMAIL_VERIFICATION,
-        rateLimit.window,
-        rateLimit.max
-      );
-
-      if (rateLimitCheck.isLimitExceeded) {
-        await emailLogger.updateEmailStatus(emailLogId, 'failed', null, 'Rate limit exceeded');
-        return;
-      }
-
-      // Send email
       const result = await emailService.sendEmailVerification(user, token, code);
       
       if (result.success) {
-        await emailLogger.updateEmailStatus(emailLogId, 'sent', result.messageId);
+        logger.info('Verification email sent successfully', { 
+          userId: user.id, 
+          messageId: result.messageId 
+        });
       } else {
-        await emailLogger.updateEmailStatus(emailLogId, 'failed', null, result.error);
+        logger.warn('Failed to send verification email, but registration continues', { 
+          userId: user.id, 
+          error: result.error 
+        });
       }
+      
+      return result;
     } catch (error) {
-      logger.error('Failed to send verification email:', error);
+      logger.error('Email service error, but registration continues:', error);
+      return { success: false, error: error.message };
     }
   }
 
   async sendWelcomeEmailAsync(user) {
     try {
-      const emailLogId = await emailLogger.logEmailAttempt(
-        user.id, 
-        user.email, 
-        emailLogger.getEmailTypes().WELCOME,
-        'Welcome to Finance Tracker'
-      );
+      logger.info('Attempting to send welcome email', { 
+        userId: user.id, 
+        email: user.email 
+      });
 
       const result = await emailService.sendWelcomeEmail(user);
       
       if (result.success) {
-        await emailLogger.updateEmailStatus(emailLogId, 'sent', result.messageId);
+        logger.info('Welcome email sent successfully', { 
+          userId: user.id, 
+          messageId: result.messageId 
+        });
       } else {
-        await emailLogger.updateEmailStatus(emailLogId, 'failed', null, result.error);
+        logger.warn('Failed to send welcome email', { 
+          userId: user.id, 
+          error: result.error 
+        });
       }
+      
+      return result;
     } catch (error) {
-      logger.error('Failed to send welcome email:', error);
+      logger.error('Welcome email service error:', error);
+      return { success: false, error: error.message };
     }
   }
 
   async sendPasswordResetEmailAsync(user, token, requestDetails) {
     try {
-      const emailLogId = await emailLogger.logEmailAttempt(
-        user.id, 
-        user.email, 
-        emailLogger.getEmailTypes().PASSWORD_RESET,
-        'Password Reset Request'
-      );
+      logger.info('Attempting to send password reset email', { 
+        userId: user.id, 
+        email: user.email 
+      });
 
       const result = await emailService.sendPasswordReset(user, token);
       
       if (result.success) {
-        await emailLogger.updateEmailStatus(emailLogId, 'sent', result.messageId);
+        logger.info('Password reset email sent successfully', { 
+          userId: user.id, 
+          messageId: result.messageId 
+        });
       } else {
-        await emailLogger.updateEmailStatus(emailLogId, 'failed', null, result.error);
+        logger.warn('Failed to send password reset email', { 
+          userId: user.id, 
+          error: result.error 
+        });
       }
+      
+      return result;
     } catch (error) {
-      logger.error('Failed to send password reset email:', error);
+      logger.error('Password reset email service error:', error);
+      return { success: false, error: error.message };
     }
   }
 

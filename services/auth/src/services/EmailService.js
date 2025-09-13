@@ -13,12 +13,19 @@ const logger = winston.createLogger({
 class EmailService {
   constructor() {
     this.transporter = null;
-    this.initializeTransporter();
+    this.initialized = false;
   }
 
-  async initializeTransporter() {
+  async initialize() {
+    if (this.initialized) return true;
+    
     try {
-      this.transporter = nodemailer.createTransporter({
+      if (!process.env.SMTP_USERNAME || !process.env.SMTP_PASSWORD) {
+        logger.warn('SMTP credentials not provided, email service disabled');
+        return false;
+      }
+
+      this.transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.SMTP_PORT) || 587,
         secure: process.env.SMTP_SECURE === 'true',
@@ -32,25 +39,38 @@ class EmailService {
       });
 
       await this.verifyConnection();
+      this.initialized = true;
       logger.info('Email service initialized successfully');
+      return true;
     } catch (error) {
-      logger.error('Failed to initialize email service:', error);
-      throw new Error('Email service initialization failed');
+      logger.error('Failed to initialize email service:', error.message);
+      this.initialized = false;
+      return false;
     }
   }
 
   async verifyConnection() {
+    if (!this.transporter) {
+      throw new Error('Transporter not initialized');
+    }
+    
     try {
       await this.transporter.verify();
       logger.info('SMTP connection verified successfully');
       return true;
     } catch (error) {
-      logger.error('SMTP connection verification failed:', error);
-      return false;
+      logger.error('SMTP connection verification failed:', error.message);
+      throw error;
     }
   }
 
   async sendEmailVerification(user, verificationToken, verificationCode) {
+    const initialized = await this.initialize();
+    if (!initialized) {
+      logger.warn('Email service not initialized, skipping verification email');
+      return { success: false, error: 'Email service not available' };
+    }
+
     const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
     
     const htmlContent = `
@@ -60,13 +80,13 @@ class EmailService {
         <meta charset="utf-8">
         <title>Verify Your Email - ${process.env.APP_NAME || 'Finance Tracker'}</title>
         <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #1a1a1a; color: white; padding: 30px; text-align: center; }
-            .content { padding: 30px; background: #f9f9f9; }
+            .header { background: #1a1a1a; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { padding: 30px; background: #f9f9f9; border-radius: 0 0 8px 8px; }
             .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
             .code { background: white; border: 2px dashed #1a1a1a; padding: 20px; text-align: center; margin: 20px 0; }
-            .code-text { font-size: 24px; font-weight: bold; letter-spacing: 3px; color: #1a1a1a; }
+            .code-text { font-size: 24px; font-weight: bold; letter-spacing: 3px; color: #1a1a1a; font-family: monospace; }
         </style>
     </head>
     <body>
@@ -127,6 +147,12 @@ class EmailService {
   }
 
   async sendWelcomeEmail(user) {
+    const initialized = await this.initialize();
+    if (!initialized) {
+      logger.warn('Email service not initialized, skipping welcome email');
+      return { success: false, error: 'Email service not available' };
+    }
+
     const htmlContent = `
     <!DOCTYPE html>
     <html>
@@ -134,10 +160,10 @@ class EmailService {
         <meta charset="utf-8">
         <title>Welcome - ${process.env.APP_NAME || 'Finance Tracker'}</title>
         <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #1a1a1a; color: white; padding: 30px; text-align: center; }
-            .content { padding: 30px; background: #f9f9f9; }
+            .header { background: #1a1a1a; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { padding: 30px; background: #f9f9f9; border-radius: 0 0 8px 8px; }
             .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
         </style>
     </head>
@@ -195,6 +221,12 @@ class EmailService {
   }
 
   async sendPasswordReset(user, resetToken) {
+    const initialized = await this.initialize();
+    if (!initialized) {
+      logger.warn('Email service not initialized, skipping password reset email');
+      return { success: false, error: 'Email service not available' };
+    }
+
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
     
     const htmlContent = `
@@ -204,10 +236,10 @@ class EmailService {
         <meta charset="utf-8">
         <title>Password Reset - ${process.env.APP_NAME || 'Finance Tracker'}</title>
         <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #dc3545; color: white; padding: 30px; text-align: center; }
-            .content { padding: 30px; background: #f9f9f9; }
+            .header { background: #dc3545; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { padding: 30px; background: #f9f9f9; border-radius: 0 0 8px 8px; }
             .button { display: inline-block; background: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
             .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
         </style>
@@ -258,6 +290,11 @@ class EmailService {
   }
 
   async sendEmail({ to, subject, html, text }) {
+    const initialized = await this.initialize();
+    if (!initialized) {
+      return { success: false, error: 'Email service not available' };
+    }
+
     try {
       const mailOptions = {
         from: `"${process.env.SMTP_FROM_NAME || 'Finance Tracker'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USERNAME}>`,

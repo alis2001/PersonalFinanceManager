@@ -5,7 +5,7 @@
 -- Create demo user (for testing purposes)
 INSERT INTO users (id, email, password_hash, first_name, last_name, status, email_verified) 
 VALUES (
-    'demo-user-uuid-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000001'::uuid,
     'demo@financetracker.com',
     crypt('DemoPassword123!', gen_salt('bf', 12)),
     'Demo',

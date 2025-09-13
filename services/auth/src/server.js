@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const healthRoutes = require('./routes/health');
 const { connectDatabase, connectRedis } = require('./config/database');
 const { requestLogger, errorHandler } = require('./middleware/common');
+const emailService = require('./services/EmailService');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -28,9 +29,20 @@ const logger = winston.createLogger({
 // Initialize database connections
 const initializeConnections = async () => {
   try {
+    logger.info('Initializing database connections...');
     await connectDatabase();
     await connectRedis();
     logger.info('Database and Redis connections established');
+
+    // Initialize email service (don't fail if it doesn't work)
+    logger.info('Initializing email service...');
+    try {
+      await emailService.initialize();
+      logger.info('Email service initialized successfully');
+    } catch (error) {
+      logger.warn('Email service initialization failed, continuing without email functionality:', error.message);
+    }
+
   } catch (error) {
     logger.error('Failed to connect to databases:', error);
     process.exit(1);
@@ -107,6 +119,7 @@ const startServer = async () => {
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
     logger.info(`Redis: ${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`);
+    logger.info(`Email Service: ${process.env.SMTP_USERNAME ? 'Configured with ' + process.env.SMTP_USERNAME : 'Not configured'}`);
   });
 };
 
