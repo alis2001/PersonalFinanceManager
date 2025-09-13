@@ -1,7 +1,7 @@
 {
   "name": "finance-auth",
   "version": "1.0.0",
-  "description": "Finance Tracker Authentication Service",
+  "description": "Finance Tracker Enhanced Authentication Service with Email Verification",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -19,15 +19,35 @@
     "pg": "^8.11.3",
     "redis": "^4.6.10",
     "joi": "^17.11.0",
-    "express-rate-limit": "^7.1.5"
+    "express-rate-limit": "^7.1.5",
+    "nodemailer": "^6.9.7",
+    "crypto": "^1.0.1",
+    "validator": "^13.11.0",
+    "express-validator": "^7.0.1",
+    "rate-limiter-flexible": "^3.0.8",
+    "moment": "^2.29.4",
+    "uuid": "^9.0.1",
+    "handlebars": "^4.7.8",
+    "html-to-text": "^9.0.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",
-    "jest": "^29.7.0"
+    "jest": "^29.7.0",
+    "@types/node": "^20.8.0",
+    "supertest": "^6.3.3"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "author": "Finance Tracker Team",
-  "license": "MIT"
+  "license": "MIT",
+  "keywords": [
+    "finance",
+    "authentication",
+    "email-verification",
+    "jwt",
+    "nodejs",
+    "express",
+    "microservice"
+  ]
 }
