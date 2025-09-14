@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';  // ← MAKE SURE THIS IS HERE
 import authService from '../services/authService';
 import expenseService from '../services/expenseService';
 import type { Expense } from '../services/expenseService';
@@ -143,8 +143,9 @@ const Dashboard: React.FC = () => {
   };
 
   const handleViewAnalytics = () => {
-    console.log('View analytics clicked');
-  };
+  console.log('Navigating to analytics dashboard...');
+  navigate('/analytics');
+};
 
   const handleManageCategories = () => {
     setShowManageCategories(true);

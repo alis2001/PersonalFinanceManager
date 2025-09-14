@@ -435,6 +435,298 @@ async def _get_top_categories(user_id: str, date_range: dict) -> dict:
         "income": income_summaries
     }
 
+async def _get_period_comparison(user_id: str, date_range: dict, period: PeriodType) -> dict:
+    """Get period-over-period comparison"""
+    # Calculate previous period dates
+    days_diff = (date_range["end"] - date_range["start"]).days
+    previous_end = date_range["start"] - timedelta(days=1)
+    previous_start = previous_end - timedelta(days=days_diff)
+    
+    # Get previous period data
+    previous_data = await _get_overview_data(user_id, {
+        "start": previous_start, 
+        "end": previous_end
+    })
+    
+    # Calculate changes
+    current_expenses = float(await _get_overview_data(user_id, date_range)["total_expenses"])
+    previous_expenses = float(previous_data["total_expenses"])
+    
+    expense_change = ((current_expenses - previous_expenses) / previous_expenses * 100) if previous_expenses > 0 else 0
+    
+    return {
+        "previous_period_expenses": previous_expenses,
+        "expense_change_percentage": expense_change,
+        "comparison_period": f"{previous_start} to {previous_end}"
+    }
+
+async def _get_category_breakdown(user_id: str, date_range: dict, category_ids: List[str], group_by_type: bool) -> List[CategorySummary]:
+    """Get detailed category breakdown"""
+    category_filter = ""
+    params = [user_id, date_range["start"], date_range["end"]]
+    
+    if category_ids:
+        placeholders = ",".join([f"${i+4}" for i in range(len(category_ids))])
+        category_filter = f" AND c.id IN ({placeholders})"
+        params.extend(category_ids)
+    
+    query = f"""
+    SELECT 
+        c.id as category_id,
+        c.name as category_name,
+        c.type as category_type,
+        COALESCE(SUM(e.amount), 0) as total_amount,
+        COALESCE(COUNT(e.id), 0) as transaction_count,
+        COALESCE(AVG(e.amount), 0) as avg_amount
+    FROM categories c
+    LEFT JOIN expenses e ON c.id = e.category_id 
+        AND e.user_id = $1
+        AND e.transaction_date BETWEEN $2 AND $3
+    WHERE c.user_id = $1 AND c.type IN ('expense', 'both')
+    {category_filter}
+    GROUP BY c.id, c.name, c.type
+    HAVING COALESCE(SUM(e.amount), 0) > 0
+    ORDER BY total_amount DESC
+    """
+    
+    results = await execute_query(query, *params)
+    
+    # Calculate total for percentages
+    total_amount = sum(row["total_amount"] for row in results)
+    
+    return [
+        CategorySummary(
+            category_id=str(row["category_id"]),
+            category_name=row["category_name"],
+            total_amount=Decimal(str(row["total_amount"])),
+            transaction_count=row["transaction_count"],
+            average_amount=Decimal(str(row["avg_amount"])),
+            percentage_of_total=float(row["total_amount"]) / total_amount * 100 if total_amount > 0 else 0
+        )
+        for row in results
+    ]
+
+async def _get_category_time_series(user_id: str, date_range: dict, category_ids: List[str], period: PeriodType) -> List[TimePeriodData]:
+    """Get category time series data"""
+    # Determine date truncation based on period
+    date_trunc = {
+        PeriodType.daily: "day",
+        PeriodType.weekly: "week", 
+        PeriodType.monthly: "month",
+        PeriodType.quarterly: "quarter",
+        PeriodType.yearly: "year"
+    }.get(period, "day")
+    
+    category_filter = ""
+    params = [user_id, date_range["start"], date_range["end"]]
+    
+    if category_ids:
+        placeholders = ",".join([f"${i+4}" for i in range(len(category_ids))])
+        category_filter = f" AND e.category_id IN ({placeholders})"
+        params.extend(category_ids)
+    
+    query = f"""
+    SELECT 
+        DATE_TRUNC('{date_trunc}', e.transaction_date) as period,
+        SUM(e.amount) as total_amount,
+        COUNT(e.id) as transaction_count
+    FROM expenses e
+    WHERE e.user_id = $1
+        AND e.transaction_date BETWEEN $2 AND $3
+        {category_filter}
+    GROUP BY DATE_TRUNC('{date_trunc}', e.transaction_date)
+    ORDER BY period
+    """
+    
+    results = await execute_query(query, *params)
+    
+    return [
+        TimePeriodData(
+            period=row["period"].isoformat(),
+            amount=Decimal(str(row["total_amount"])),
+            transaction_count=row["transaction_count"],
+            period_type=period
+        )
+        for row in results
+    ]
+
+async def _generate_category_charts(categories: List[CategorySummary], time_series: List[TimePeriodData]) -> List[ChartData]:
+    """Generate category charts"""
+    charts = []
+    
+    # Category spending breakdown
+    if categories:
+        charts.append(ChartData(
+            chart_type=ChartType.pie,
+            title="Category Breakdown",
+            data=[
+                {"category": cat.category_name, "amount": float(cat.total_amount)}
+                for cat in categories[:10]  # Top 10
+            ]
+        ))
+    
+    # Time series chart
+    if time_series:
+        charts.append(ChartData(
+            chart_type=ChartType.line,
+            title="Spending Over Time",
+            data=[
+                {"period": ts.period, "amount": float(ts.amount)}
+                for ts in time_series
+            ]
+        ))
+    
+    return charts
+
+async def _generate_category_insights(categories: List[CategorySummary], time_series: List[TimePeriodData]) -> List[InsightItem]:
+    """Generate category insights"""
+    insights = []
+    
+    if categories:
+        top_category = categories[0]
+        insights.append(InsightItem(
+            type="top_category",
+            title="Highest Spending Category",
+            description=f"You spent the most on {top_category.category_name} with ${top_category.total_amount:.2f}",
+            value=float(top_category.total_amount),
+            severity="info"
+        ))
+    
+    # Trend insight
+    if len(time_series) >= 2:
+        latest = float(time_series[-1].amount)
+        previous = float(time_series[-2].amount)
+        change = ((latest - previous) / previous * 100) if previous > 0 else 0
+        
+        if abs(change) > 20:
+            insights.append(InsightItem(
+                type="trend_change",
+                title="Significant Spending Change",
+                description=f"Your spending {'increased' if change > 0 else 'decreased'} by {abs(change):.1f}% from the previous period",
+                value=change,
+                severity="warning" if change > 0 else "info",
+                action_suggested="Review recent transactions" if change > 0 else None
+            ))
+    
+    return insights
+
+async def _get_budget_status(user_id: str, date_range: dict, category_ids: List[str]) -> List[BudgetStatus]:
+    """Get budget status data"""
+    category_filter = ""
+    params = [user_id]
+    
+    if category_ids:
+        placeholders = ",".join([f"${i+2}" for i in range(len(category_ids))])
+        category_filter = f" AND b.category_id IN ({placeholders})"
+        params.extend(category_ids)
+    
+    query = f"""
+    SELECT 
+        b.category_id,
+        c.name as category_name,
+        b.amount as budget_amount,
+        COALESCE(SUM(e.amount), 0) as spent_amount,
+        (b.amount - COALESCE(SUM(e.amount), 0)) as remaining_amount,
+        CASE 
+            WHEN b.amount > 0 THEN (COALESCE(SUM(e.amount), 0) / b.amount * 100)
+            ELSE 0
+        END as usage_percentage
+    FROM budgets b
+    JOIN categories c ON b.category_id = c.id
+    LEFT JOIN expenses e ON b.category_id = e.category_id 
+        AND b.user_id = e.user_id
+        AND e.transaction_date >= DATE_TRUNC('month', CURRENT_DATE)
+        AND e.transaction_date < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+    WHERE b.user_id = $1 AND b.is_active = true
+    {category_filter}
+    GROUP BY b.category_id, c.name, b.amount
+    ORDER BY usage_percentage DESC
+    """
+    
+    results = await execute_query(query, *params)
+    
+    return [
+        BudgetStatus(
+            category_id=str(row["category_id"]),
+            category_name=row["category_name"],
+            budget_amount=Decimal(str(row["budget_amount"])),
+            spent_amount=Decimal(str(row["spent_amount"])),
+            remaining_amount=Decimal(str(row["remaining_amount"])),
+            usage_percentage=float(row["usage_percentage"]),
+            is_over_budget=float(row["usage_percentage"]) > 100
+        )
+        for row in results
+    ]
+
+async def _generate_budget_charts(budget_status: List[BudgetStatus]) -> List[ChartData]:
+    """Generate budget charts"""
+    charts = []
+    
+    if budget_status:
+        # Budget usage chart
+        charts.append(ChartData(
+            chart_type=ChartType.bar,
+            title="Budget Usage by Category",
+            data=[
+                {
+                    "category": status.category_name,
+                    "used": float(status.spent_amount),
+                    "budget": float(status.budget_amount),
+                    "percentage": status.usage_percentage
+                }
+                for status in budget_status
+            ],
+            config={"colors": ["#ef4444" if s.is_over_budget else "#22c55e" for s in budget_status]}
+        ))
+    
+    return charts
+
+async def _generate_budget_alerts(budget_status: List[BudgetStatus], threshold: float = 0.8) -> List[InsightItem]:
+    """Generate budget alerts"""
+    alerts = []
+    
+    for status in budget_status:
+        if status.is_over_budget:
+            alerts.append(InsightItem(
+                type="over_budget",
+                title="Budget Exceeded",
+                description=f"You've exceeded your budget for {status.category_name} by ${abs(status.remaining_amount):.2f}",
+                value=float(status.usage_percentage),
+                severity="critical",
+                action_suggested="Consider reducing spending in this category"
+            ))
+        elif status.usage_percentage > threshold * 100:
+            alerts.append(InsightItem(
+                type="approaching_budget",
+                title="Approaching Budget Limit",
+                description=f"You've used {status.usage_percentage:.1f}% of your budget for {status.category_name}",
+                value=float(status.usage_percentage),
+                severity="warning"
+            ))
+    
+    return alerts
+
+async def _generate_comprehensive_insights(user_id: str, date_range: dict, insight_types: Optional[str]) -> List[InsightItem]:
+    """Generate comprehensive insights"""
+    insights = []
+    
+    # Get data for insights
+    overview_data = await _get_overview_data(user_id, date_range)
+    top_categories = await _get_top_categories(user_id, date_range)
+    
+    # Basic insights
+    insights.extend(await _generate_overview_insights(overview_data, top_categories))
+    
+    # Budget insights
+    try:
+        budget_status = await _get_budget_status(user_id, date_range, [])
+        if budget_status:
+            insights.extend(await _generate_budget_alerts(budget_status))
+    except Exception:
+        pass  # Budget insights are optional
+    
+    return insights
+
 async def _generate_overview_charts(user_id: str, date_range: dict, overview_data: dict, top_categories: dict) -> List[ChartData]:
     """Generate charts for overview"""
     charts = []

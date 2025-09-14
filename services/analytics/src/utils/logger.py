@@ -1,32 +1,44 @@
 """
-Logging Utilities for Analytics Service
+Logger Utilities for Analytics Service
 Location: services/analytics/src/utils/logger.py
 """
 
-import logging
+import os
 import sys
 import time
-from typing import Dict, Any, Optional
+import logging
 import structlog
-from structlog.stdlib import LoggerFactory
+from typing import Dict, Any, Optional, Union
+from datetime import datetime
 
 from ..config.settings import settings
+
 
 def setup_logging():
     """Configure structured logging for the analytics service"""
     
+    # Configure structlog processors
+    processors = [
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+    ]
+    
+    # Add JSON formatting for production, human-readable for development
+    if settings.is_production:
+        processors.append(structlog.processors.JSONRenderer())
+    else:
+        processors.append(structlog.dev.ConsoleRenderer(colors=True))
+    
     # Configure structlog
     structlog.configure(
-        processors=[
-            # Add timestamp
-            structlog.stdlib.add_log_level,
-            structlog.stdlib.add_logger_name,
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.dev.ConsoleRenderer() if settings.is_development else structlog.processors.JSONRenderer()
-        ],
-        context_class=dict,
-        logger_factory=LoggerFactory(),
+        processors=processors,
         wrapper_class=structlog.stdlib.BoundLogger,
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
     
@@ -34,262 +46,244 @@ def setup_logging():
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
-        level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+        level=getattr(logging, settings.LOG_LEVEL.upper()),
     )
     
-    # Configure third-party library log levels
-    _configure_third_party_logs()
-    
-    # Log startup
-    logger = structlog.get_logger(__name__)
-    logger.info(
-        "Logging configured", 
-        level=settings.LOG_LEVEL,
-        format=settings.LOG_FORMAT,
-        environment=settings.ENVIRONMENT
-    )
+    # Set up file logging if specified
+    if settings.LOG_FILE:
+        file_handler = logging.FileHandler(settings.LOG_FILE)
+        file_handler.setFormatter(logging.Formatter("%(message)s"))
+        logging.getLogger().addHandler(file_handler)
 
-def _configure_third_party_logs():
-    """Configure log levels for third-party libraries"""
-    # Reduce noise from verbose libraries
-    library_levels = {
-        "uvicorn.access": logging.WARNING,
-        "asyncpg": logging.WARNING,
-        "aioredis": logging.WARNING,
-        "matplotlib": logging.WARNING,
-        "PIL": logging.WARNING,
-        "urllib3": logging.WARNING,
-        "httpx": logging.WARNING,
-    }
-    
-    for library, level in library_levels.items():
-        logging.getLogger(library).setLevel(level)
 
 class AnalyticsLogger:
-    """Specialized logger for analytics operations"""
+    """Enhanced logger for analytics-specific operations"""
     
-    def __init__(self, name: str = "analytics"):
-        self.logger = structlog.get_logger(name)
+    def __init__(self):
+        self.logger = structlog.get_logger("analytics")
     
-    def log_query_performance(self, query_type: str, duration_ms: float, 
-                            user_id: str = None, **kwargs):
-        """Log database query performance"""
+    def log_user_activity(self, user_id: str, action: str, resource: str, **kwargs):
+        """Log user analytics activity"""
         self.logger.info(
-            "Database query executed",
-            query_type=query_type,
-            duration_ms=round(duration_ms, 2),
+            "User Activity",
             user_id=user_id,
+            action=action,
+            resource=resource,
+            timestamp=datetime.utcnow().isoformat(),
             **kwargs
         )
     
-    def log_cache_operation(self, operation: str, key: str, hit: bool = None, 
-                          ttl: int = None, **kwargs):
+    def log_cache_operation(self, operation: str, cache_key: str, hit: bool = None, ttl: int = None):
         """Log cache operations"""
         log_data = {
-            "cache_operation": operation,
-            "cache_key": key,
-            **kwargs
+            "operation": operation,
+            "cache_key": cache_key,
+            "timestamp": datetime.utcnow().isoformat()
         }
         
         if hit is not None:
-            log_data["cache_hit"] = hit
+            log_data["hit"] = hit
         if ttl is not None:
             log_data["ttl_seconds"] = ttl
             
-        self.logger.info("Cache operation", **log_data)
+        self.logger.debug("Cache Operation", **log_data)
     
-    def log_chart_generation(self, chart_type: str, data_points: int, 
-                           generation_time_ms: float, user_id: str = None, **kwargs):
-        """Log chart generation metrics"""
-        self.logger.info(
-            "Chart generated",
-            chart_type=chart_type,
-            data_points=data_points,
-            generation_time_ms=round(generation_time_ms, 2),
-            user_id=user_id,
-            **kwargs
-        )
-    
-    def log_user_activity(self, user_id: str, action: str, resource: str, **kwargs):
-        """Log user activity for analytics"""
-        self.logger.info(
-            "User activity",
-            user_id=user_id,
-            action=action,
-            resource=resource,
-            timestamp=time.time(),
-            **kwargs
-        )
-    
-    def log_forecast_generation(self, model_type: str, forecast_days: int, 
-                              accuracy: float = None, user_id: str = None, **kwargs):
-        """Log forecasting operations"""
+    def log_query_performance(self, query_type: str, duration_ms: float, rows_affected: int = None):
+        """Log database query performance"""
         log_data = {
-            "forecast_generated": True,
-            "model_type": model_type,
-            "forecast_days": forecast_days,
-            "user_id": user_id,
-            **kwargs
+            "query_type": query_type,
+            "duration_ms": round(duration_ms, 2),
+            "timestamp": datetime.utcnow().isoformat()
         }
         
-        if accuracy is not None:
-            log_data["model_accuracy"] = round(accuracy, 4)
-            
-        self.logger.info("Forecast generated", **log_data)
-    
-    def log_export_operation(self, export_format: str, record_count: int, 
-                           file_size_mb: float = None, user_id: str = None, **kwargs):
-        """Log data export operations"""
-        log_data = {
-            "data_exported": True,
-            "format": export_format,
-            "record_count": record_count,
-            "user_id": user_id,
-            **kwargs
-        }
+        if rows_affected is not None:
+            log_data["rows_affected"] = rows_affected
         
-        if file_size_mb is not None:
-            log_data["file_size_mb"] = round(file_size_mb, 2)
-            
-        self.logger.info("Data exported", **log_data)
+        # Log as warning if query is slow
+        if duration_ms > 1000:  # 1 second
+            self.logger.warning("Slow Query Detected", **log_data)
+        else:
+            self.logger.debug("Query Performance", **log_data)
+    
+    def log_analytics_generation(self, user_id: str, analytics_type: str, processing_time_ms: float, **kwargs):
+        """Log analytics generation events"""
+        self.logger.info(
+            "Analytics Generated",
+            user_id=user_id,
+            analytics_type=analytics_type,
+            processing_time_ms=round(processing_time_ms, 2),
+            timestamp=datetime.utcnow().isoformat(),
+            **kwargs
+        )
     
     def log_error_with_context(self, error: Exception, context: Dict[str, Any]):
-        """Log error with contextual information"""
+        """Log errors with additional context"""
         self.logger.error(
-            "Operation failed",
+            "Analytics Error",
             error=str(error),
             error_type=type(error).__name__,
-            **context
+            context=context,
+            timestamp=datetime.utcnow().isoformat(),
+            exc_info=True
+        )
+    
+    def log_ml_operation(self, model_type: str, operation: str, user_id: str, **kwargs):
+        """Log machine learning operations"""
+        self.logger.info(
+            "ML Operation",
+            model_type=model_type,
+            operation=operation,
+            user_id=user_id,
+            timestamp=datetime.utcnow().isoformat(),
+            **kwargs
         )
 
+
 class PerformanceLogger:
-    """Performance monitoring logger"""
+    """Logger for performance monitoring and metrics"""
     
-    def __init__(self, logger_name: str = "performance"):
-        self.logger = structlog.get_logger(logger_name)
+    def __init__(self):
+        self.logger = structlog.get_logger("performance")
     
-    def log_request_performance(self, method: str, path: str, duration_ms: float, 
-                              status_code: int, user_id: str = None, **kwargs):
-        """Log HTTP request performance"""
+    def log_request_metrics(self, endpoint: str, method: str, duration_ms: float, status_code: int, user_id: str = None):
+        """Log HTTP request performance metrics"""
         self.logger.info(
-            "Request processed",
-            http_method=method,
-            path=path,
+            "Request Performance",
+            endpoint=endpoint,
+            method=method,
             duration_ms=round(duration_ms, 2),
             status_code=status_code,
             user_id=user_id,
-            **kwargs
+            timestamp=datetime.utcnow().isoformat()
         )
     
-    def log_slow_query(self, query: str, duration_ms: float, threshold_ms: float = 1000):
-        """Log slow database queries"""
-        if duration_ms > threshold_ms:
-            self.logger.warning(
-                "Slow query detected",
-                query_preview=query[:200] + "..." if len(query) > 200 else query,
-                duration_ms=round(duration_ms, 2),
-                threshold_ms=threshold_ms
-            )
+    def log_database_metrics(self, operation: str, duration_ms: float, pool_stats: Dict[str, Any] = None):
+        """Log database performance metrics"""
+        log_data = {
+            "operation": operation,
+            "duration_ms": round(duration_ms, 2),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        if pool_stats:
+            log_data["pool_stats"] = pool_stats
+        
+        self.logger.info("Database Performance", **log_data)
     
-    def log_memory_usage(self, operation: str, memory_mb: float):
-        """Log memory usage for operations"""
+    def log_cache_metrics(self, operation: str, duration_ms: float, hit_rate: float = None):
+        """Log cache performance metrics"""
+        log_data = {
+            "operation": operation,
+            "duration_ms": round(duration_ms, 2),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        if hit_rate is not None:
+            log_data["hit_rate"] = round(hit_rate, 3)
+        
+        self.logger.info("Cache Performance", **log_data)
+    
+    def log_memory_usage(self, memory_mb: float, process_name: str = "analytics"):
+        """Log memory usage metrics"""
         self.logger.info(
-            "Memory usage",
-            operation=operation,
-            memory_mb=round(memory_mb, 2)
+            "Memory Usage",
+            memory_mb=round(memory_mb, 2),
+            process_name=process_name,
+            timestamp=datetime.utcnow().isoformat()
         )
     
-    def log_rate_limit_hit(self, client_id: str, endpoint: str, limit_type: str):
-        """Log rate limit violations"""
-        self.logger.warning(
-            "Rate limit exceeded",
-            client_id=client_id,
-            endpoint=endpoint,
-            limit_type=limit_type
+    def log_processing_benchmark(self, operation: str, records_processed: int, duration_ms: float):
+        """Log data processing benchmarks"""
+        records_per_second = (records_processed / (duration_ms / 1000)) if duration_ms > 0 else 0
+        
+        self.logger.info(
+            "Processing Benchmark",
+            operation=operation,
+            records_processed=records_processed,
+            duration_ms=round(duration_ms, 2),
+            records_per_second=round(records_per_second, 2),
+            timestamp=datetime.utcnow().isoformat()
         )
+
 
 class SecurityLogger:
-    """Security-focused logging"""
+    """Logger for security-related events"""
     
-    def __init__(self, logger_name: str = "security"):
-        self.logger = structlog.get_logger(logger_name)
+    def __init__(self):
+        self.logger = structlog.get_logger("security")
     
-    def log_auth_failure(self, reason: str, client_ip: str = None, 
-                        user_agent: str = None, **kwargs):
-        """Log authentication failures"""
-        self.logger.warning(
-            "Authentication failed",
-            failure_reason=reason,
-            client_ip=client_ip,
-            user_agent=user_agent,
-            **kwargs
+    def log_authentication_attempt(self, user_id: str = None, success: bool = False, ip_address: str = None):
+        """Log authentication attempts"""
+        self.logger.info(
+            "Authentication Attempt",
+            user_id=user_id,
+            success=success,
+            ip_address=ip_address,
+            timestamp=datetime.utcnow().isoformat()
         )
     
-    def log_suspicious_activity(self, activity: str, user_id: str = None,
-                              client_ip: str = None, **kwargs):
-        """Log potentially suspicious activities"""
+    def log_rate_limit_exceeded(self, ip_address: str, endpoint: str, user_id: str = None):
+        """Log rate limiting events"""
         self.logger.warning(
-            "Suspicious activity detected",
+            "Rate Limit Exceeded",
+            ip_address=ip_address,
+            endpoint=endpoint,
+            user_id=user_id,
+            timestamp=datetime.utcnow().isoformat()
+        )
+    
+    def log_suspicious_activity(self, user_id: str, activity: str, details: Dict[str, Any]):
+        """Log suspicious user activity"""
+        self.logger.warning(
+            "Suspicious Activity",
+            user_id=user_id,
             activity=activity,
-            user_id=user_id,
-            client_ip=client_ip,
-            **kwargs
-        )
-    
-    def log_data_access(self, user_id: str, resource: str, action: str,
-                       sensitive: bool = False, **kwargs):
-        """Log data access for audit trails"""
-        log_level = "warning" if sensitive else "info"
-        
-        getattr(self.logger, log_level)(
-            "Data access",
-            user_id=user_id,
-            resource=resource,
-            action=action,
-            sensitive_data=sensitive,
-            **kwargs
+            details=details,
+            timestamp=datetime.utcnow().isoformat()
         )
 
-# Utility functions for common logging patterns
-def log_execution_time(func_name: str, start_time: float, end_time: float, **kwargs):
-    """Log function execution time"""
-    logger = structlog.get_logger("performance")
-    duration_ms = (end_time - start_time) * 1000
-    
-    logger.info(
-        "Function execution",
-        function=func_name,
-        duration_ms=round(duration_ms, 2),
-        **kwargs
-    )
 
-def log_data_processing(operation: str, records_processed: int, 
-                       processing_time_ms: float, **kwargs):
-    """Log data processing operations"""
-    logger = structlog.get_logger("analytics")
-    
-    logger.info(
-        "Data processing completed",
-        operation=operation,
-        records_processed=records_processed,
-        processing_time_ms=round(processing_time_ms, 2),
-        records_per_second=round(records_processed / (processing_time_ms / 1000), 2) if processing_time_ms > 0 else 0,
-        **kwargs
-    )
-
-def create_request_logger(request_id: str = None, user_id: str = None):
-    """Create a logger with request context"""
-    logger = structlog.get_logger("request")
-    
-    context = {}
-    if request_id:
-        context["request_id"] = request_id
-    if user_id:
-        context["user_id"] = user_id
-    
-    return logger.bind(**context)
-
-# Export common logger instances
+# Create global logger instances
 analytics_logger = AnalyticsLogger()
-performance_logger = PerformanceLogger() 
+performance_logger = PerformanceLogger()
 security_logger = SecurityLogger()
+
+
+def get_logger(name: str = "analytics") -> structlog.BoundLogger:
+    """Get a structured logger instance"""
+    return structlog.get_logger(name)
+
+
+def log_analytics_event(event_type: str, user_id: str, data: Dict[str, Any]):
+    """Convenience function to log analytics events"""
+    analytics_logger.log_user_activity(
+        user_id=user_id,
+        action=event_type,
+        resource="analytics_event",
+        event_data=data
+    )
+
+
+def measure_performance(operation_name: str):
+    """Decorator to measure and log function performance"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            try:
+                result = func(*args, **kwargs)
+                duration_ms = (time.time() - start_time) * 1000
+                performance_logger.log_processing_benchmark(
+                    operation=operation_name,
+                    records_processed=len(result) if hasattr(result, '__len__') else 1,
+                    duration_ms=duration_ms
+                )
+                return result
+            except Exception as e:
+                duration_ms = (time.time() - start_time) * 1000
+                analytics_logger.log_error_with_context(e, {
+                    "operation": operation_name,
+                    "duration_ms": duration_ms
+                })
+                raise
+        return wrapper
+    return decorator
