@@ -30,7 +30,9 @@ app.get('/', (req, res) => {
     routes: {
       auth: '/api/auth/*',
       categories: '/api/categories/*',
-      expenses: '/api/expenses/*'
+      expenses: '/api/expenses/*',
+      income: '/api/income/*',
+      analytics: '/api/analytics/*'
     }
   });
 });
@@ -95,6 +97,47 @@ app.use('/api/expenses', createProxyMiddleware({
   }
 }));
 
+// Income Service Proxy
+app.use('/api/income', createProxyMiddleware({
+  target: 'http://income:3000',
+  changeOrigin: true,
+  pathRewrite: { '^/api/income': '' },
+  logLevel: 'info',
+  onProxyReq: (proxyReq, req, res) => {
+    console.log(`✅ Income: ${req.method} ${req.originalUrl} → income:3000${proxyReq.path}`);
+  },
+  onProxyRes: (proxyRes, req, res) => {
+    console.log(`✅ Income Response: ${proxyRes.statusCode}`);
+  },
+  onError: (err, req, res) => {
+    console.error('❌ Income Proxy Error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Income service unavailable' });
+    }
+  }
+}));
+
+// *** NEW: Analytics Service Proxy (Python FastAPI) ***
+app.use('/api/analytics', createProxyMiddleware({
+  target: 'http://analytics:8000',
+  changeOrigin: true,
+  pathRewrite: { '^/api/analytics': '' },
+  logLevel: 'info',
+  timeout: 30000, // 30s timeout for analytics queries
+  onProxyReq: (proxyReq, req, res) => {
+    console.log(`📊 Analytics: ${req.method} ${req.originalUrl} → analytics:8000${proxyReq.path}`);
+  },
+  onProxyRes: (proxyRes, req, res) => {
+    console.log(`📊 Analytics Response: ${proxyRes.statusCode}`);
+  },
+  onError: (err, req, res) => {
+    console.error('❌ Analytics Proxy Error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Analytics service unavailable' });
+    }
+  }
+}));
+
 // Body parsing AFTER proxy middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -104,7 +147,14 @@ app.use('*', (req, res) => {
   console.log(`❌ Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({ 
     error: 'Route not found',
-    available: ['/api/auth/*', '/api/categories/*', '/api/expenses/*', '/health']
+    available: [
+      '/api/auth/*', 
+      '/api/categories/*', 
+      '/api/expenses/*', 
+      '/api/income/*',
+      '/api/analytics/*',
+      '/health'
+    ]
   });
 });
 
@@ -114,4 +164,6 @@ app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Auth proxy: /api/auth/* → http://auth:3000`);
   console.log(`✅ Categories proxy: /api/categories/* → http://category:3000`);
   console.log(`✅ Expenses proxy: /api/expenses/* → http://expense:3000`);
+  console.log(`✅ Income proxy: /api/income/* → http://income:3000`);
+  console.log(`📊 Analytics proxy: /api/analytics/* → http://analytics:8000`);
 });

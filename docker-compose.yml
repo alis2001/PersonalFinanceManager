@@ -103,6 +103,34 @@ services:
       - finance-network
     restart: unless-stopped
 
+  analytics:
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile
+    container_name: finance-analytics-api
+    env_file:
+      - .env
+    ports:
+      - "${ANALYTICS_SERVICE_PORT}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - PYTHON_ENV=${APP_ENV}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - LOG_LEVEL=${LOG_LEVEL}
+    networks:
+      - finance-network
+    restart: unless-stopped
+    
   # Node.js Microservices
   auth:
     build:
