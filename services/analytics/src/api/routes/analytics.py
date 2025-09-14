@@ -1,5 +1,5 @@
 """
-Analytics Routes with Individual Transaction Mapping
+Enhanced Analytics Routes with Complete Individual Transaction Mapping
 Location: services/analytics/src/api/routes/analytics.py
 """
 
@@ -24,24 +24,15 @@ async def get_analytics_overview(
     user_id: str = Depends(get_user_id)
 ):
     """
-    Real Analytics Overview with Individual Transaction Mapping
+    Analytics Overview with Enhanced Individual Transaction Mapping
     """
     start_time = time.time()
     
     try:
-        # Calculate date range for the selected period
         date_range = calculate_period_date_range(period)
-        
-        # Get real expense overview
         overview_data = await get_expense_overview(user_id, date_range)
-        
-        # Get real top categories
         top_categories = await get_top_categories(user_id, date_range)
-        
-        # Generate REAL PROFESSIONAL CHARTS with individual transactions
         charts = await generate_professional_charts(user_id, date_range, period, top_categories)
-        
-        # Generate simple insights
         insights = generate_simple_insights(overview_data, top_categories)
         
         response_data = {
@@ -66,71 +57,17 @@ async def get_analytics_overview(
             detail=f"Failed to generate analytics overview: {str(e)}"
         )
 
-# ENHANCED CHART GENERATION WITH INDIVIDUAL TRANSACTIONS
-
 async def generate_professional_charts(user_id: str, date_range: dict, period: str, top_categories: List[dict]) -> List[dict]:
-    """Generate professional charts with individual transaction mapping"""
+    """Generate enhanced charts with complete individual transaction mapping"""
     charts = []
     
-    # 1. DOUGHNUT CHART - Category Breakdown
-    if top_categories:
-        charts.append({
-            "chart_type": "doughnut",
-            "title": "Expense Distribution by Category",
-            "data": [
-                {
-                    "label": cat["category_name"],
-                    "value": cat["total_amount"],
-                    "color": cat["category_color"],
-                    "percentage": cat["percentage_of_total"]
-                }
-                for cat in top_categories
-            ],
-            "config": {
-                "responsive": True,
-                "plugins": {
-                    "legend": {"position": "bottom"},
-                    "tooltip": {"format": "currency"}
-                }
-            }
-        })
-    
-    # 2. BAR CHART - Top Categories
-    if top_categories:
-        charts.append({
-            "chart_type": "bar",
-            "title": "Top Spending Categories",
-            "data": {
-                "labels": [cat["category_name"] for cat in top_categories],
-                "datasets": [{
-                    "label": "Amount Spent",
-                    "data": [cat["total_amount"] for cat in top_categories],
-                    "backgroundColor": [cat["category_color"] for cat in top_categories],
-                    "borderColor": [cat["category_color"] for cat in top_categories],
-                    "borderWidth": 1
-                }]
-            },
-            "config": {
-                "responsive": True,
-                "plugins": {
-                    "legend": {"display": False}
-                },
-                "scales": {
-                    "y": {
-                        "beginAtZero": True,
-                        "ticks": {"format": "currency"}
-                    }
-                }
-            }
-        })
-    
-    # 3. ENHANCED SPENDING MAP - Individual Transactions
+    # Enhanced Spending Map - All Individual Transactions
     spending_map = await get_individual_transaction_map(user_id, date_range, period)
     if spending_map and spending_map["transactions"]:
         charts.append({
             "chart_type": "line",
-            "title": f"Spending Map - All Transactions ({period.title()})",
-            "subtitle": f"Showing {len(spending_map['transactions'])} individual transactions",
+            "title": f"Spending Trend Map - All Transactions ({period.title()})",
+            "subtitle": f"Displaying {len(spending_map['transactions'])} individual transactions",
             "data": {
                 "labels": spending_map["labels"],
                 "datasets": [{
@@ -150,6 +87,7 @@ async def generate_professional_charts(user_id: str, date_range: dict, period: s
             },
             "config": {
                 "responsive": True,
+                "maintainAspectRatio": False,
                 "interaction": {
                     "intersect": False,
                     "mode": "index"
@@ -157,30 +95,65 @@ async def generate_professional_charts(user_id: str, date_range: dict, period: s
                 "plugins": {
                     "legend": {"display": True},
                     "tooltip": {
+                        "mode": "index",
+                        "intersect": False,
                         "callbacks": {
                             "title": "Transaction Details",
-                            "label": "Custom tooltip with transaction info"
+                            "label": "Custom tooltip with full transaction info"
                         }
                     }
                 },
                 "scales": {
                     "y": {
                         "beginAtZero": True,
-                        "ticks": {"format": "currency"}
+                        "ticks": {"format": "currency"},
+                        "title": {
+                            "display": True,
+                            "text": "Amount ($)"
+                        }
                     },
                     "x": {
                         "type": "time",
                         "time": {
                             "unit": get_time_unit(period)
+                        },
+                        "title": {
+                            "display": True,
+                            "text": "Date"
                         }
                     }
                 }
             },
-            "transaction_details": spending_map["transactions"],  # Extra data for tooltips
-            "maximizable": True  # Enable maximize feature
+            "transaction_details": spending_map["transactions"],
+            "maximizable": True,
+            "period": period
         })
     
-    # 4. MONTHLY COMPARISON (for longer periods)
+    # Category Distribution Chart
+    if top_categories:
+        charts.append({
+            "chart_type": "doughnut",
+            "title": "Spending by Category",
+            "data": {
+                "labels": [cat["category_name"] for cat in top_categories],
+                "datasets": [{
+                    "label": "Amount",
+                    "data": [cat["total_amount"] for cat in top_categories],
+                    "backgroundColor": [cat["category_color"] for cat in top_categories],
+                    "borderWidth": 2,
+                    "borderColor": "#ffffff"
+                }]
+            },
+            "config": {
+                "responsive": True,
+                "plugins": {
+                    "legend": {"position": "bottom"}
+                }
+            },
+            "maximizable": True
+        })
+    
+    # Monthly Comparison for longer periods
     if period in ["monthly", "quarterly", "yearly"]:
         monthly_comparison = await get_monthly_comparison_data(user_id)
         if monthly_comparison:
@@ -208,13 +181,14 @@ async def generate_professional_charts(user_id: str, date_range: dict, period: s
                             "ticks": {"format": "currency"}
                         }
                     }
-                }
+                },
+                "maximizable": True
             })
     
     return charts
 
 async def get_individual_transaction_map(user_id: str, date_range: dict, period: str) -> dict:
-    """Get individual transaction data for spending map"""
+    """Get complete individual transaction data for spending map"""
     
     query = """
     SELECT 
@@ -244,98 +218,50 @@ async def get_individual_transaction_map(user_id: str, date_range: dict, period:
     point_colors = []
     
     for row in results:
-        # Format transaction data
-        transaction_data = {
+        transaction_date = row["transaction_date"]
+        
+        # Format date based on period
+        if period == "daily":
+            label = transaction_date.strftime("%H:%M")
+        elif period == "weekly":
+            label = transaction_date.strftime("%a %m/%d")
+        elif period == "monthly":
+            label = transaction_date.strftime("%m/%d")
+        elif period == "quarterly":
+            label = transaction_date.strftime("%b %d")
+        else:  # yearly
+            label = transaction_date.strftime("%b %Y")
+        
+        transaction_detail = {
             "id": str(row["id"]),
             "amount": float(row["amount"]),
-            "description": row["description"] or "No description",
-            "date": row["transaction_date"].strftime("%Y-%m-%d"),
-            "time": row["transaction_date"].strftime("%H:%M"),
-            "location": row["location"] or "No location",
-            "category": row["category_name"],
-            "category_color": row["category_color"] or "#64748b",
-            "category_icon": row["category_icon"] or "💰"
+            "description": row["description"],
+            "date": transaction_date.isoformat(),
+            "location": row["location"],
+            "category": {
+                "name": row["category_name"],
+                "color": row["category_color"],
+                "icon": row["category_icon"]
+            }
         }
         
-        transactions.append(transaction_data)
-        
-        # Format labels based on period
-        if period == "daily":
-            labels.append(row["transaction_date"].strftime("%H:%M"))
-        else:
-            labels.append(row["transaction_date"].strftime("%m/%d"))
-        
+        transactions.append(transaction_detail)
+        labels.append(label)
         amounts.append(float(row["amount"]))
-        point_colors.append(row["category_color"] or "#64748b")
+        point_colors.append(row["category_color"] or "#ef4444")
     
     return {
         "transactions": transactions,
         "labels": labels,
         "amounts": amounts,
         "point_colors": point_colors,
+        "period": period,
         "total_transactions": len(transactions),
-        "period": period
+        "total_amount": sum(amounts)
     }
 
-def calculate_period_date_range(period: str) -> dict:
-    """Calculate exact date range for the selected period"""
-    today = date.today()
-    
-    if period == "daily":
-        # Today only
-        start_date = today
-        end_date = today
-    elif period == "weekly":
-        # This week (Monday to Sunday)
-        days_since_monday = today.weekday()
-        start_date = today - timedelta(days=days_since_monday)
-        end_date = start_date + timedelta(days=6)
-    elif period == "monthly":
-        # This month
-        start_date = today.replace(day=1)
-        if today.month == 12:
-            end_date = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            end_date = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
-    elif period == "quarterly":
-        # This quarter
-        quarter = (today.month - 1) // 3 + 1
-        start_month = (quarter - 1) * 3 + 1
-        start_date = today.replace(month=start_month, day=1)
-        
-        if quarter == 4:
-            end_date = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            end_month = quarter * 3 + 1
-            end_date = today.replace(month=end_month, day=1) - timedelta(days=1)
-    elif period == "yearly":
-        # This year
-        start_date = today.replace(month=1, day=1)
-        end_date = today.replace(month=12, day=31)
-    else:
-        # Default to current month
-        start_date = today.replace(day=1)
-        end_date = today
-    
-    return {"start": start_date, "end": end_date}
-
-def get_time_unit(period: str) -> str:
-    """Get appropriate time unit for chart x-axis"""
-    if period == "daily":
-        return "hour"
-    elif period == "weekly":
-        return "day"
-    elif period == "monthly":
-        return "day"
-    elif period == "quarterly":
-        return "week"
-    elif period == "yearly":
-        return "month"
-    else:
-        return "day"
-
 async def get_monthly_comparison_data(user_id: str) -> dict:
-    """Get monthly comparison data"""
+    """Get monthly comparison data for the last 12 months"""
     query = """
     SELECT 
         DATE_TRUNC('month', e.transaction_date) as month,
@@ -357,10 +283,39 @@ async def get_monthly_comparison_data(user_id: str) -> dict:
         "amounts": [float(row["total_amount"]) for row in results]
     }
 
-# EXISTING HELPER FUNCTIONS (keep all previous functions)
+def get_time_unit(period: str) -> str:
+    """Get Chart.js time unit based on period"""
+    time_units = {
+        "daily": "hour",
+        "weekly": "day", 
+        "monthly": "day",
+        "quarterly": "week",
+        "yearly": "month"
+    }
+    return time_units.get(period, "day")
+
+def calculate_period_date_range(period: str) -> dict:
+    """Calculate date range based on period"""
+    end_date = date.today()
+    
+    if period == "daily":
+        start_date = end_date
+    elif period == "weekly":
+        start_date = end_date - timedelta(days=7)
+    elif period == "monthly":
+        start_date = end_date - timedelta(days=30)
+    elif period == "quarterly":
+        start_date = end_date - timedelta(days=90)
+    else:  # yearly
+        start_date = end_date - timedelta(days=365)
+    
+    return {
+        "start": start_date,
+        "end": end_date
+    }
 
 async def get_expense_overview(user_id: str, date_range: dict) -> dict:
-    """Get real expense overview from database"""
+    """Get expense overview from database"""
     query = """
     SELECT 
         COALESCE(SUM(amount), 0) as total_expenses,
@@ -380,8 +335,6 @@ async def get_expense_overview(user_id: str, date_range: dict) -> dict:
         }
     
     total_expenses = Decimal(str(result["total_expenses"]))
-    
-    # Calculate average daily spending
     days = (date_range["end"] - date_range["start"]).days or 1
     avg_daily = total_expenses / days
     
@@ -392,7 +345,7 @@ async def get_expense_overview(user_id: str, date_range: dict) -> dict:
     }
 
 async def get_top_categories(user_id: str, date_range: dict) -> List[dict]:
-    """Get real top expense categories from database"""
+    """Get top expense categories from database"""
     query = """
     SELECT 
         c.name as category_name,
@@ -412,8 +365,6 @@ async def get_top_categories(user_id: str, date_range: dict) -> List[dict]:
     """
     
     results = await execute_query(query, user_id, date_range["start"], date_range["end"])
-    
-    # Calculate total for percentages
     total_expenses = sum(Decimal(str(row["total_amount"])) for row in results)
     
     categories = []
@@ -433,14 +384,13 @@ async def get_top_categories(user_id: str, date_range: dict) -> List[dict]:
     return categories
 
 def generate_simple_insights(overview_data: dict, top_categories: List[dict]) -> List[dict]:
-    """Generate simple insights from real data"""
+    """Generate insights from data"""
     insights = []
     
     total_expenses = overview_data["total_expenses"]
     transaction_count = overview_data["transaction_count"]
     avg_daily = overview_data["average_daily_spending"]
     
-    # Basic spending insight
     if total_expenses > 0:
         insights.append({
             "type": "spending_summary",
@@ -449,7 +399,6 @@ def generate_simple_insights(overview_data: dict, top_categories: List[dict]) ->
             "severity": "info"
         })
     
-    # Top category insight
     if top_categories:
         top_cat = top_categories[0]
         insights.append({
@@ -459,7 +408,6 @@ def generate_simple_insights(overview_data: dict, top_categories: List[dict]) ->
             "severity": "warning" if top_cat["percentage_of_total"] > 40 else "info"
         })
     
-    # Transaction frequency insight
     if transaction_count > 0:
         avg_transaction = float(total_expenses) / transaction_count
         insights.append({
