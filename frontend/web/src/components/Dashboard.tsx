@@ -6,6 +6,7 @@ import type { Expense } from '../services/expenseService';
 import AddExpense from './AddExpense';
 import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
+import ManageCategories from './ManageCategories';
 import '../styles/Dashboard.css';
 
 interface User {
@@ -39,6 +40,7 @@ const Dashboard: React.FC = () => {
   const [recentExpensesLoading, setRecentExpensesLoading] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showEditExpense, setShowEditExpense] = useState(false);
+  const [showManageCategories, setShowManageCategories] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
   useEffect(() => {
@@ -144,6 +146,15 @@ const Dashboard: React.FC = () => {
     console.log('View analytics clicked');
   };
 
+  const handleManageCategories = () => {
+    setShowManageCategories(true);
+  };
+
+  const handleManageCategoriesSuccess = () => {
+    loadExpenseStats();
+    loadRecentExpenses();
+  };
+
   const formatCurrency = (amount: number): string => {
     return expenseService.formatCurrency(amount);
   };
@@ -175,7 +186,6 @@ const Dashboard: React.FC = () => {
 
       <main className="dashboard-main">
         <div className="dashboard-content">
-          {/* Expense Statistics Cards */}
           <div className="stats-grid">
             <div className={getStatCardClass(statsLoading)}>
               <div className="stat-icon">📅</div>
@@ -217,7 +227,6 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Top Categories Section */}
           {monthlyStats && monthlyStats.topCategories.length > 0 && (
             <div className="top-categories-section">
               <h2>Top Spending Categories This Month</h2>
@@ -240,30 +249,25 @@ const Dashboard: React.FC = () => {
             </div>
           )}
 
-          {/* Quick Actions */}
+          {/* UPDATED: Only 3 buttons, removed Add Income and + symbol */}
           <div className="quick-actions">
             <h2>Quick Actions</h2>
             <div className="action-buttons">
               <button className="btn-action primary" onClick={handleAddExpense}>
-                <span>➕</span>
-                Add Expense
-              </button>
-              <button className="btn-action" onClick={() => console.log('Add Income')}>
                 <span>💰</span>
-                Add Income
+                Add Expense
               </button>
               <button className="btn-action" onClick={handleViewAnalytics}>
                 <span>📊</span>
                 View Analytics
               </button>
-              <button className="btn-action" onClick={() => console.log('Manage Categories')}>
+              <button className="btn-action" onClick={handleManageCategories}>
                 <span>🏷️</span>
                 Manage Categories
               </button>
             </div>
           </div>
 
-          {/* Recent Expenses Table */}
           <div className="recent-activity">
             <h2>Recent Expenses</h2>
             <RecentExpensesTable
@@ -276,14 +280,12 @@ const Dashboard: React.FC = () => {
         </div>
       </main>
 
-      {/* Add Expense Modal */}
       <AddExpense 
         isOpen={showAddExpense}
         onClose={() => setShowAddExpense(false)}
         onExpenseAdded={handleAddExpenseSuccess}
       />
 
-      {/* Edit Expense Modal */}
       {selectedExpense && (
         <EditExpense 
           isOpen={showEditExpense}
@@ -295,6 +297,12 @@ const Dashboard: React.FC = () => {
           onExpenseUpdated={handleEditExpenseSuccess}
         />
       )}
+
+      <ManageCategories
+        isOpen={showManageCategories}
+        onClose={() => setShowManageCategories(false)}
+        onCategoriesUpdated={handleManageCategoriesSuccess}
+      />
     </div>
   );
 };

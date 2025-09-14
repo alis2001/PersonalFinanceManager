@@ -249,6 +249,35 @@ class CategoryService {
       return { success: false, error: error.message };
     }
   }
+
+  // Utility method for formatting currency in components
+  formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  }
+
+  // Utility method for generating default category colors
+  getRandomColor(): string {
+    const colors = [
+      '#FF6B35', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD',
+      '#85C1E9', '#F8C471', '#A9DFBF', '#F7DC6F', '#BB8FCE', '#82E0AA',
+      '#AED6F1', '#F9E79F', '#D7BDE2', '#A3E4D7', '#FADBD8', '#D5DBDB'
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+  }
+
+  // Utility method for generating default icons
+  getRandomIcon(): string {
+    const icons = [
+      '💰', '🍽️', '🚗', '🛍️', '🎬', '📄', '❤️', '📚', '✈️', '🏠',
+      '✨', '🎁', '💼', '🎯', '⚡', '📊', '💡', '🎨', '🎵', '🏃‍♂️'
+    ];
+    return icons[Math.floor(Math.random() * icons.length)];
+  }
 }
 
 export default new CategoryService();

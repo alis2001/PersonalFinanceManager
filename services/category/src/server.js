@@ -37,8 +37,6 @@ const db = new Pool({
 // Security middleware
 app.use(helmet());
 app.use(cors());
-
-// Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -51,14 +49,24 @@ app.use((req, res, next) => {
 // Validation schemas
 const categorySchema = Joi.object({
   name: Joi.string().min(2).max(100).required(),
-  description: Joi.string().max(500).optional(),
+  description: Joi.string().max(500).optional().allow(''),
   color: Joi.string().pattern(/^#[0-9A-F]{6}$/i).optional(),
   icon: Joi.string().max(50).optional(),
   type: Joi.string().valid('income', 'expense', 'both').default('both'),
   is_active: Joi.boolean().default(true)
 });
 
-// Auth middleware (simple token verification)
+// FIXED: Update schema allows partial updates
+const categoryUpdateSchema = Joi.object({
+  name: Joi.string().min(2).max(100).optional(),
+  description: Joi.string().max(500).optional().allow(''),
+  color: Joi.string().pattern(/^#[0-9A-F]{6}$/i).optional(),
+  icon: Joi.string().max(50).optional(),
+  type: Joi.string().valid('income', 'expense', 'both').optional(),
+  is_active: Joi.boolean().optional()
+}).min(1); // Require at least one field to update
+
+// Auth middleware
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -68,7 +76,6 @@ const authenticateToken = async (req, res, next) => {
   }
   
   try {
-    // Verify token with auth service
     const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://auth:3000';
     const response = await axios.post(`${authServiceUrl}/verify`, { token }, {
       timeout: 5000
@@ -89,7 +96,6 @@ const authenticateToken = async (req, res, next) => {
 // Health check endpoint
 app.get('/health', async (req, res) => {
   try {
-    // Test database connection
     await db.query('SELECT 1');
     
     res.json({
@@ -226,18 +232,16 @@ app.post('/categories', authenticateToken, async (req, res) => {
   }
 });
 
-// Update category
+// Update category - FIXED to support partial updates
 app.put('/categories/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Validate request
-    const { error, value } = categorySchema.validate(req.body);
+    // FIXED: Use update schema instead of create schema
+    const { error, value } = categoryUpdateSchema.validate(req.body);
     if (error) {
       return res.status(400).json({ error: error.details[0].message });
     }
-    
-    const { name, description, color, icon, type, is_active } = value;
     
     // Check if category exists and belongs to user
     const existingCategory = await db.query(
@@ -249,28 +253,49 @@ app.put('/categories/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Category not found' });
     }
     
-    // Check if name already exists for user (excluding current category)
-    const nameCheck = await db.query(
-      'SELECT id FROM categories WHERE user_id = $1 AND LOWER(name) = LOWER($2) AND id != $3',
-      [req.user.userId, name, id]
-    );
-    
-    if (nameCheck.rows.length > 0) {
-      return res.status(409).json({ error: 'Category with this name already exists' });
+    // Check if name already exists for user (only if name is being updated)
+    if (value.name) {
+      const nameCheck = await db.query(
+        'SELECT id FROM categories WHERE user_id = $1 AND LOWER(name) = LOWER($2) AND id != $3',
+        [req.user.userId, value.name, id]
+      );
+      
+      if (nameCheck.rows.length > 0) {
+        return res.status(409).json({ error: 'Category with this name already exists' });
+      }
     }
     
-    // Update category
-    const result = await db.query(
-      `UPDATE categories 
-       SET name = $1, description = $2, color = $3, icon = $4, type = $5, is_active = $6, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $7 AND user_id = $8
-       RETURNING *`,
-      [name, description, color, icon, type, is_active, id, req.user.userId]
-    );
+    // Build dynamic update query
+    const updateFields = [];
+    const values = [];
+    let paramCount = 0;
+    
+    // Only update fields that are provided
+    Object.keys(value).forEach(key => {
+      if (value[key] !== undefined) {
+        updateFields.push(`${key} = $${++paramCount}`);
+        values.push(value[key]);
+      }
+    });
+    
+    // Always update the updated_at timestamp
+    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    
+    // Add WHERE clause parameters
+    values.push(id, req.user.userId);
+    
+    const updateQuery = `
+      UPDATE categories 
+      SET ${updateFields.join(', ')} 
+      WHERE id = $${++paramCount} AND user_id = $${++paramCount}
+      RETURNING *
+    `;
+    
+    const result = await db.query(updateQuery, values);
     
     const category = result.rows[0];
     
-    logger.info(`Category updated: ${name} by user ${req.user.userId}`);
+    logger.info(`Category updated: ${category.name} by user ${req.user.userId}`);
     
     res.json({
       message: 'Category updated successfully',
