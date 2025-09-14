@@ -1,745 +1,73 @@
 """
-Trends Analysis Routes for Analytics Service
+Simplified Trends Routes - REAL DATA ONLY with FIXED Date Ordering
 Location: services/analytics/src/api/routes/trends.py
 """
 
 import time
-import json
 from datetime import date, datetime, timedelta
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from decimal import Decimal
+
 from fastapi import APIRouter, Request, HTTPException, status, Depends, Query
-import pandas as pd
-import numpy as np
-from scipy import stats
 import structlog
 
-from ...config.database import execute_query, execute_fetchrow, cache_get, cache_set
-from ...config.settings import settings
-from ...models.schemas import (
-    TrendsRequest, TrendsResponse, TimePeriodData, ChartData, InsightItem,
-    ChartType, PeriodType, TrendDirection
-)
+from ...config.database import execute_query
 from ...middleware.auth import get_user_id
-from ...utils.logger import analytics_logger, performance_logger
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
 
-@router.get("/spending", response_model=TrendsResponse, tags=["Trends"])
+@router.get("/spending", tags=["Trends"])
 async def get_spending_trends(
     request: Request,
-    period: PeriodType = PeriodType.monthly,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    include_seasonality: bool = True,
-    smoothing: bool = False,
-    category_id: Optional[str] = Query(None, description="Filter by category ID"),
+    period: str = Query("monthly", description="Period: daily, weekly, monthly"),
     user_id: str = Depends(get_user_id)
 ):
     """
-    Analyze spending trends over time
-    
-    Returns:
-    - Trend direction and strength
-    - Time series data with trend lines
-    - Seasonal pattern analysis
-    - Spending velocity indicators
-    - Predictive trend projections
+    Simple spending trends - Real data only, no complex analysis
     """
     start_time = time.time()
     
     try:
-        cache_key = f"spending_trends:{user_id}:{period}:{start_date}:{end_date}:{include_seasonality}:{smoothing}:{category_id}"
+        # Get simple spending trend data
+        trend_data = await get_simple_spending_trend(user_id, period)
         
-        # Check cache
-        cached_data = await cache_get(cache_key)
-        if cached_data:
-            analytics_logger.log_cache_operation("get", cache_key, hit=True)
-            response_data = json.loads(cached_data)
-            response_data["processing_time_ms"] = (time.time() - start_time) * 1000
-            return TrendsResponse(**response_data)
+        # Calculate simple trend direction
+        trend_direction = calculate_simple_trend(trend_data)
         
-        # Calculate date range
-        date_range = _calculate_trend_date_range(period, start_date, end_date)
-        
-        # Get time series data
-        time_series_data = await _get_spending_time_series(user_id, date_range, period, category_id)
-        
-        # Perform trend analysis
-        trend_analysis = _analyze_trend_direction(time_series_data, smoothing)
-        
-        # Seasonal analysis if requested
-        seasonal_patterns = None
-        if include_seasonality and len(time_series_data) >= 12:  # Need minimum data for seasonality
-            seasonal_patterns = _analyze_seasonal_patterns(time_series_data, period)
-        
-        # Generate trend charts
-        charts = await _generate_trend_charts(time_series_data, trend_analysis, seasonal_patterns, smoothing)
-        
-        # Generate predictions
-        predictions = _generate_trend_predictions(time_series_data, trend_analysis, days_ahead=30)
-        
-        response_data = TrendsResponse(
-            trend_direction=trend_analysis["direction"],
-            trend_strength=trend_analysis["strength"],
-            trend_percentage=trend_analysis["percentage_change"],
-            seasonal_patterns=seasonal_patterns,
-            time_series=time_series_data,
-            charts=charts,
-            predictions=predictions,
-            processing_time_ms=(time.time() - start_time) * 1000
-        )
-        
-        # Cache result
-        await cache_set(cache_key, response_data.json(), ttl=settings.CACHE_TTL_DEFAULT)
-        
-        # Log activity
-        analytics_logger.log_user_activity(
-            user_id=user_id,
-            action="spending_trends_analyzed",
-            resource="trends",
-            trend_direction=trend_analysis["direction"],
-            data_points=len(time_series_data)
-        )
+        response_data = {
+            "success": True,
+            "trend_direction": trend_direction["direction"],
+            "trend_strength": trend_direction["strength"],
+            "trend_percentage": trend_direction["percentage_change"],
+            "time_series": trend_data,
+            "processing_time_ms": (time.time() - start_time) * 1000
+        }
         
         return response_data
         
     except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
-        analytics_logger.log_error_with_context(e, {
-            "user_id": user_id,
-            "period": period,
-            "processing_time_ms": processing_time
-        })
-        
+        logger.error("Spending trends failed", error=str(e), user_id=user_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to analyze spending trends: {str(e)}"
         )
 
-@router.get("/category/{category_id}", response_model=TrendsResponse, tags=["Trends"])
-async def get_category_trends(
-    category_id: str,
-    request: Request,
-    period: PeriodType = PeriodType.monthly,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    include_seasonality: bool = True,
-    compare_to_average: bool = True,
-    user_id: str = Depends(get_user_id)
-):
-    """
-    Analyze trends for a specific category
-    
-    Returns:
-    - Category-specific trend analysis
-    - Comparison to user's average spending
-    - Category performance metrics
-    - Seasonal spending patterns for category
-    - Category-specific insights and recommendations
-    """
-    start_time = time.time()
-    
-    try:
-        cache_key = f"category_trends:{user_id}:{category_id}:{period}:{start_date}:{end_date}:{include_seasonality}:{compare_to_average}"
-        
-        # Check cache
-        cached_data = await cache_get(cache_key)
-        if cached_data:
-            analytics_logger.log_cache_operation("get", cache_key, hit=True)
-            response_data = json.loads(cached_data)
-            response_data["processing_time_ms"] = (time.time() - start_time) * 1000
-            return TrendsResponse(**response_data)
-        
-        # Validate category belongs to user
-        await _validate_user_category(user_id, category_id)
-        
-        # Calculate date range
-        date_range = _calculate_trend_date_range(period, start_date, end_date)
-        
-        # Get category-specific time series
-        time_series_data = await _get_category_time_series(user_id, category_id, date_range, period)
-        
-        # Perform trend analysis
-        trend_analysis = _analyze_trend_direction(time_series_data)
-        
-        # Category comparison analysis
-        comparison_data = None
-        if compare_to_average:
-            comparison_data = await _get_category_comparison(user_id, category_id, date_range, period)
-        
-        # Seasonal analysis
-        seasonal_patterns = None
-        if include_seasonality and len(time_series_data) >= 8:
-            seasonal_patterns = _analyze_seasonal_patterns(time_series_data, period)
-        
-        # Generate charts
-        charts = await _generate_category_trend_charts(time_series_data, trend_analysis, comparison_data, seasonal_patterns)
-        
-        # Generate category-specific insights
-        insights = await _generate_category_trend_insights(user_id, category_id, trend_analysis, comparison_data)
-        
-        response_data = TrendsResponse(
-            trend_direction=trend_analysis["direction"],
-            trend_strength=trend_analysis["strength"],
-            trend_percentage=trend_analysis["percentage_change"],
-            seasonal_patterns=seasonal_patterns,
-            time_series=time_series_data,
-            charts=charts,
-            predictions=comparison_data,
-            processing_time_ms=(time.time() - start_time) * 1000
-        )
-        
-        # Cache result
-        await cache_set(cache_key, response_data.json(), ttl=settings.CACHE_TTL_DEFAULT)
-        
-        # Log activity
-        analytics_logger.log_user_activity(
-            user_id=user_id,
-            action="category_trends_analyzed",
-            resource=f"category:{category_id}",
-            trend_direction=trend_analysis["direction"]
-        )
-        
-        return response_data
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
-        analytics_logger.log_error_with_context(e, {
-            "user_id": user_id,
-            "category_id": category_id,
-            "processing_time_ms": processing_time
-        })
-        
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze category trends: {str(e)}"
-        )
+# SIMPLE HELPER FUNCTIONS - FIXED CHRONOLOGICAL ORDER
 
-@router.get("/comparative", tags=["Trends"])
-async def get_comparative_trends(
-    request: Request,
-    period: PeriodType = PeriodType.monthly,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    category_ids: Optional[str] = Query(None, description="Comma-separated category IDs to compare"),
-    metric: str = Query("amount", description="Metric to compare: amount, count, average"),
-    normalize: bool = Query(False, description="Normalize values for comparison"),
-    user_id: str = Depends(get_user_id)
-):
-    """
-    Compare trends across multiple categories or time periods
+async def get_simple_spending_trend(user_id: str, period: str) -> List[dict]:
+    """Get simple spending trend from database - FIXED CHRONOLOGICAL ORDER"""
     
-    Returns:
-    - Side-by-side trend comparisons
-    - Relative performance analysis
-    - Growth rate comparisons
-    - Correlation analysis between categories
-    - Comparative insights and recommendations
-    """
-    start_time = time.time()
-    
-    try:
-        # Parse category IDs
-        category_id_list = []
-        if category_ids:
-            category_id_list = [id.strip() for id in category_ids.split(",")]
-        
-        cache_key = f"comparative_trends:{user_id}:{period}:{start_date}:{end_date}:{category_ids}:{metric}:{normalize}"
-        
-        # Check cache
-        cached_data = await cache_get(cache_key)
-        if cached_data:
-            analytics_logger.log_cache_operation("get", cache_key, hit=True)
-            return json.loads(cached_data)
-        
-        # Calculate date range
-        date_range = _calculate_trend_date_range(period, start_date, end_date)
-        
-        # Get comparative data
-        comparative_data = await _get_comparative_trend_data(user_id, date_range, period, category_id_list, metric)
-        
-        # Perform comparative analysis
-        comparison_analysis = _analyze_comparative_trends(comparative_data, normalize)
-        
-        # Generate comparative charts
-        charts = _generate_comparative_charts(comparative_data, comparison_analysis, normalize)
-        
-        # Generate correlation analysis
-        correlation_analysis = _analyze_trend_correlations(comparative_data)
-        
-        # Generate comparative insights
-        insights = _generate_comparative_insights(comparison_analysis, correlation_analysis)
-        
-        response_data = {
-            "success": True,
-            "timestamp": datetime.utcnow().isoformat(),
-            "comparative_analysis": comparison_analysis,
-            "correlation_analysis": correlation_analysis,
-            "charts": [chart.dict() for chart in charts],
-            "insights": [insight.dict() for insight in insights],
-            "processing_time_ms": (time.time() - start_time) * 1000
-        }
-        
-        # Cache result
-        await cache_set(cache_key, json.dumps(response_data, default=str), ttl=settings.CACHE_TTL_DEFAULT)
-        
-        # Log activity
-        analytics_logger.log_user_activity(
-            user_id=user_id,
-            action="comparative_trends_analyzed",
-            resource="comparative_trends",
-            categories_compared=len(category_id_list)
-        )
-        
-        return response_data
-        
-    except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
-        analytics_logger.log_error_with_context(e, {
-            "user_id": user_id,
-            "processing_time_ms": processing_time
-        })
-        
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate comparative trends: {str(e)}"
-        )
-
-@router.get("/velocity", tags=["Trends"])
-async def get_spending_velocity(
-    request: Request,
-    period: PeriodType = PeriodType.weekly,
-    lookback_days: int = Query(90, ge=30, le=365, description="Days to look back for velocity calculation"),
-    category_id: Optional[str] = Query(None, description="Filter by category ID"),
-    user_id: str = Depends(get_user_id)
-):
-    """
-    Analyze spending velocity (acceleration/deceleration)
-    
-    Returns:
-    - Spending acceleration/deceleration metrics
-    - Velocity trend charts
-    - Rate of change analysis
-    - Momentum indicators
-    - Velocity-based insights
-    """
-    start_time = time.time()
-    
-    try:
-        cache_key = f"spending_velocity:{user_id}:{period}:{lookback_days}:{category_id}"
-        
-        # Check cache
-        cached_data = await cache_get(cache_key)
-        if cached_data:
-            analytics_logger.log_cache_operation("get", cache_key, hit=True)
-            return json.loads(cached_data)
-        
-        # Calculate date range for velocity analysis
-        end_date = date.today()
-        start_date = end_date - timedelta(days=lookback_days)
-        date_range = {"start": start_date, "end": end_date}
-        
-        # Get velocity data
-        velocity_data = await _calculate_spending_velocity(user_id, date_range, period, category_id)
-        
-        # Generate velocity charts
-        velocity_charts = _generate_velocity_charts(velocity_data)
-        
-        # Generate velocity insights
-        velocity_insights = _generate_velocity_insights(velocity_data)
-        
-        response_data = {
-            "success": True,
-            "timestamp": datetime.utcnow().isoformat(),
-            "velocity_analysis": velocity_data,
-            "charts": [chart.dict() for chart in velocity_charts],
-            "insights": [insight.dict() for insight in velocity_insights],
-            "processing_time_ms": (time.time() - start_time) * 1000
-        }
-        
-        # Cache result
-        await cache_set(cache_key, json.dumps(response_data, default=str), ttl=settings.CACHE_TTL_SHORT)
-        
-        # Log activity
-        analytics_logger.log_user_activity(
-            user_id=user_id,
-            action="spending_velocity_analyzed",
-            resource="velocity",
-            lookback_days=lookback_days
-        )
-        
-        return response_data
-        
-    except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
-        analytics_logger.log_error_with_context(e, {
-            "user_id": user_id,
-            "processing_time_ms": processing_time
-        })
-        
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze spending velocity: {str(e)}"
-        )
-
-# Utility functions
-def _calculate_trend_date_range(period: PeriodType, start_date: Optional[date], end_date: Optional[date]) -> dict:
-    """Calculate appropriate date range for trend analysis"""
-    if start_date and end_date:
-        return {"start": start_date, "end": end_date}
-    
-    today = date.today()
-    
-    # Longer lookback periods for trend analysis
-    if period == PeriodType.daily:
-        return {"start": today - timedelta(days=90), "end": today}
-    elif period == PeriodType.weekly:
-        return {"start": today - timedelta(weeks=52), "end": today}  # 1 year
-    elif period == PeriodType.monthly:
-        return {"start": today - timedelta(days=365 * 2), "end": today}  # 2 years
-    elif period == PeriodType.quarterly:
-        return {"start": today - timedelta(days=365 * 3), "end": today}  # 3 years
-    elif period == PeriodType.yearly:
-        return {"start": today - timedelta(days=365 * 5), "end": today}  # 5 years
-    
-    return {"start": today - timedelta(days=365), "end": today}
-
-async def _get_spending_time_series(user_id: str, date_range: dict, period: PeriodType, category_id: Optional[str]) -> List[TimePeriodData]:
-    """Get spending time series data"""
-    # Use the database function for trend analysis
-    query = "SELECT * FROM get_spending_trend($1, $2)"
-    days = (date_range["end"] - date_range["start"]).days
-    
-    results = await execute_query(query, user_id, days)
-    
-    time_series = []
-    for row in results:
-        time_series.append(TimePeriodData(
-            period=row["period_date"].isoformat(),
-            amount=Decimal(str(row["total_amount"])),
-            transaction_count=row["transaction_count"]
-        ))
-    
-    return time_series
-
-def _analyze_trend_direction(time_series_data: List[TimePeriodData], smoothing: bool = False) -> dict:
-    """Analyze trend direction using statistical methods"""
-    if len(time_series_data) < 2:
-        return {
-            "direction": TrendDirection.stable,
-            "strength": 0.0,
-            "percentage_change": 0.0
-        }
-    
-    # Extract amounts for analysis
-    amounts = [float(data.amount) for data in time_series_data]
-    
-    if smoothing:
-        # Apply simple moving average smoothing
-        window_size = min(3, len(amounts) // 3)
-        amounts = pd.Series(amounts).rolling(window=window_size, center=True).mean().fillna(method='bfill').fillna(method='ffill').tolist()
-    
-    # Calculate linear regression slope
-    x = np.arange(len(amounts))
-    slope, intercept, r_value, p_value, std_err = stats.linregress(x, amounts)
-    
-    # Determine trend direction
-    if slope > 0.1:
-        direction = TrendDirection.increasing
-    elif slope < -0.1:
-        direction = TrendDirection.decreasing
-    else:
-        direction = TrendDirection.stable
-    
-    # Calculate trend strength (R-squared)
-    strength = r_value ** 2
-    
-    # Calculate percentage change
-    if len(amounts) >= 2:
-        first_amount = amounts[0]
-        last_amount = amounts[-1]
-        percentage_change = ((last_amount - first_amount) / first_amount * 100) if first_amount != 0 else 0
-    else:
-        percentage_change = 0
-    
-    return {
-        "direction": direction,
-        "strength": min(1.0, abs(strength)),
-        "percentage_change": round(percentage_change, 2),
-        "slope": slope,
-        "r_squared": strength,
-        "p_value": p_value
-    }
-
-def _analyze_seasonal_patterns(time_series_data: List[TimePeriodData], period: PeriodType) -> dict:
-    """Analyze seasonal patterns in spending data"""
-    if len(time_series_data) < 12:
-        return None
-    
-    # Convert to pandas for easier seasonal analysis
-    dates = [datetime.fromisoformat(data.period) for data in time_series_data]
-    amounts = [float(data.amount) for data in time_series_data]
-    
-    df = pd.DataFrame({"date": dates, "amount": amounts})
-    df["month"] = df["date"].dt.month
-    df["quarter"] = df["date"].dt.quarter
-    df["day_of_week"] = df["date"].dt.dayofweek
-    
-    # Monthly seasonality
-    monthly_avg = df.groupby("month")["amount"].mean().to_dict()
-    
-    # Find peak and low months
-    peak_month = max(monthly_avg, key=monthly_avg.get)
-    low_month = min(monthly_avg, key=monthly_avg.get)
-    
-    # Calculate seasonality strength
-    seasonal_variance = np.var(list(monthly_avg.values()))
-    overall_variance = np.var(amounts)
-    seasonality_strength = seasonal_variance / overall_variance if overall_variance > 0 else 0
-    
-    return {
-        "has_seasonality": seasonality_strength > 0.1,
-        "seasonality_strength": min(1.0, seasonality_strength),
-        "monthly_patterns": monthly_avg,
-        "peak_month": peak_month,
-        "low_month": low_month,
-        "seasonal_variance": seasonal_variance
-    }
-
-async def _generate_trend_charts(time_series_data: List[TimePeriodData], trend_analysis: dict, 
-                                seasonal_patterns: dict, smoothing: bool) -> List[ChartData]:
-    """Generate trend visualization charts"""
-    charts = []
-    
-    # Main trend line chart
-    trend_chart_data = [
-        {
-            "period": data.period,
-            "amount": float(data.amount),
-            "transaction_count": data.transaction_count
-        }
-        for data in time_series_data
-    ]
-    
-    trend_chart = ChartData(
-        chart_type=ChartType.line,
-        title="Spending Trend Analysis",
-        data=trend_chart_data,
-        config={
-            "trend_line": True,
-            "smoothing": smoothing,
-            "show_trend_stats": True,
-            "colors": ["#3b82f6", "#ef4444"]
-        }
-    )
-    charts.append(trend_chart)
-    
-    # Seasonal pattern chart if available
-    if seasonal_patterns and seasonal_patterns.get("has_seasonality"):
-        seasonal_data = [
-            {"month": month, "average_amount": amount}
-            for month, amount in seasonal_patterns["monthly_patterns"].items()
-        ]
-        
-        seasonal_chart = ChartData(
-            chart_type=ChartType.bar,
-            title="Monthly Spending Patterns",
-            data=seasonal_data,
-            config={"highlight_peaks": True}
-        )
-        charts.append(seasonal_chart)
-    
-    return charts
-
-def _generate_trend_predictions(time_series_data: List[TimePeriodData], trend_analysis: dict, days_ahead: int) -> dict:
-    """Generate simple trend predictions"""
-    if len(time_series_data) < 3:
-        return None
-    
-    # Simple linear prediction based on trend slope
-    slope = trend_analysis.get("slope", 0)
-    last_amount = float(time_series_data[-1].amount)
-    
-    # Project future values
-    predictions = []
-    for i in range(1, days_ahead + 1):
-        predicted_amount = last_amount + (slope * i)
-        predictions.append({
-            "days_ahead": i,
-            "predicted_amount": max(0, predicted_amount),  # Don't predict negative spending
-            "confidence": max(0, trend_analysis.get("r_squared", 0))
-        })
-    
-    return {
-        "prediction_method": "linear_trend",
-        "predictions": predictions[:10],  # Return first 10 days
-        "trend_confidence": trend_analysis.get("r_squared", 0)
-    }
-
-# ADD THESE FUNCTIONS TO services/analytics/src/api/routes/trends.py (at the end of file)
-
-async def _get_spending_time_series(user_id: str, date_range: dict, period: PeriodType, category_id: Optional[str]) -> List[TimePeriodData]:
-    """Get time series data for spending analysis"""
-    date_trunc = {
-        PeriodType.daily: "day",
-        PeriodType.weekly: "week",
-        PeriodType.monthly: "month",
-        PeriodType.quarterly: "quarter",
-        PeriodType.yearly: "year"
-    }.get(period, "day")
-    
-    category_filter = ""
-    params = [user_id, date_range["start"], date_range["end"]]
-    
-    if category_id:
-        category_filter = " AND e.category_id = $4"
-        params.append(category_id)
-    
-    query = f"""
-    SELECT 
-        DATE_TRUNC('{date_trunc}', e.transaction_date) as period,
-        SUM(e.amount) as total_amount,
-        COUNT(e.id) as transaction_count,
-        AVG(e.amount) as avg_amount
-    FROM expenses e
-    WHERE e.user_id = $1
-        AND e.transaction_date BETWEEN $2 AND $3
-        {category_filter}
-    GROUP BY DATE_TRUNC('{date_trunc}', e.transaction_date)
-    ORDER BY period
-    """
-    
-    results = await execute_query(query, *params)
-    
-    return [
-        TimePeriodData(
-            period=row["period"].isoformat(),
-            amount=Decimal(str(row["total_amount"])),
-            transaction_count=row["transaction_count"],
-            period_type=period
-        )
-        for row in results
-    ]
-
-def _analyze_trend_direction(time_series_data: List[TimePeriodData]) -> dict:
-    """Analyze trend direction and strength"""
-    if len(time_series_data) < 2:
-        return {
-            "direction": TrendDirection.stable,
-            "strength": 0.0,
-            "percentage_change": 0.0,
-            "slope": 0.0
-        }
-    
-    # Extract amounts for analysis
-    amounts = [float(ts.amount) for ts in time_series_data]
-    periods = list(range(len(amounts)))
-    
-    # Calculate linear regression for trend
-    if len(amounts) > 1:
-        slope, intercept, r_value, p_value, std_err = stats.linregress(periods, amounts)
-        
-        # Calculate percentage change from first to last
-        first_amount = amounts[0] if amounts[0] > 0 else 1
-        last_amount = amounts[-1]
-        percentage_change = ((last_amount - amounts[0]) / first_amount) * 100
-        
-        # Determine trend direction
-        if abs(percentage_change) < 5:  # Less than 5% change
-            direction = TrendDirection.stable
-        elif percentage_change > 0:
-            direction = TrendDirection.increasing
-        else:
-            direction = TrendDirection.decreasing
-        
-        # Calculate trend strength (0-1 scale based on R-squared)
-        strength = abs(r_value) if not math.isnan(r_value) else 0.0
-        
-        return {
-            "direction": direction,
-            "strength": min(strength, 1.0),
-            "percentage_change": percentage_change,
-            "slope": slope,
-            "r_value": r_value,
-            "p_value": p_value
-        }
-    
-    return {
-        "direction": TrendDirection.stable,
-        "strength": 0.0,
-        "percentage_change": 0.0,
-        "slope": 0.0
-    }
-
-def _analyze_seasonal_patterns(time_series_data: List[TimePeriodData], period: PeriodType) -> dict:
-    """Analyze seasonal patterns in spending"""
-    if len(time_series_data) < 4:
-        return None
-    
-    # Convert to pandas for easier analysis
-    df = pd.DataFrame([
-        {
-            "period": datetime.fromisoformat(ts.period),
-            "amount": float(ts.amount)
-        }
-        for ts in time_series_data
-    ])
-    
-    seasonal_patterns = {}
-    
-    if period == PeriodType.monthly and len(df) >= 12:
-        # Monthly seasonality analysis
-        df['month'] = df['period'].dt.month
-        monthly_avg = df.groupby('month')['amount'].mean()
-        overall_avg = df['amount'].mean()
-        
-        seasonal_patterns = {
-            "type": "monthly",
-            "peak_months": monthly_avg.nlargest(3).index.tolist(),
-            "low_months": monthly_avg.nsmallest(3).index.tolist(),
-            "seasonal_index": (monthly_avg / overall_avg).to_dict(),
-            "has_strong_seasonality": (monthly_avg.max() / monthly_avg.min()) > 1.5 if monthly_avg.min() > 0 else False
-        }
-    
-    elif period == PeriodType.weekly and len(df) >= 4:
-        # Weekly patterns
-        df['weekday'] = df['period'].dt.dayofweek
-        weekly_avg = df.groupby('weekday')['amount'].mean()
-        
-        weekday_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        seasonal_patterns = {
-            "type": "weekly",
-            "peak_days": [weekday_names[i] for i in weekly_avg.nlargest(2).index],
-            "low_days": [weekday_names[i] for i in weekly_avg.nsmallest(2).index],
-            "weekday_pattern": {weekday_names[i]: float(weekly_avg[i]) for i in range(7)}
-        }
-    
-    return seasonal_patterns if seasonal_patterns else None
-
-async def _validate_user_category(user_id: str, category_id: str):
-    """Validate category belongs to user"""
-    query = "SELECT COUNT(*) FROM categories WHERE id = $1 AND user_id = $2"
-    result = await execute_scalar(query, category_id, user_id)
-    
-    if not result or result == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Category not found or does not belong to user"
-        )
-
-async def _get_category_time_series(user_id: str, category_id: str, date_range: dict, period: PeriodType) -> List[TimePeriodData]:
-    """Get time series data for specific category"""
-    date_trunc = {
-        PeriodType.daily: "day",
-        PeriodType.weekly: "week",
-        PeriodType.monthly: "month",
-        PeriodType.quarterly: "quarter",
-        PeriodType.yearly: "year"
-    }.get(period, "day")
+    # Determine date truncation and range
+    if period == "daily":
+        date_trunc = "day"
+        days_back = 30
+    elif period == "weekly":
+        date_trunc = "week"
+        days_back = 84  # 12 weeks
+    else:  # monthly
+        date_trunc = "month"
+        days_back = 365  # 12 months
     
     query = f"""
     SELECT 
@@ -748,241 +76,54 @@ async def _get_category_time_series(user_id: str, category_id: str, date_range: 
         COUNT(e.id) as transaction_count
     FROM expenses e
     WHERE e.user_id = $1
-        AND e.category_id = $2
-        AND e.transaction_date BETWEEN $3 AND $4
+        AND e.transaction_date >= CURRENT_DATE - INTERVAL '{days_back} days'
     GROUP BY DATE_TRUNC('{date_trunc}', e.transaction_date)
-    ORDER BY period
+    ORDER BY period ASC
     """
     
-    results = await execute_query(query, user_id, category_id, date_range["start"], date_range["end"])
+    results = await execute_query(query, user_id)
     
     return [
-        TimePeriodData(
-            period=row["period"].isoformat(),
-            amount=Decimal(str(row["total_amount"])),
-            transaction_count=row["transaction_count"],
-            period_type=period
-        )
+        {
+            "period": row["period"].strftime("%Y-%m-%d"),
+            "amount": float(row["total_amount"]),
+            "transaction_count": row["transaction_count"]
+        }
         for row in results
     ]
 
-async def _get_category_comparison(user_id: str, category_id: str, date_range: dict, period: PeriodType) -> dict:
-    """Get category comparison data"""
-    # Get user's average spending in this category
-    query = """
-    SELECT AVG(amount) as avg_amount
-    FROM expenses 
-    WHERE user_id = $1 AND category_id = $2
-        AND transaction_date >= $3 - INTERVAL '365 days'
-    """
+def calculate_simple_trend(trend_data: List[dict]) -> dict:
+    """Calculate simple trend direction from data"""
+    if len(trend_data) < 2:
+        return {
+            "direction": "stable",
+            "strength": 0.0,
+            "percentage_change": 0.0
+        }
     
-    result = await execute_fetchrow(query, user_id, category_id, date_range["start"])
+    # Compare first half to second half
+    mid_point = len(trend_data) // 2
+    first_half_avg = sum(item["amount"] for item in trend_data[:mid_point]) / mid_point if mid_point > 0 else 0
+    second_half_avg = sum(item["amount"] for item in trend_data[mid_point:]) / (len(trend_data) - mid_point)
     
-    current_spending = await execute_scalar(
-        "SELECT SUM(amount) FROM expenses WHERE user_id = $1 AND category_id = $2 AND transaction_date BETWEEN $3 AND $4",
-        user_id, category_id, date_range["start"], date_range["end"]
-    )
+    if first_half_avg == 0:
+        percentage_change = 0
+    else:
+        percentage_change = ((second_half_avg - first_half_avg) / first_half_avg) * 100
     
-    avg_amount = float(result["avg_amount"]) if result and result["avg_amount"] else 0
-    current_amount = float(current_spending) if current_spending else 0
+    # Determine direction
+    if abs(percentage_change) < 5:
+        direction = "stable"
+        strength = 0.0
+    elif percentage_change > 0:
+        direction = "increasing"
+        strength = min(abs(percentage_change) / 50, 1.0)  # Normalize to 0-1
+    else:
+        direction = "decreasing"
+        strength = min(abs(percentage_change) / 50, 1.0)
     
     return {
-        "historical_average": avg_amount,
-        "current_period_total": current_amount,
-        "vs_average_percentage": ((current_amount - avg_amount) / avg_amount * 100) if avg_amount > 0 else 0
+        "direction": direction,
+        "strength": strength,
+        "percentage_change": percentage_change
     }
-
-async def _generate_category_trend_charts(time_series_data: List[TimePeriodData], trend_analysis: dict, 
-                                        comparison_data: dict, seasonal_patterns: dict) -> List[ChartData]:
-    """Generate category-specific trend charts"""
-    charts = []
-    
-    # Time series line chart
-    if time_series_data:
-        charts.append(ChartData(
-            chart_type=ChartType.line,
-            title="Category Spending Trend",
-            data=[
-                {
-                    "period": ts.period,
-                    "amount": float(ts.amount),
-                    "transaction_count": ts.transaction_count
-                }
-                for ts in time_series_data
-            ],
-            config={
-                "trend_line": True,
-                "slope": trend_analysis.get("slope", 0)
-            }
-        ))
-    
-    # Seasonal pattern chart if available
-    if seasonal_patterns and seasonal_patterns.get("type") == "monthly":
-        charts.append(ChartData(
-            chart_type=ChartType.bar,
-            title="Monthly Spending Pattern",
-            data=[
-                {
-                    "month": i,
-                    "seasonal_index": seasonal_patterns["seasonal_index"].get(i, 1.0)
-                }
-                for i in range(1, 13)
-            ]
-        ))
-    
-    return charts
-
-async def _generate_category_trend_insights(user_id: str, category_id: str, trend_analysis: dict, comparison_data: dict) -> List[InsightItem]:
-    """Generate category-specific insights"""
-    insights = []
-    
-    # Trend direction insight
-    direction = trend_analysis["direction"]
-    percentage = trend_analysis["percentage_change"]
-    
-    if direction != TrendDirection.stable:
-        insights.append(InsightItem(
-            type="category_trend",
-            title=f"Spending {'Increasing' if direction == TrendDirection.increasing else 'Decreasing'}",
-            description=f"Your spending in this category has {direction.value} by {abs(percentage):.1f}%",
-            value=percentage,
-            severity="warning" if direction == TrendDirection.increasing else "info"
-        ))
-    
-    # Comparison to average
-    if comparison_data and comparison_data.get("vs_average_percentage"):
-        vs_avg = comparison_data["vs_average_percentage"]
-        if abs(vs_avg) > 20:
-            insights.append(InsightItem(
-                type="vs_average",
-                title="Compared to Your Average",
-                description=f"You're spending {abs(vs_avg):.1f}% {'more' if vs_avg > 0 else 'less'} than your historical average",
-                value=vs_avg,
-                severity="info"
-            ))
-    
-    return insights
-
-def _generate_trend_charts(time_series_data: List[TimePeriodData], trend_analysis: dict, seasonal_patterns: Optional[dict]) -> List[ChartData]:
-    """Generate trend analysis charts"""
-    charts = []
-    
-    # Main trend chart
-    if time_series_data:
-        charts.append(ChartData(
-            chart_type=ChartType.area,
-            title="Spending Trend Analysis", 
-            data=[
-                {
-                    "period": ts.period,
-                    "amount": float(ts.amount),
-                    "trend": "increasing" if trend_analysis["direction"] == TrendDirection.increasing else 
-                             "decreasing" if trend_analysis["direction"] == TrendDirection.decreasing else "stable"
-                }
-                for ts in time_series_data
-            ],
-            config={
-                "show_trend_line": True,
-                "trend_strength": trend_analysis["strength"]
-            }
-        ))
-    
-    return charts
-
-def _generate_trend_insights(trend_analysis: dict, seasonal_patterns: Optional[dict]) -> List[InsightItem]:
-    """Generate trend insights"""
-    insights = []
-    
-    # Main trend insight
-    direction = trend_analysis["direction"]
-    strength = trend_analysis["strength"]
-    percentage = trend_analysis["percentage_change"]
-    
-    severity_map = {
-        TrendDirection.increasing: "warning",
-        TrendDirection.decreasing: "info", 
-        TrendDirection.stable: "info"
-    }
-    
-    insights.append(InsightItem(
-        type="trend_analysis",
-        title=f"Spending Trend: {direction.value.title()}",
-        description=f"Your spending trend shows a {strength*100:.1f}% strength {direction.value} pattern with {abs(percentage):.1f}% change",
-        value=percentage,
-        severity=severity_map[direction]
-    ))
-    
-    # Seasonal insights
-    if seasonal_patterns:
-        if seasonal_patterns.get("has_strong_seasonality"):
-            insights.append(InsightItem(
-                type="seasonality",
-                title="Strong Seasonal Pattern Detected",
-                description=f"Peak spending months: {', '.join(map(str, seasonal_patterns.get('peak_months', [])))}",
-                severity="info"
-            ))
-    
-    return insights
-
-async def _validate_user_category(user_id: str, category_id: str):
-    """Validate that category belongs to user"""
-    query = "SELECT COUNT(*) FROM categories WHERE id = $1 AND user_id = $2"
-    count = await execute_query(query, category_id, user_id)
-    
-    if not count or count[0]["count"] == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Category not found or does not belong to user"
-        )
-
-async def _get_category_time_series(user_id: str, category_id: str, date_range: dict, period: PeriodType) -> List[TimePeriodData]:
-    """Get time series data for specific category"""
-    # Implementation would query expenses filtered by category
-    return []
-
-async def _get_category_comparison(user_id: str, category_id: str, date_range: dict, period: PeriodType) -> dict:
-    """Get category comparison data"""
-    return {}
-
-async def _generate_category_trend_charts(time_series_data: List[TimePeriodData], trend_analysis: dict, 
-                                        comparison_data: dict, seasonal_patterns: dict) -> List[ChartData]:
-    """Generate category-specific trend charts"""
-    return []
-
-async def _generate_category_trend_insights(user_id: str, category_id: str, trend_analysis: dict, comparison_data: dict) -> List[InsightItem]:
-    """Generate category-specific insights"""
-    return []
-
-async def _get_comparative_trend_data(user_id: str, date_range: dict, period: PeriodType, 
-                                    category_ids: List[str], metric: str) -> dict:
-    """Get data for comparative analysis"""
-    return {}
-
-def _analyze_comparative_trends(comparative_data: dict, normalize: bool) -> dict:
-    """Analyze comparative trends"""
-    return {}
-
-def _generate_comparative_charts(comparative_data: dict, comparison_analysis: dict, normalize: bool) -> List[ChartData]:
-    """Generate comparative charts"""
-    return []
-
-def _analyze_trend_correlations(comparative_data: dict) -> dict:
-    """Analyze correlations between trends"""
-    return {}
-
-def _generate_comparative_insights(comparison_analysis: dict, correlation_analysis: dict) -> List[InsightItem]:
-    """Generate comparative insights"""
-    return []
-
-async def _calculate_spending_velocity(user_id: str, date_range: dict, period: PeriodType, category_id: Optional[str]) -> dict:
-    """Calculate spending velocity metrics"""
-    return {}
-
-def _generate_velocity_charts(velocity_data: dict) -> List[ChartData]:
-    """Generate velocity charts"""
-    return []
-
-def _generate_velocity_insights(velocity_data: dict) -> List[InsightItem]:
-    """Generate velocity insights"""
-    return []
-

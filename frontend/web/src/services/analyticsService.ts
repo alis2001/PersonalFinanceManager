@@ -113,7 +113,7 @@ class AnalyticsService {
         }
       });
 
-      const url = `${this.analyticsURL}/analytics/overview${queryParams.toString() ? `?${queryParams}` : ''}`;
+      const url = `${this.analyticsURL}/overview${queryParams.toString() ? `?${queryParams}` : ''}`;
       
       const response = await fetch(url, {
         method: 'GET',
@@ -145,7 +145,7 @@ class AnalyticsService {
         }
       });
 
-      const url = `${this.analyticsURL}/analytics/categories${queryParams.toString() ? `?${queryParams}` : ''}`;
+      const url = `${this.analyticsURL}/categories${queryParams.toString() ? `?${queryParams}` : ''}`;
       
       const response = await fetch(url, {
         method: 'GET',

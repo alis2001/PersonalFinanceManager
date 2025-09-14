@@ -14,6 +14,8 @@ import structlog
 from .config.database import init_db, close_db, get_db_status, get_redis_status
 from .config.settings import settings
 from .api.routes.analytics import router as analytics_router
+from .api.routes.trends import router as trends_router
+from .middleware.auth import AuthMiddleware
 
 # Setup logging
 structlog.configure(
@@ -77,6 +79,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(AuthMiddleware)
+
+
 # Request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -104,7 +109,8 @@ async def log_requests(request: Request, call_next):
     return response
 
 # Include the REAL analytics routes
-app.include_router(analytics_router, prefix="/analytics", tags=["Analytics"])
+app.include_router(analytics_router, prefix="", tags=["Analytics"])
+app.include_router(trends_router, prefix="/trends", tags=["Trends"])
 
 # Health check endpoint
 @app.get("/health")

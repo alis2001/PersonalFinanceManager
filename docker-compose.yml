@@ -127,10 +127,11 @@ services:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - LOG_LEVEL=${LOG_LEVEL}
+      - JWT_SECRET=${JWT_SECRET} 
     networks:
       - finance-network
     restart: unless-stopped
-    
+
   # Node.js Microservices
   auth:
     build:
