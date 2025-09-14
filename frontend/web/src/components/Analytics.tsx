@@ -11,14 +11,13 @@ import {
   Title,
   Tooltip,
   Legend,
-  Filler,
-  TimeScale
+  Filler
 } from 'chart.js';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
-import 'chartjs-adapter-date-fns';
 import analyticsService from '../services/analyticsService';
 import '../styles/Analytics.css';
 
+// Register Chart.js components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -29,20 +28,8 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  Filler,
-  TimeScale
+  Filler
 );
-
-interface ChartConfig {
-  chart_type: string;
-  title: string;
-  subtitle?: string;
-  data: any;
-  config?: any;
-  transaction_details?: any[];
-  maximizable?: boolean;
-  period?: string;
-}
 
 interface AnalyticsOverview {
   total_expenses: number;
@@ -62,7 +49,12 @@ interface AnalyticsOverview {
     description: string;
     severity: string;
   }>;
-  charts?: ChartConfig[];
+  charts?: Array<{
+    chart_type: string;
+    title: string;
+    data: any;
+    config?: any;
+  }>;
 }
 
 interface SpendingTrends {
@@ -83,7 +75,6 @@ const Analytics: React.FC = () => {
   const [trends, setTrends] = useState<SpendingTrends | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState('monthly');
   const [error, setError] = useState<string | null>(null);
-  const [maximizedChart, setMaximizedChart] = useState<ChartConfig | null>(null);
 
   useEffect(() => {
     loadAnalyticsData();
@@ -94,6 +85,7 @@ const Analytics: React.FC = () => {
     setError(null);
 
     try {
+      // Load analytics overview
       const overviewResult = await analyticsService.getAnalyticsOverview({
         period: selectedPeriod
       });
@@ -104,6 +96,7 @@ const Analytics: React.FC = () => {
         setError(overviewResult.error || 'Failed to load analytics overview');
       }
 
+      // Load spending trends
       const trendsResult = await analyticsService.getSpendingTrends({
         period: selectedPeriod
       });
@@ -133,69 +126,169 @@ const Analytics: React.FC = () => {
     return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
   };
 
-  const renderChart = (chartConfig: ChartConfig, isMaximized: boolean = false) => {
-    const { chart_type, data, config, transaction_details } = chartConfig;
-    
-    const chartOptions = {
-      ...config,
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical': return '#ef4444';
+      case 'warning': return '#f59e0b';
+      default: return '#22c55e';
+    }
+  };
+
+  // Chart rendering functions
+  const renderChart = (chart: any) => {
+    const commonOptions = {
       responsive: true,
-      maintainAspectRatio: !isMaximized,
+      maintainAspectRatio: false,
       plugins: {
-        ...config?.plugins,
+        legend: {
+          position: 'bottom' as const,
+          labels: {
+            usePointStyle: true,
+            font: {
+              size: 12
+            }
+          }
+        },
         tooltip: {
-          ...config?.plugins?.tooltip,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          borderColor: '#3182ce',
+          borderWidth: 1,
           callbacks: {
-            title: (context: any) => {
-              if (transaction_details && context[0]) {
-                const index = context[0].dataIndex;
-                const transaction = transaction_details[index];
-                return transaction ? `${transaction.category.name} - ${transaction.description}` : '';
-              }
-              return context[0]?.label || '';
-            },
             label: (context: any) => {
-              const value = formatCurrency(context.parsed.y);
-              if (transaction_details && context.dataIndex < transaction_details.length) {
-                const transaction = transaction_details[context.dataIndex];
-                return [
-                  `Amount: ${value}`,
-                  `Date: ${new Date(transaction.date).toLocaleDateString()}`,
-                  `Location: ${transaction.location || 'N/A'}`
-                ];
+              if (chart.chart_type === 'doughnut') {
+                return `${context.label}: ${formatCurrency(context.raw)} (${context.parsed}%)`;
               }
-              return `Amount: ${value}`;
+              return `${context.dataset.label}: ${formatCurrency(context.raw)}`;
             }
           }
         }
       }
     };
 
-    switch (chart_type) {
-      case 'line':
-        return <Line data={data} options={chartOptions} />;
-      case 'bar':
-        return <Bar data={data} options={chartOptions} />;
+    switch (chart.chart_type) {
       case 'doughnut':
-        return <Doughnut data={data} options={chartOptions} />;
-      default:
-        return <Line data={data} options={chartOptions} />;
+        if (chart.data && chart.data.length > 0) {
+          const chartData = {
+            labels: chart.data.map((item: any) => item.label),
+            datasets: [{
+              data: chart.data.map((item: any) => item.value),
+              backgroundColor: chart.data.map((item: any) => item.color || '#64748b'),
+              borderColor: '#ffffff',
+              borderWidth: 2,
+              hoverBorderWidth: 3
+            }]
+          };
+          
+          return (
+            <div className="chart-wrapper">
+              <Doughnut 
+                data={chartData} 
+                options={{
+                  ...commonOptions,
+                  cutout: '60%',
+                  plugins: {
+                    ...commonOptions.plugins,
+                    legend: {
+                      ...commonOptions.plugins.legend,
+                      position: 'right' as const
+                    }
+                  }
+                }} 
+              />
+            </div>
+          );
+        }
+        break;
+
+      case 'bar':
+        if (chart.data && chart.data.labels && chart.data.labels.length > 0) {
+          const options = {
+            ...commonOptions,
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  callback: (value: any) => formatCurrency(value)
+                },
+                grid: {
+                  color: 'rgba(0, 0, 0, 0.1)'
+                }
+              },
+              x: {
+                grid: {
+                  display: false
+                }
+              }
+            }
+          };
+
+          return (
+            <div className="chart-wrapper">
+              <Bar data={chart.data} options={options} />
+            </div>
+          );
+        }
+        break;
+
+      case 'line':
+      case 'area':
+        if (chart.data && chart.data.labels && chart.data.labels.length > 0) {
+          const options = {
+            ...commonOptions,
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  callback: (value: any) => formatCurrency(value)
+                },
+                grid: {
+                  color: 'rgba(0, 0, 0, 0.1)'
+                }
+              },
+              x: {
+                grid: {
+                  display: false
+                }
+              }
+            },
+            elements: {
+              line: {
+                tension: 0.4
+              },
+              point: {
+                radius: 4,
+                hoverRadius: 6
+              }
+            }
+          };
+
+          return (
+            <div className="chart-wrapper">
+              <Line data={chart.data} options={options} />
+            </div>
+          );
+        }
+        break;
     }
-  };
 
-  const maximizeChart = (chart: ChartConfig) => {
-    setMaximizedChart(chart);
-  };
-
-  const closeMaximizedChart = () => {
-    setMaximizedChart(null);
+    // Fallback for charts with no data
+    return (
+      <div className="chart-no-data">
+        <div className="no-data-icon">📊</div>
+        <p>No data available for this period</p>
+        <small>Try selecting a different time period</small>
+      </div>
+    );
   };
 
   if (loading) {
     return (
       <div className="analytics-container">
-        <div className="loading-state">
-          <div className="loading-spinner"></div>
-          <p>Loading analytics data...</p>
+        <div className="loading-spinner">
+          <div className="spinner"></div>
+          <p>Loading analytics...</p>
         </div>
       </div>
     );
@@ -204,11 +297,11 @@ const Analytics: React.FC = () => {
   if (error) {
     return (
       <div className="analytics-container">
-        <div className="error-state">
+        <div className="error-message">
           <h3>Error Loading Analytics</h3>
           <p>{error}</p>
-          <button onClick={loadAnalyticsData} className="retry-button">
-            Retry
+          <button onClick={() => navigate('/dashboard')} className="btn-secondary">
+            Back to Dashboard
           </button>
         </div>
       </div>
@@ -217,13 +310,13 @@ const Analytics: React.FC = () => {
 
   return (
     <div className="analytics-container">
-      {/* Header */}
-      <div className="analytics-header">
-        <h1>Analytics Dashboard</h1>
-        <div className="period-selector">
+      <header className="analytics-header">
+        <h1>📊 Financial Analytics</h1>
+        <div className="analytics-controls">
           <select 
             value={selectedPeriod} 
             onChange={(e) => setSelectedPeriod(e.target.value)}
+            className="period-selector"
           >
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
@@ -231,141 +324,118 @@ const Analytics: React.FC = () => {
             <option value="quarterly">Quarterly</option>
             <option value="yearly">Yearly</option>
           </select>
+          <button onClick={() => navigate('/dashboard')} className="btn-secondary">
+            Back to Dashboard
+          </button>
         </div>
-      </div>
+      </header>
 
-      {/* Overview Cards */}
       {overview && (
-        <div className="overview-cards">
-          <div className="overview-card">
-            <h3>Total Expenses</h3>
-            <p className="amount">{formatCurrency(overview.total_expenses)}</p>
-          </div>
-          <div className="overview-card">
-            <h3>Transactions</h3>
-            <p className="count">{overview.transaction_count}</p>
-          </div>
-          <div className="overview-card">
-            <h3>Daily Average</h3>
-            <p className="amount">{formatCurrency(overview.average_daily_spending)}</p>
-          </div>
-          <div className="overview-card">
-            <h3>Net Amount</h3>
-            <p className={`amount ${overview.net_amount >= 0 ? 'positive' : 'negative'}`}>
-              {formatCurrency(overview.net_amount)}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Charts Section */}
-      {overview?.charts && (
-        <div className="charts-section">
-          {overview.charts.map((chart, index) => (
-            <div key={index} className="chart-container">
-              <div className="chart-header">
-                <div>
-                  <h3>{chart.title}</h3>
-                  {chart.subtitle && <p className="chart-subtitle">{chart.subtitle}</p>}
-                </div>
-                {chart.maximizable && (
-                  <button 
-                    className="maximize-button"
-                    onClick={() => maximizeChart(chart)}
-                    title="Maximize Chart"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16">
-                      <path d="M1.5 1.5v3h3m7-3v3h3m-3 7v3h3m-7 0v3h-3" 
-                            stroke="currentColor" 
-                            strokeWidth="1.5" 
-                            fill="none"/>
-                    </svg>
-                  </button>
-                )}
+        <>
+          {/* Overview Cards */}
+          <div className="analytics-overview">
+            <div className="overview-cards">
+              <div className="overview-card expense">
+                <h3>Total Expenses</h3>
+                <p className="amount">{formatCurrency(overview.total_expenses)}</p>
+                <span className="label">This {selectedPeriod}</span>
               </div>
-              <div className="chart-content">
-                {renderChart(chart)}
+              
+              <div className="overview-card transactions">
+                <h3>Total Transactions</h3>
+                <p className="amount">{overview.transaction_count}</p>
+                <span className="label">This {selectedPeriod}</span>
+              </div>
+              
+              <div className="overview-card daily-avg">
+                <h3>Daily Average</h3>
+                <p className="amount">{formatCurrency(overview.average_daily_spending)}</p>
+                <span className="label">Average per day</span>
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Trends Section */}
-      {trends && (
-        <div className="trends-section">
-          <h2>Spending Trends</h2>
-          <div className="trend-summary">
-            <div className="trend-direction">
-              <span className={`trend-indicator ${trends.trend_direction}`}>
-                {trends.trend_direction === 'increasing' ? '↗' : 
-                 trends.trend_direction === 'decreasing' ? '↘' : '→'}
-              </span>
-              <span>Trend: {trends.trend_direction}</span>
-            </div>
-            <div className="trend-percentage">
-              <span className={trends.trend_percentage >= 0 ? 'positive' : 'negative'}>
-                {formatPercentage(trends.trend_percentage)}
-              </span>
-            </div>
           </div>
-        </div>
-      )}
 
-      {/* Top Categories */}
-      {overview?.top_expense_categories && (
-        <div className="categories-section">
-          <h2>Top Spending Categories</h2>
-          <div className="categories-list">
-            {overview.top_expense_categories.map((category, index) => (
-              <div key={index} className="category-item">
-                <div className="category-info">
-                  <span className="category-icon">{category.category_icon}</span>
-                  <span className="category-name">{category.category_name}</span>
-                </div>
-                <div className="category-amounts">
-                  <span className="amount">{formatCurrency(category.total_amount)}</span>
-                  <span className="percentage">({category.percentage_of_total.toFixed(1)}%)</span>
+          {/* Professional Charts Section */}
+          {overview.charts && overview.charts.length > 0 && (
+            <div className="charts-section">
+              <h2>📈 Financial Analysis Charts</h2>
+              <div className="charts-grid">
+                {overview.charts.map((chart, index) => (
+                  <div key={index} className="chart-container">
+                    <h3>{chart.title}</h3>
+                    {renderChart(chart)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Trends Section */}
+          {trends && (
+            <div className="trends-section">
+              <h2>📊 Spending Trends</h2>
+              <div className="trend-summary">
+                <div className="trend-indicator">
+                  <span className={`trend-direction ${trends.trend_direction}`}>
+                    {trends.trend_direction === 'increasing' ? '📈' : 
+                     trends.trend_direction === 'decreasing' ? '📉' : '➡️'}
+                  </span>
+                  <div className="trend-info">
+                    <h3>Trend: {trends.trend_direction}</h3>
+                    <p>Change: {formatPercentage(trends.trend_percentage)}</p>
+                    <p>Strength: {(trends.trend_strength * 100).toFixed(0)}%</p>
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Insights */}
-      {overview?.insights && (
-        <div className="insights-section">
-          <h2>Insights</h2>
-          <div className="insights-list">
-            {overview.insights.map((insight, index) => (
-              <div key={index} className={`insight-item ${insight.severity}`}>
-                <h4>{insight.title}</h4>
-                <p>{insight.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Maximized Chart Modal */}
-      {maximizedChart && (
-        <div className="chart-modal-overlay" onClick={closeMaximizedChart}>
-          <div className="chart-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{maximizedChart.title}</h2>
-              <button 
-                className="close-button"
-                onClick={closeMaximizedChart}
-              >
-                ×
-              </button>
             </div>
-            <div className="modal-content">
-              {renderChart(maximizedChart, true)}
+          )}
+
+          {/* Top Categories */}
+          <div className="categories-section">
+            <h2>🏆 Top Spending Categories</h2>
+            <div className="categories-list">
+              {overview.top_expense_categories.map((category, index) => (
+                <div key={index} className="category-item">
+                  <div className="category-info">
+                    <span className="category-icon">{category.category_icon || '💰'}</span>
+                    <div className="category-details">
+                      <h4>{category.category_name}</h4>
+                      <p>{formatCurrency(category.total_amount)} ({category.percentage_of_total.toFixed(1)}%)</p>
+                    </div>
+                  </div>
+                  <div className="category-bar">
+                    <div 
+                      className="category-progress" 
+                      style={{ 
+                        width: `${category.percentage_of_total}%`,
+                        backgroundColor: category.category_color || '#64748b'
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+
+          {/* Insights */}
+          <div className="insights-section">
+            <h2>💡 Financial Insights</h2>
+            <div className="insights-list">
+              {overview.insights.map((insight, index) => (
+                <div key={index} className="insight-item">
+                  <div 
+                    className="insight-indicator"
+                    style={{ backgroundColor: getSeverityColor(insight.severity) }}
+                  ></div>
+                  <div className="insight-content">
+                    <h4>{insight.title}</h4>
+                    <p>{insight.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
