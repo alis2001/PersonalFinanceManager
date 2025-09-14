@@ -21,7 +21,7 @@ interface CategoryResponse {
 }
 
 class CategoryService {
-  private baseURL = process.env.REACT_APP_API_URL?.replace('/auth', '') || 'http://localhost:8080';
+  private baseURL = 'http://localhost:8080';
   private categoryURL = `${this.baseURL}/api/categories`;
 
   private getAuthHeaders(): Record<string, string> {
@@ -37,7 +37,6 @@ class CategoryService {
     
     if (!response.ok) {
       if (response.status === 401) {
-        // Token expired, try to refresh
         const refreshSuccess = await this.refreshToken();
         if (!refreshSuccess) {
           localStorage.removeItem('accessToken');
@@ -78,7 +77,6 @@ class CategoryService {
     return false;
   }
 
-  // Get categories
   async getCategories(params: {
     type?: 'income' | 'expense' | 'both';
     active?: boolean;
@@ -115,15 +113,12 @@ class CategoryService {
     }
   }
 
-  // Get expense categories with auto-creation of defaults
   async getExpenseCategories(): Promise<CategoryResponse> {
     try {
       const result = await this.getCategories({ type: 'expense', active: true });
       
-      // If no categories exist, create default ones
       if (result.success && result.categories && result.categories.length === 0) {
         await this.createDefaultCategories();
-        // Retry getting categories after creating defaults
         return this.getCategories({ type: 'expense', active: true });
       }
       
@@ -134,7 +129,6 @@ class CategoryService {
     }
   }
 
-  // Create default expense categories for new users
   private async createDefaultCategories(): Promise<void> {
     const defaultExpenseCategories = [
       { name: 'Food & Dining', description: 'Restaurants, groceries, food delivery', color: '#FF6B35', icon: '🍽️', type: 'expense' as const },
@@ -147,7 +141,6 @@ class CategoryService {
       { name: 'Other Expenses', description: 'Miscellaneous and uncategorized expenses', color: '#D5DBDB', icon: '📝', type: 'expense' as const }
     ];
 
-    // Create categories in parallel
     const promises = defaultExpenseCategories.map(category => 
       this.createCategory({ ...category, is_active: true })
     );
@@ -155,12 +148,10 @@ class CategoryService {
     await Promise.allSettled(promises);
   }
 
-  // Get income categories only
   async getIncomeCategories(): Promise<CategoryResponse> {
     return this.getCategories({ type: 'income', active: true });
   }
 
-  // Get single category
   async getCategory(id: string): Promise<CategoryResponse> {
     try {
       const response = await fetch(`${this.categoryURL}/categories/${id}`, {
@@ -178,7 +169,6 @@ class CategoryService {
     }
   }
 
-  // Create category
   async createCategory(categoryData: {
     name: string;
     description?: string;
@@ -209,7 +199,6 @@ class CategoryService {
     }
   }
 
-  // Update category
   async updateCategory(id: string, categoryData: {
     name?: string;
     description?: string;
@@ -240,7 +229,6 @@ class CategoryService {
     }
   }
 
-  // Delete category
   async deleteCategory(id: string): Promise<CategoryResponse> {
     try {
       const response = await fetch(`${this.categoryURL}/categories/${id}`, {

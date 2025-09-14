@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import expenseService from '../services/expenseService';
+import type { Expense } from '../services/expenseService';
 import AddExpense from './AddExpense';
 import '../styles/Dashboard.css';
 
@@ -29,9 +30,11 @@ const Dashboard: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [recentExpensesLoading, setRecentExpensesLoading] = useState(false);
   const [weeklyStats, setWeeklyStats] = useState<ExpenseStats | null>(null);
   const [monthlyStats, setMonthlyStats] = useState<ExpenseStats | null>(null);
   const [yearlyStats, setYearlyStats] = useState<ExpenseStats | null>(null);
+  const [recentExpenses, setRecentExpenses] = useState<Expense[]>([]);
   const [showAddExpense, setShowAddExpense] = useState(false);
 
   useEffect(() => {
@@ -41,6 +44,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     if (user) {
       loadExpenseStats();
+      loadRecentExpenses();
     }
   }, [user]);
 
@@ -63,7 +67,6 @@ const Dashboard: React.FC = () => {
     setStatsLoading(true);
     
     try {
-      // Load all three periods concurrently
       const [weeklyResult, monthlyResult, yearlyResult] = await Promise.all([
         expenseService.getExpenseStats('weekly'),
         expenseService.getExpenseStats('monthly'),
@@ -88,6 +91,27 @@ const Dashboard: React.FC = () => {
     setStatsLoading(false);
   };
 
+  const loadRecentExpenses = async () => {
+    setRecentExpensesLoading(true);
+    
+    try {
+      const result = await expenseService.getExpenses({
+        page: 1,
+        limit: 10,
+        sortBy: 'transaction_date',
+        sortOrder: 'desc'
+      });
+
+      if (result.success && result.expenses) {
+        setRecentExpenses(result.expenses);
+      }
+    } catch (error) {
+      console.error('Failed to load recent expenses:', error);
+    }
+    
+    setRecentExpensesLoading(false);
+  };
+
   const handleLogout = async () => {
     await authService.logout();
     navigate('/login');
@@ -98,17 +122,37 @@ const Dashboard: React.FC = () => {
   };
 
   const handleAddExpenseSuccess = () => {
-    // Reload expense stats when a new expense is added
     loadExpenseStats();
+    loadRecentExpenses();
   };
 
   const handleViewAnalytics = () => {
-    // TODO: Navigate to analytics page
     console.log('View analytics clicked');
   };
 
   const formatCurrency = (amount: number): string => {
     return expenseService.formatCurrency(amount);
+  };
+
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return 'Today';
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    } else {
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+      });
+    }
   };
 
   const getStatCardClass = (isLoading: boolean) => {
@@ -231,13 +275,52 @@ const Dashboard: React.FC = () => {
 
           {/* Recent Activity */}
           <div className="recent-activity">
-            <h2>Recent Activity</h2>
-            <div className="activity-placeholder">
-              <p>Your recent expenses will appear here</p>
-              <button className="btn-secondary" onClick={handleAddExpense}>
-                Add Your First Expense
-              </button>
-            </div>
+            <h2>Recent Expenses</h2>
+            {recentExpensesLoading ? (
+              <div className="activity-loading">
+                <div className="loading-spinner"></div>
+                <p>Loading recent expenses...</p>
+              </div>
+            ) : recentExpenses.length > 0 ? (
+              <div className="expenses-list">
+                {recentExpenses.map((expense) => (
+                  <div key={expense.id} className="expense-item">
+                    <div className="expense-main">
+                      <div 
+                        className="expense-category-icon"
+                        style={{ backgroundColor: expense.category.color + '20', color: expense.category.color }}
+                      >
+                        {expense.category.icon}
+                      </div>
+                      <div className="expense-details">
+                        <div className="expense-description">
+                          {expense.description || expense.category.name}
+                        </div>
+                        <div className="expense-category">
+                          {expense.category.name}
+                          {expense.location && ` • ${expense.location}`}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="expense-right">
+                      <div className="expense-amount">
+                        {formatCurrency(expense.amount)}
+                      </div>
+                      <div className="expense-date">
+                        {formatDate(expense.transactionDate)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="activity-placeholder">
+                <p>No expenses yet</p>
+                <button className="btn-secondary" onClick={handleAddExpense}>
+                  Add Your First Expense
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>

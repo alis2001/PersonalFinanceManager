@@ -56,9 +56,16 @@
 }
 
 .welcome {
-  color: #666666;
-  font-weight: 400;
+  color: #2d3748;
+  font-weight: 500;
   font-size: 0.95rem;
+  background: none;
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+  border: none;
+  text-shadow: none;
+  box-shadow: none;
 }
 
 .btn-logout {
@@ -426,7 +433,7 @@
   }
   
   .welcome {
-    display: none;
+    font-size: 0.9rem;
   }
   
   .dashboard-main {
@@ -467,5 +474,11 @@
   
   .modal-header, .modal-body, .modal-footer {
     padding: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .welcome {
+    display: none;
   }
 }

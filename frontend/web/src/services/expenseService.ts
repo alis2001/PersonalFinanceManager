@@ -56,7 +56,7 @@ interface ExpenseResponse {
 }
 
 class ExpenseService {
-  private baseURL = process.env.REACT_APP_API_URL?.replace('/auth', '') || 'http://localhost:8080';
+  private baseURL = 'http://localhost:8080';
   private expenseURL = `${this.baseURL}/api/expenses`;
 
   private getAuthHeaders(): Record<string, string> {
@@ -72,7 +72,6 @@ class ExpenseService {
     
     if (!response.ok) {
       if (response.status === 401) {
-        // Token expired, try to refresh
         const refreshSuccess = await this.refreshToken();
         if (!refreshSuccess) {
           localStorage.removeItem('accessToken');
@@ -113,7 +112,6 @@ class ExpenseService {
     return false;
   }
 
-  // Get expense statistics
   async getExpenseStats(period: 'weekly' | 'monthly' | 'yearly' = 'monthly'): Promise<ExpenseResponse> {
     try {
       const response = await fetch(`${this.expenseURL}/stats?period=${period}`, {
@@ -131,7 +129,6 @@ class ExpenseService {
     }
   }
 
-  // Get all expenses
   async getExpenses(params: {
     page?: number;
     limit?: number;
@@ -171,7 +168,6 @@ class ExpenseService {
     }
   }
 
-  // Get single expense
   async getExpense(id: string): Promise<ExpenseResponse> {
     try {
       const response = await fetch(`${this.expenseURL}/expenses/${id}`, {
@@ -189,7 +185,6 @@ class ExpenseService {
     }
   }
 
-  // Create new expense
   async createExpense(expenseData: CreateExpenseData): Promise<ExpenseResponse> {
     try {
       const response = await fetch(`${this.expenseURL}/expenses`, {
@@ -213,7 +208,6 @@ class ExpenseService {
     }
   }
 
-  // Update expense
   async updateExpense(id: string, expenseData: UpdateExpenseData): Promise<ExpenseResponse> {
     try {
       const response = await fetch(`${this.expenseURL}/expenses/${id}`, {
@@ -237,7 +231,6 @@ class ExpenseService {
     }
   }
 
-  // Delete expense
   async deleteExpense(id: string): Promise<ExpenseResponse> {
     try {
       const response = await fetch(`${this.expenseURL}/expenses/${id}`, {
@@ -259,7 +252,6 @@ class ExpenseService {
     }
   }
 
-  // Helper method to format currency
   formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -268,7 +260,6 @@ class ExpenseService {
     }).format(amount);
   }
 
-  // Helper method to format date
   formatDate(date: string): string {
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -277,7 +268,6 @@ class ExpenseService {
     });
   }
 
-  // Helper method to format datetime for input
   formatDateTimeForInput(date: Date): string {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -288,7 +278,6 @@ class ExpenseService {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   }
 
-  // Helper method to parse datetime from input
   parseDateTimeFromInput(dateTimeString: string): Date {
     return new Date(dateTimeString);
   }
