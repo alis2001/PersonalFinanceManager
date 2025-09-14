@@ -1,5 +1,5 @@
 """
-Database Configuration for Analytics Service
+Simplified Database Configuration for Analytics Service
 Location: services/analytics/src/config/database.py
 """
 
@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional, Union
 from contextlib import asynccontextmanager
 
 import asyncpg
-import aioredis
+import redis
 import structlog
 from decimal import Decimal
 
@@ -20,7 +20,7 @@ logger = structlog.get_logger(__name__)
 
 # Global connection pools
 db_pool: Optional[asyncpg.Pool] = None
-redis_client: Optional[aioredis.Redis] = None
+redis_client: Optional[redis.Redis] = None
 
 async def init_db():
     """Initialize database connections and pools"""
@@ -36,8 +36,8 @@ async def init_db():
             user=settings.DB_USER,
             password=settings.DB_PASSWORD,
             min_size=5,
-            max_size=settings.DB_POOL_SIZE,
-            command_timeout=settings.DB_POOL_TIMEOUT,
+            max_size=10,
+            command_timeout=30,
             server_settings={
                 'jit': 'off'
             }
@@ -48,17 +48,18 @@ async def init_db():
             await conn.execute('SELECT 1')
             logger.info("PostgreSQL connection pool initialized successfully")
         
-        # Initialize Redis connection
+        # Initialize Redis connection (simplified)
         logger.info("Initializing Redis connection...")
-        redis_client = aioredis.from_url(
-            settings.redis_url,
-            encoding="utf-8",
+        redis_client = redis.Redis(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            db=0,
             decode_responses=True,
-            max_connections=settings.REDIS_POOL_SIZE
+            socket_timeout=5
         )
         
         # Test Redis connection
-        await redis_client.ping()
+        redis_client.ping()
         logger.info("Redis connection initialized successfully")
         
     except Exception as e:
@@ -75,154 +76,71 @@ async def close_db():
             logger.info("PostgreSQL connection pool closed")
             
         if redis_client:
-            await redis_client.close()
+            redis_client.close()
             logger.info("Redis connection closed")
             
     except Exception as e:
         logger.error("Error closing database connections", error=str(e))
 
-@asynccontextmanager
-async def get_db_connection():
-    """Get database connection from pool"""
-    if not db_pool:
-        raise RuntimeError("Database pool not initialized")
-    
-    async with db_pool.acquire() as connection:
-        yield connection
+# Database query helpers
+async def execute_query(query: str, *args) -> List[Dict]:
+    """Execute a query and return results"""
+    try:
+        async with db_pool.acquire() as conn:
+            result = await conn.fetch(query, *args)
+            return [dict(record) for record in result]
+    except Exception as e:
+        logger.error("Database query failed", query=query, error=str(e))
+        raise
 
-async def get_redis_client() -> aioredis.Redis:
-    """Get Redis client"""
-    if not redis_client:
-        raise RuntimeError("Redis client not initialized")
-    return redis_client
-
-# Database query functions
-async def execute_query(query: str, *args) -> List[Dict[str, Any]]:
-    """Execute query and return all results"""
-    async with get_db_connection() as conn:
-        start_time = time.time()
-        try:
-            rows = await conn.fetch(query, *args)
-            duration_ms = (time.time() - start_time) * 1000
-            
-            logger.debug("Query executed", 
-                        query_preview=query[:100] + "..." if len(query) > 100 else query,
-                        duration_ms=round(duration_ms, 2),
-                        row_count=len(rows))
-            
-            # Convert asyncpg.Record to dict
-            return [dict(row) for row in rows]
-            
-        except Exception as e:
-            duration_ms = (time.time() - start_time) * 1000
-            logger.error("Query failed", 
-                        query_preview=query[:100] + "..." if len(query) > 100 else query,
-                        duration_ms=round(duration_ms, 2),
-                        error=str(e))
-            raise
-
-async def execute_fetchrow(query: str, *args) -> Optional[Dict[str, Any]]:
-    """Execute query and return single row"""
-    async with get_db_connection() as conn:
-        start_time = time.time()
-        try:
-            row = await conn.fetchrow(query, *args)
-            duration_ms = (time.time() - start_time) * 1000
-            
-            logger.debug("Query executed (single row)", 
-                        query_preview=query[:100] + "..." if len(query) > 100 else query,
-                        duration_ms=round(duration_ms, 2),
-                        found=row is not None)
-            
-            return dict(row) if row else None
-            
-        except Exception as e:
-            duration_ms = (time.time() - start_time) * 1000
-            logger.error("Query failed (single row)", 
-                        query_preview=query[:100] + "..." if len(query) > 100 else query,
-                        duration_ms=round(duration_ms, 2),
-                        error=str(e))
-            raise
+async def execute_fetchrow(query: str, *args) -> Optional[Dict]:
+    """Execute a query and return single row"""
+    try:
+        async with db_pool.acquire() as conn:
+            result = await conn.fetchrow(query, *args)
+            return dict(result) if result else None
+    except Exception as e:
+        logger.error("Database fetchrow failed", query=query, error=str(e))
+        raise
 
 async def execute_scalar(query: str, *args) -> Any:
-    """Execute query and return single value"""
-    async with get_db_connection() as conn:
-        start_time = time.time()
-        try:
-            result = await conn.fetchval(query, *args)
-            duration_ms = (time.time() - start_time) * 1000
-            
-            logger.debug("Query executed (scalar)", 
-                        query_preview=query[:100] + "..." if len(query) > 100 else query,
-                        duration_ms=round(duration_ms, 2))
-            
-            return result
-            
-        except Exception as e:
-            duration_ms = (time.time() - start_time) * 1000
-            logger.error("Query failed (scalar)", 
-                        query_preview=query[:100] + "..." if len(query) > 100 else query,
-                        duration_ms=round(duration_ms, 2),
-                        error=str(e))
-            raise
+    """Execute a query and return single value"""
+    try:
+        async with db_pool.acquire() as conn:
+            return await conn.fetchval(query, *args)
+    except Exception as e:
+        logger.error("Database scalar query failed", query=query, error=str(e))
+        raise
 
-# Cache functions
+# Simplified cache operations
 async def cache_get(key: str) -> Optional[str]:
     """Get value from cache"""
     try:
-        redis = await get_redis_client()
-        full_key = f"{settings.CACHE_PREFIX}:{key}"
-        result = await redis.get(full_key)
-        
-        logger.debug("Cache get", key=full_key, hit=result is not None)
-        return result
-        
+        if redis_client:
+            return redis_client.get(f"analytics:{key}")
+        return None
     except Exception as e:
-        logger.error("Cache get failed", key=key, error=str(e))
+        logger.warning("Cache get failed", key=key, error=str(e))
         return None
 
-async def cache_set(key: str, value: str, ttl: int = None) -> bool:
+async def cache_set(key: str, value: str, ttl: int = 3600) -> bool:
     """Set value in cache"""
     try:
-        redis = await get_redis_client()
-        full_key = f"{settings.CACHE_PREFIX}:{key}"
-        ttl = ttl or settings.CACHE_TTL_DEFAULT
-        
-        await redis.setex(full_key, ttl, value)
-        
-        logger.debug("Cache set", key=full_key, ttl=ttl)
-        return True
-        
-    except Exception as e:
-        logger.error("Cache set failed", key=key, error=str(e))
+        if redis_client:
+            return redis_client.setex(f"analytics:{key}", ttl, value)
         return False
-
-async def cache_delete(key: str) -> bool:
-    """Delete key from cache"""
-    try:
-        redis = await get_redis_client()
-        full_key = f"{settings.CACHE_PREFIX}:{key}"
-        
-        result = await redis.delete(full_key)
-        
-        logger.debug("Cache delete", key=full_key, deleted=result > 0)
-        return result > 0
-        
     except Exception as e:
-        logger.error("Cache delete failed", key=key, error=str(e))
+        logger.warning("Cache set failed", key=key, error=str(e))
         return False
 
 async def cache_exists(key: str) -> bool:
     """Check if key exists in cache"""
     try:
-        redis = await get_redis_client()
-        full_key = f"{settings.CACHE_PREFIX}:{key}"
-        
-        result = await redis.exists(full_key)
-        return result > 0
-        
+        if redis_client:
+            return redis_client.exists(f"analytics:{key}") > 0
+        return False
     except Exception as e:
-        logger.error("Cache exists check failed", key=key, error=str(e))
+        logger.warning("Cache exists check failed", key=key, error=str(e))
         return False
 
 # Health check functions
@@ -230,58 +148,35 @@ async def get_db_status() -> Dict[str, Any]:
     """Get database connection status"""
     try:
         start_time = time.time()
-        await execute_scalar("SELECT 1")
+        async with db_pool.acquire() as conn:
+            await conn.execute('SELECT 1')
         response_time = (time.time() - start_time) * 1000
         
         return {
-            "status": "connected",
+            "status": "healthy",
             "response_time_ms": round(response_time, 2),
-            "pool_size": settings.DB_POOL_SIZE,
-            "active_connections": db_pool.get_size() if db_pool else 0
+            "pool_size": len(db_pool._queue._queue) if db_pool else 0,
         }
-        
     except Exception as e:
         return {
-            "status": "error",
-            "error": str(e),
-            "response_time_ms": None
+            "status": "unhealthy",
+            "error": str(e)
         }
 
 async def get_redis_status() -> Dict[str, Any]:
     """Get Redis connection status"""
     try:
-        redis = await get_redis_client()
         start_time = time.time()
-        await redis.ping()
+        if redis_client:
+            redis_client.ping()
         response_time = (time.time() - start_time) * 1000
         
-        info = await redis.info()
-        
         return {
-            "status": "connected",
+            "status": "healthy",
             "response_time_ms": round(response_time, 2),
-            "connected_clients": info.get("connected_clients", 0),
-            "used_memory": info.get("used_memory_human", "unknown")
         }
-        
     except Exception as e:
         return {
-            "status": "error",
-            "error": str(e),
-            "response_time_ms": None
+            "status": "unhealthy", 
+            "error": str(e)
         }
-
-# Utility functions for data conversion
-def decimal_to_float(obj):
-    """Convert Decimal objects to float for JSON serialization"""
-    if isinstance(obj, Decimal):
-        return float(obj)
-    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-
-def serialize_for_cache(data: Any) -> str:
-    """Serialize data for cache storage"""
-    return json.dumps(data, default=decimal_to_float, ensure_ascii=False)
-
-def deserialize_from_cache(data: str) -> Any:
-    """Deserialize data from cache"""
-    return json.loads(data)

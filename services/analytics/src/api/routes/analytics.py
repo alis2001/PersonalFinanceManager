@@ -1,400 +1,172 @@
 """
-Core Analytics Routes for Analytics Service
-Location: services/analytics/src/api/routes/analytics.py
+REAL Analytics Implementation - Actually queries your data
+Location: services/analytics/src/api/routes/analytics_real.py
+
+This file contains ACTUAL implementations that query your expense data from PostgreSQL
+Replace the stub functions in analytics.py with these REAL implementations.
 """
 
 import time
 import json
 from datetime import date, datetime, timedelta
-from typing import List, Optional
+from typing import List, Dict, Any, Optional
 from decimal import Decimal
+from collections import defaultdict
+
 from fastapi import APIRouter, Request, HTTPException, status, Depends, Query
 import structlog
 
-from ...config.database import execute_query, execute_fetchrow, execute_scalar, cache_get, cache_set
+from ...config.database import execute_query, execute_fetchrow, cache_get, cache_set
 from ...config.settings import settings
-from ...models.schemas import (
-    AnalyticsOverviewRequest, AnalyticsOverviewResponse,
-    CategoryAnalyticsRequest, CategoryAnalyticsResponse,
-    BudgetAnalyticsRequest, BudgetAnalyticsResponse,
-    CategorySummary, TimePeriodData, BudgetStatus, ChartData, InsightItem,
-    ChartType, PeriodType, TrendDirection
-)
 from ...middleware.auth import get_user_id
-from ...utils.logger import analytics_logger, performance_logger
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
 
-@router.get("/overview", response_model=AnalyticsOverviewResponse, tags=["Analytics"])
-async def get_analytics_overview(
+@router.get("/analytics/overview", tags=["Analytics"])
+async def get_analytics_overview_real(
     request: Request,
-    period: PeriodType = PeriodType.monthly,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    include_forecasting: bool = False,
-    include_comparisons: bool = True,
+    period: str = Query("monthly", description="Period: daily, weekly, monthly, quarterly, yearly"),
+    start_date: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    include_comparisons: bool = Query(True, description="Include period comparisons"),
     user_id: str = Depends(get_user_id)
 ):
     """
-    Get comprehensive analytics overview
-    
-    Returns:
-    - Total expenses and income
-    - Net amount and transaction counts  
-    - Top categories
-    - Period comparisons
-    - Interactive charts
-    - AI-generated insights
+    REAL Analytics Overview - Queries actual expense data from database
     """
     start_time = time.time()
     
     try:
-        # Generate cache key
-        cache_key = f"overview:{user_id}:{period}:{start_date}:{end_date}:{include_forecasting}:{include_comparisons}"
-        
-        # Try cache first
-        cached_data = await cache_get(cache_key)
-        if cached_data:
-            analytics_logger.log_cache_operation("get", cache_key, hit=True)
-            response_data = json.loads(cached_data)
-            response_data["processing_time_ms"] = (time.time() - start_time) * 1000
-            return AnalyticsOverviewResponse(**response_data)
-        
         # Calculate date range
-        date_range = _calculate_date_range(period, start_date, end_date)
+        date_range = calculate_date_range(period, start_date, end_date)
         
-        # Get overview data concurrently
-        overview_data = await _get_overview_data(user_id, date_range)
-        top_categories = await _get_top_categories(user_id, date_range)
-        charts = await _generate_overview_charts(user_id, date_range, overview_data, top_categories)
-        insights = await _generate_overview_insights(overview_data, top_categories)
+        # Get REAL expense data from database
+        overview_data = await get_real_expense_overview(user_id, date_range)
+        
+        # Get REAL top categories
+        top_categories = await get_real_top_categories(user_id, date_range)
+        
+        # Generate REAL chart data
+        charts = await generate_real_charts(user_id, date_range, period, top_categories)
+        
+        # Generate REAL insights
+        insights = await generate_real_insights(overview_data, top_categories)
         
         # Period comparison if requested
         period_comparison = None
         if include_comparisons:
-            period_comparison = await _get_period_comparison(user_id, date_range, period)
+            period_comparison = await get_real_period_comparison(user_id, date_range, period)
         
-        # Build response
-        response_data = AnalyticsOverviewResponse(
-            total_expenses=overview_data["total_expenses"],
-            total_income=overview_data["total_income"], 
-            net_amount=overview_data["net_amount"],
-            transaction_count=overview_data["transaction_count"],
-            average_daily_spending=overview_data["average_daily_spending"],
-            period_comparison=period_comparison,
-            top_expense_categories=top_categories["expenses"],
-            top_income_categories=top_categories["income"],
-            charts=charts,
-            insights=insights,
-            processing_time_ms=(time.time() - start_time) * 1000
-        )
-        
-        # Cache the result
-        await cache_set(cache_key, response_data.json(), ttl=settings.CACHE_TTL_SHORT)
-        analytics_logger.log_cache_operation("set", cache_key, ttl=settings.CACHE_TTL_SHORT)
-        
-        # Log analytics
-        analytics_logger.log_user_activity(
-            user_id=user_id,
-            action="overview_generated",
-            resource="analytics",
-            period=period,
-            date_range=f"{date_range['start']} to {date_range['end']}"
-        )
+        response_data = {
+            "success": True,
+            "total_expenses": float(overview_data["total_expenses"]),
+            "total_income": 0,  # Not needed for now as requested
+            "net_amount": -float(overview_data["total_expenses"]),  # Negative because only expenses
+            "transaction_count": overview_data["transaction_count"],
+            "average_daily_spending": float(overview_data["average_daily_spending"]),
+            "period_comparison": period_comparison,
+            "top_expense_categories": top_categories,
+            "charts": charts,
+            "insights": insights,
+            "processing_time_ms": (time.time() - start_time) * 1000
+        }
         
         return response_data
         
     except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
-        analytics_logger.log_error_with_context(e, {
-            "user_id": user_id,
-            "period": period,
-            "processing_time_ms": processing_time
-        })
-        
+        logger.error("Analytics overview failed", error=str(e), user_id=user_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate analytics overview: {str(e)}"
         )
 
-@router.get("/categories", response_model=CategoryAnalyticsResponse, tags=["Analytics"])
-async def get_category_analytics(
+@router.get("/analytics/categories", tags=["Analytics"])
+async def get_category_analytics_real(
     request: Request,
-    period: PeriodType = PeriodType.monthly,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    period: str = Query("monthly", description="Period type"),
+    start_date: Optional[str] = Query(None, description="Start date"),
+    end_date: Optional[str] = Query(None, description="End date"),
     category_ids: Optional[str] = Query(None, description="Comma-separated category IDs"),
-    include_subcategories: bool = True,
-    group_by_type: bool = True,
     user_id: str = Depends(get_user_id)
 ):
     """
-    Get detailed category analytics
-    
-    Returns:
-    - Category breakdown with amounts and percentages
-    - Time series data for trends
-    - Category comparison charts
-    - Category-specific insights
+    REAL Category Analytics - Actual category breakdown and comparison
     """
-    start_time = time.time()
-    
     try:
-        # Parse category IDs if provided
-        category_id_list = []
-        if category_ids:
-            category_id_list = [id.strip() for id in category_ids.split(",")]
+        date_range = calculate_date_range(period, start_date, end_date)
         
-        cache_key = f"categories:{user_id}:{period}:{start_date}:{end_date}:{category_ids}:{include_subcategories}:{group_by_type}"
+        # Parse category filter
+        category_filter = category_ids.split(',') if category_ids else None
         
-        # Check cache
-        cached_data = await cache_get(cache_key)
-        if cached_data:
-            analytics_logger.log_cache_operation("get", cache_key, hit=True)
-            response_data = json.loads(cached_data)
-            response_data["processing_time_ms"] = (time.time() - start_time) * 1000
-            return CategoryAnalyticsResponse(**response_data)
+        # Get detailed category analysis
+        category_data = await get_real_category_breakdown(user_id, date_range, category_filter)
         
-        # Calculate date range
-        date_range = _calculate_date_range(period, start_date, end_date)
+        # Get time series for category trends
+        time_series = await get_real_category_time_series(user_id, date_range, period, category_filter)
         
-        # Get category data
-        categories = await _get_category_breakdown(user_id, date_range, category_id_list, group_by_type)
-        time_series = await _get_category_time_series(user_id, date_range, category_id_list, period)
-        charts = await _generate_category_charts(categories, time_series)
-        insights = await _generate_category_insights(categories, time_series)
+        # Generate category comparison charts
+        charts = await generate_category_comparison_charts(category_data, time_series, period)
         
-        response_data = CategoryAnalyticsResponse(
-            categories=categories,
-            time_series=time_series,
-            charts=charts,
-            insights=insights,
-            processing_time_ms=(time.time() - start_time) * 1000
-        )
-        
-        # Cache result
-        await cache_set(cache_key, response_data.json(), ttl=settings.CACHE_TTL_DEFAULT)
-        
-        # Log activity
-        analytics_logger.log_user_activity(
-            user_id=user_id,
-            action="category_analysis",
-            resource="categories",
-            category_count=len(categories),
-            period=period
-        )
-        
-        return response_data
-        
-    except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
-        analytics_logger.log_error_with_context(e, {
-            "user_id": user_id,
-            "processing_time_ms": processing_time
-        })
-        
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate category analytics: {str(e)}"
-        )
-
-@router.get("/budget", response_model=BudgetAnalyticsResponse, tags=["Analytics"])
-async def get_budget_analytics(
-    request: Request,
-    period: PeriodType = PeriodType.monthly,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    category_ids: Optional[str] = Query(None, description="Comma-separated category IDs"),
-    include_predictions: bool = False,
-    alert_threshold: float = Query(0.8, ge=0.0, le=1.0, description="Budget alert threshold"),
-    user_id: str = Depends(get_user_id)
-):
-    """
-    Get budget analysis and performance
-    
-    Returns:
-    - Budget vs actual spending by category
-    - Budget utilization percentages
-    - Over-budget alerts
-    - Budget performance charts
-    - Recommendations for budget optimization
-    """
-    start_time = time.time()
-    
-    try:
-        # Parse category IDs if provided
-        category_id_list = []
-        if category_ids:
-            category_id_list = [id.strip() for id in category_ids.split(",")]
-        
-        cache_key = f"budget:{user_id}:{period}:{start_date}:{end_date}:{category_ids}:{include_predictions}:{alert_threshold}"
-        
-        # Check cache
-        cached_data = await cache_get(cache_key)
-        if cached_data:
-            analytics_logger.log_cache_operation("get", cache_key, hit=True)
-            response_data = json.loads(cached_data)
-            response_data["processing_time_ms"] = (time.time() - start_time) * 1000
-            return BudgetAnalyticsResponse(**response_data)
-        
-        # Calculate date range
-        date_range = _calculate_date_range(period, start_date, end_date)
-        
-        # Get budget data
-        budget_status = await _get_budget_status(user_id, date_range, category_id_list)
-        charts = await _generate_budget_charts(budget_status)
-        alerts = await _generate_budget_alerts(budget_status, alert_threshold)
-        
-        # Calculate overall metrics
-        total_budgets = len(budget_status)
-        over_budget_count = sum(1 for b in budget_status if b.is_over_budget)
-        overall_usage = sum(b.usage_percentage for b in budget_status) / total_budgets if total_budgets > 0 else 0
-        
-        response_data = BudgetAnalyticsResponse(
-            budget_status=budget_status,
-            overall_budget_usage=round(overall_usage, 2),
-            over_budget_categories=over_budget_count,
-            charts=charts,
-            alerts=alerts,
-            processing_time_ms=(time.time() - start_time) * 1000
-        )
-        
-        # Cache result
-        await cache_set(cache_key, response_data.json(), ttl=settings.CACHE_TTL_DEFAULT)
-        
-        # Log activity
-        analytics_logger.log_user_activity(
-            user_id=user_id,
-            action="budget_analysis",
-            resource="budgets",
-            over_budget_count=over_budget_count,
-            overall_usage=overall_usage
-        )
-        
-        return response_data
-        
-    except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
-        analytics_logger.log_error_with_context(e, {
-            "user_id": user_id,
-            "processing_time_ms": processing_time
-        })
-        
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate budget analytics: {str(e)}"
-        )
-
-@router.get("/insights", tags=["Analytics"])
-async def get_analytics_insights(
-    request: Request,
-    period: PeriodType = PeriodType.monthly,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    insight_types: Optional[str] = Query(None, description="Comma-separated insight types"),
-    user_id: str = Depends(get_user_id)
-):
-    """
-    Get AI-powered financial insights
-    
-    Returns:
-    - Spending pattern insights
-    - Budget recommendations
-    - Trend analysis
-    - Anomaly detection
-    - Personalized suggestions
-    """
-    start_time = time.time()
-    
-    try:
-        cache_key = f"insights:{user_id}:{period}:{start_date}:{end_date}:{insight_types}"
-        
-        # Check cache
-        cached_data = await cache_get(cache_key)
-        if cached_data:
-            analytics_logger.log_cache_operation("get", cache_key, hit=True)
-            return json.loads(cached_data)
-        
-        # Calculate date range
-        date_range = _calculate_date_range(period, start_date, end_date)
-        
-        # Generate insights
-        insights = await _generate_comprehensive_insights(user_id, date_range, insight_types)
-        
-        response_data = {
+        return {
             "success": True,
-            "timestamp": datetime.utcnow().isoformat(),
-            "insights": insights,
-            "processing_time_ms": (time.time() - start_time) * 1000
+            "categories": category_data,
+            "time_series": time_series,
+            "charts": charts,
+            "total_categories": len(category_data),
+            "period": period,
+            "date_range": {
+                "start": date_range["start"].isoformat(),
+                "end": date_range["end"].isoformat()
+            }
         }
         
-        # Cache result
-        await cache_set(cache_key, json.dumps(response_data, default=str), ttl=settings.CACHE_TTL_LONG)
-        
-        # Log activity
-        analytics_logger.log_user_activity(
-            user_id=user_id,
-            action="insights_generated",
-            resource="insights",
-            insight_count=len(insights)
-        )
-        
-        return response_data
-        
     except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
-        analytics_logger.log_error_with_context(e, {
-            "user_id": user_id,
-            "processing_time_ms": processing_time
-        })
-        
+        logger.error("Category analytics failed", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate insights: {str(e)}"
+            detail=f"Failed to get category analytics: {str(e)}"
         )
 
-# Utility functions
-def _calculate_date_range(period: PeriodType, start_date: Optional[date], end_date: Optional[date]) -> dict:
-    """Calculate date range based on period or explicit dates"""
+# REAL IMPLEMENTATION FUNCTIONS
+
+def calculate_date_range(period: str, start_date: Optional[str], end_date: Optional[str]) -> dict:
+    """Calculate actual date range based on period or explicit dates"""
     if start_date and end_date:
-        return {"start": start_date, "end": end_date}
+        return {
+            "start": datetime.strptime(start_date, "%Y-%m-%d").date(),
+            "end": datetime.strptime(end_date, "%Y-%m-%d").date()
+        }
     
     today = date.today()
     
-    if period == PeriodType.daily:
+    if period == "daily":
         return {"start": today - timedelta(days=30), "end": today}
-    elif period == PeriodType.weekly:
+    elif period == "weekly":
         return {"start": today - timedelta(weeks=12), "end": today}
-    elif period == PeriodType.monthly:
+    elif period == "monthly":
         return {"start": today - timedelta(days=90), "end": today}
-    elif period == PeriodType.quarterly:
+    elif period == "quarterly":
         return {"start": today - timedelta(days=365), "end": today}
-    elif period == PeriodType.yearly:
+    elif period == "yearly":
         return {"start": today - timedelta(days=730), "end": today}
     
     return {"start": today - timedelta(days=30), "end": today}
 
-async def _get_overview_data(user_id: str, date_range: dict) -> dict:
-    """Get overview financial data"""
+async def get_real_expense_overview(user_id: str, date_range: dict) -> dict:
+    """Get REAL expense overview data from database"""
     query = """
     SELECT 
-        COALESCE(SUM(CASE WHEN e.amount IS NOT NULL THEN e.amount ELSE 0 END), 0) as total_expenses,
-        COALESCE(SUM(CASE WHEN i.amount IS NOT NULL THEN i.amount ELSE 0 END), 0) as total_income,
-        COALESCE(COUNT(e.id), 0) + COALESCE(COUNT(i.id), 0) as transaction_count
-    FROM users u
-    LEFT JOIN expenses e ON u.id = e.user_id 
-        AND e.transaction_date BETWEEN $2 AND $3
-    LEFT JOIN income i ON u.id = i.user_id 
-        AND i.transaction_date BETWEEN $2 AND $3
-    WHERE u.id = $1
+        COALESCE(SUM(amount), 0) as total_expenses,
+        COUNT(*) as transaction_count,
+        COALESCE(AVG(amount), 0) as avg_transaction_amount
+    FROM expenses 
+    WHERE user_id = $1 AND transaction_date BETWEEN $2 AND $3
     """
     
     result = await execute_fetchrow(query, user_id, date_range["start"], date_range["end"])
     
     total_expenses = Decimal(str(result["total_expenses"])) if result["total_expenses"] else Decimal("0")
-    total_income = Decimal(str(result["total_income"])) if result["total_income"] else Decimal("0")
-    net_amount = total_income - total_expenses
     
     # Calculate average daily spending
     days = (date_range["end"] - date_range["start"]).days or 1
@@ -402,422 +174,353 @@ async def _get_overview_data(user_id: str, date_range: dict) -> dict:
     
     return {
         "total_expenses": total_expenses,
-        "total_income": total_income,
-        "net_amount": net_amount,
         "transaction_count": result["transaction_count"] or 0,
-        "average_daily_spending": avg_daily
+        "average_daily_spending": avg_daily,
+        "average_transaction_amount": Decimal(str(result["avg_transaction_amount"])) if result["avg_transaction_amount"] else Decimal("0")
     }
 
-async def _get_top_categories(user_id: str, date_range: dict) -> dict:
-    """Get top expense and income categories"""
-    # Use the database function we created
-    expense_query = "SELECT * FROM get_category_insights($1, 'month') LIMIT 10"
-    expense_categories = await execute_query(expense_query, user_id)
+async def get_real_top_categories(user_id: str, date_range: dict) -> List[dict]:
+    """Get REAL top expense categories from database"""
+    query = """
+    SELECT 
+        c.name as category_name,
+        c.color as category_color,
+        c.icon as category_icon,
+        COALESCE(SUM(e.amount), 0) as total_amount,
+        COUNT(e.id) as transaction_count,
+        COALESCE(AVG(e.amount), 0) as avg_amount
+    FROM categories c
+    LEFT JOIN expenses e ON c.id = e.category_id 
+        AND e.user_id = $1 
+        AND e.transaction_date BETWEEN $2 AND $3
+    WHERE c.user_id = $1 AND c.type IN ('expense', 'both')
+    GROUP BY c.id, c.name, c.color, c.icon
+    HAVING COALESCE(SUM(e.amount), 0) > 0
+    ORDER BY total_amount DESC
+    LIMIT 10
+    """
     
-    # Convert to CategorySummary objects
-    expense_summaries = [
-        CategorySummary(
-            category_id=row["category_id"],
-            category_name=row["category_name"],
-            total_amount=Decimal(str(row["total_amount"])),
-            transaction_count=row["transaction_count"],
-            average_amount=Decimal(str(row["avg_transaction"])),
-            percentage_of_total=float(row["percentage_of_total"])
-        )
-        for row in expense_categories
+    results = await execute_query(query, user_id, date_range["start"], date_range["end"])
+    
+    # Calculate total for percentages
+    total_expenses = sum(Decimal(str(row["total_amount"])) for row in results)
+    
+    categories = []
+    for row in results:
+        amount = Decimal(str(row["total_amount"]))
+        percentage = float((amount / total_expenses * 100)) if total_expenses > 0 else 0
+        
+        categories.append({
+            "category_name": row["category_name"],
+            "category_color": row["category_color"],
+            "category_icon": row["category_icon"],
+            "total_amount": float(amount),
+            "percentage_of_total": percentage,
+            "transaction_count": row["transaction_count"],
+            "average_amount": float(row["avg_amount"])
+        })
+    
+    return categories
+
+async def generate_real_charts(user_id: str, date_range: dict, period: str, top_categories: List[dict]) -> List[dict]:
+    """Generate REAL chart data from actual database queries"""
+    charts = []
+    
+    # 1. Monthly spending trend chart
+    monthly_trend = await get_monthly_spending_trend(user_id, date_range)
+    if monthly_trend:
+        charts.append({
+            "chart_type": "line",
+            "title": "Monthly Spending Trend",
+            "data": monthly_trend,
+            "config": {
+                "x_axis": "month",
+                "y_axis": "amount",
+                "color": "#ef4444"
+            }
+        })
+    
+    # 2. Category breakdown pie chart
+    if top_categories:
+        charts.append({
+            "chart_type": "pie",
+            "title": "Expenses by Category",
+            "data": [
+                {
+                    "name": cat["category_name"],
+                    "value": cat["total_amount"],
+                    "color": cat["category_color"] or "#64748b"
+                }
+                for cat in top_categories[:8]  # Top 8 for better visualization
+            ],
+            "config": {
+                "show_percentages": True
+            }
+        })
+    
+    # 3. Weekly spending pattern
+    weekly_pattern = await get_weekly_spending_pattern(user_id, date_range)
+    if weekly_pattern:
+        charts.append({
+            "chart_type": "bar",
+            "title": "Spending by Day of Week",
+            "data": weekly_pattern,
+            "config": {
+                "x_axis": "day",
+                "y_axis": "amount",
+                "color": "#3b82f6"
+            }
+        })
+    
+    return charts
+
+async def get_monthly_spending_trend(user_id: str, date_range: dict) -> List[dict]:
+    """Get actual monthly spending trend"""
+    query = """
+    SELECT 
+        DATE_TRUNC('month', transaction_date) as month,
+        SUM(amount) as total_amount,
+        COUNT(*) as transaction_count
+    FROM expenses 
+    WHERE user_id = $1 AND transaction_date BETWEEN $2 AND $3
+    GROUP BY DATE_TRUNC('month', transaction_date)
+    ORDER BY month
+    """
+    
+    results = await execute_query(query, user_id, date_range["start"], date_range["end"])
+    
+    return [
+        {
+            "month": row["month"].strftime("%Y-%m"),
+            "amount": float(row["total_amount"]),
+            "transaction_count": row["transaction_count"]
+        }
+        for row in results
     ]
-    
-    # For income categories (simplified for now)
-    income_summaries = []
-    
-    return {
-        "expenses": expense_summaries,
-        "income": income_summaries
-    }
 
-async def _get_period_comparison(user_id: str, date_range: dict, period: PeriodType) -> dict:
-    """Get period-over-period comparison"""
-    # Calculate previous period dates
-    days_diff = (date_range["end"] - date_range["start"]).days
-    previous_end = date_range["start"] - timedelta(days=1)
-    previous_start = previous_end - timedelta(days=days_diff)
+async def get_weekly_spending_pattern(user_id: str, date_range: dict) -> List[dict]:
+    """Get spending pattern by day of week"""
+    query = """
+    SELECT 
+        EXTRACT(DOW FROM transaction_date) as day_of_week,
+        TO_CHAR(transaction_date, 'Day') as day_name,
+        AVG(amount) as avg_amount,
+        COUNT(*) as transaction_count
+    FROM expenses 
+    WHERE user_id = $1 AND transaction_date BETWEEN $2 AND $3
+    GROUP BY EXTRACT(DOW FROM transaction_date), TO_CHAR(transaction_date, 'Day')
+    ORDER BY day_of_week
+    """
     
-    # Get previous period data
-    previous_data = await _get_overview_data(user_id, {
-        "start": previous_start, 
-        "end": previous_end
-    })
+    results = await execute_query(query, user_id, date_range["start"], date_range["end"])
     
-    # Calculate changes
-    current_expenses = float(await _get_overview_data(user_id, date_range)["total_expenses"])
-    previous_expenses = float(previous_data["total_expenses"])
-    
-    expense_change = ((current_expenses - previous_expenses) / previous_expenses * 100) if previous_expenses > 0 else 0
-    
-    return {
-        "previous_period_expenses": previous_expenses,
-        "expense_change_percentage": expense_change,
-        "comparison_period": f"{previous_start} to {previous_end}"
-    }
+    return [
+        {
+            "day": row["day_name"].strip(),
+            "amount": float(row["avg_amount"]),
+            "transaction_count": row["transaction_count"]
+        }
+        for row in results
+    ]
 
-async def _get_category_breakdown(user_id: str, date_range: dict, category_ids: List[str], group_by_type: bool) -> List[CategorySummary]:
-    """Get detailed category breakdown"""
-    category_filter = ""
+async def get_real_category_breakdown(user_id: str, date_range: dict, category_filter: Optional[List[str]]) -> List[dict]:
+    """Get detailed category breakdown with filtering"""
+    where_clause = "AND c.id = ANY($4)" if category_filter else ""
     params = [user_id, date_range["start"], date_range["end"]]
-    
-    if category_ids:
-        placeholders = ",".join([f"${i+4}" for i in range(len(category_ids))])
-        category_filter = f" AND c.id IN ({placeholders})"
-        params.extend(category_ids)
+    if category_filter:
+        params.append(category_filter)
     
     query = f"""
     SELECT 
         c.id as category_id,
         c.name as category_name,
-        c.type as category_type,
+        c.color as category_color,
+        c.icon as category_icon,
         COALESCE(SUM(e.amount), 0) as total_amount,
-        COALESCE(COUNT(e.id), 0) as transaction_count,
-        COALESCE(AVG(e.amount), 0) as avg_amount
+        COUNT(e.id) as transaction_count,
+        COALESCE(AVG(e.amount), 0) as avg_amount,
+        COALESCE(MIN(e.amount), 0) as min_amount,
+        COALESCE(MAX(e.amount), 0) as max_amount
     FROM categories c
     LEFT JOIN expenses e ON c.id = e.category_id 
-        AND e.user_id = $1
+        AND e.user_id = $1 
         AND e.transaction_date BETWEEN $2 AND $3
-    WHERE c.user_id = $1 AND c.type IN ('expense', 'both')
-    {category_filter}
-    GROUP BY c.id, c.name, c.type
-    HAVING COALESCE(SUM(e.amount), 0) > 0
+    WHERE c.user_id = $1 AND c.type IN ('expense', 'both') {where_clause}
+    GROUP BY c.id, c.name, c.color, c.icon
     ORDER BY total_amount DESC
     """
     
     results = await execute_query(query, *params)
     
-    # Calculate total for percentages
-    total_amount = sum(row["total_amount"] for row in results)
-    
     return [
-        CategorySummary(
-            category_id=str(row["category_id"]),
-            category_name=row["category_name"],
-            total_amount=Decimal(str(row["total_amount"])),
-            transaction_count=row["transaction_count"],
-            average_amount=Decimal(str(row["avg_amount"])),
-            percentage_of_total=float(row["total_amount"]) / total_amount * 100 if total_amount > 0 else 0
-        )
+        {
+            "category_id": row["category_id"],
+            "category_name": row["category_name"],
+            "category_color": row["category_color"],
+            "category_icon": row["category_icon"],
+            "total_amount": float(row["total_amount"]),
+            "transaction_count": row["transaction_count"],
+            "average_amount": float(row["avg_amount"]),
+            "min_amount": float(row["min_amount"]),
+            "max_amount": float(row["max_amount"])
+        }
         for row in results
     ]
 
-async def _get_category_time_series(user_id: str, date_range: dict, category_ids: List[str], period: PeriodType) -> List[TimePeriodData]:
-    """Get category time series data"""
-    # Determine date truncation based on period
-    date_trunc = {
-        PeriodType.daily: "day",
-        PeriodType.weekly: "week", 
-        PeriodType.monthly: "month",
-        PeriodType.quarterly: "quarter",
-        PeriodType.yearly: "year"
-    }.get(period, "day")
-    
-    category_filter = ""
-    params = [user_id, date_range["start"], date_range["end"]]
-    
-    if category_ids:
-        placeholders = ",".join([f"${i+4}" for i in range(len(category_ids))])
-        category_filter = f" AND e.category_id IN ({placeholders})"
-        params.extend(category_ids)
-    
-    query = f"""
-    SELECT 
-        DATE_TRUNC('{date_trunc}', e.transaction_date) as period,
-        SUM(e.amount) as total_amount,
-        COUNT(e.id) as transaction_count
-    FROM expenses e
-    WHERE e.user_id = $1
-        AND e.transaction_date BETWEEN $2 AND $3
-        {category_filter}
-    GROUP BY DATE_TRUNC('{date_trunc}', e.transaction_date)
-    ORDER BY period
-    """
-    
-    results = await execute_query(query, *params)
-    
-    return [
-        TimePeriodData(
-            period=row["period"].isoformat(),
-            amount=Decimal(str(row["total_amount"])),
-            transaction_count=row["transaction_count"],
-            period_type=period
-        )
-        for row in results
-    ]
-
-async def _generate_category_charts(categories: List[CategorySummary], time_series: List[TimePeriodData]) -> List[ChartData]:
-    """Generate category charts"""
-    charts = []
-    
-    # Category spending breakdown
-    if categories:
-        charts.append(ChartData(
-            chart_type=ChartType.pie,
-            title="Category Breakdown",
-            data=[
-                {"category": cat.category_name, "amount": float(cat.total_amount)}
-                for cat in categories[:10]  # Top 10
-            ]
-        ))
-    
-    # Time series chart
-    if time_series:
-        charts.append(ChartData(
-            chart_type=ChartType.line,
-            title="Spending Over Time",
-            data=[
-                {"period": ts.period, "amount": float(ts.amount)}
-                for ts in time_series
-            ]
-        ))
-    
-    return charts
-
-async def _generate_category_insights(categories: List[CategorySummary], time_series: List[TimePeriodData]) -> List[InsightItem]:
-    """Generate category insights"""
-    insights = []
-    
-    if categories:
-        top_category = categories[0]
-        insights.append(InsightItem(
-            type="top_category",
-            title="Highest Spending Category",
-            description=f"You spent the most on {top_category.category_name} with ${top_category.total_amount:.2f}",
-            value=float(top_category.total_amount),
-            severity="info"
-        ))
-    
-    # Trend insight
-    if len(time_series) >= 2:
-        latest = float(time_series[-1].amount)
-        previous = float(time_series[-2].amount)
-        change = ((latest - previous) / previous * 100) if previous > 0 else 0
-        
-        if abs(change) > 20:
-            insights.append(InsightItem(
-                type="trend_change",
-                title="Significant Spending Change",
-                description=f"Your spending {'increased' if change > 0 else 'decreased'} by {abs(change):.1f}% from the previous period",
-                value=change,
-                severity="warning" if change > 0 else "info",
-                action_suggested="Review recent transactions" if change > 0 else None
-            ))
-    
-    return insights
-
-async def _get_budget_status(user_id: str, date_range: dict, category_ids: List[str]) -> List[BudgetStatus]:
-    """Get budget status data"""
-    category_filter = ""
-    params = [user_id]
-    
-    if category_ids:
-        placeholders = ",".join([f"${i+2}" for i in range(len(category_ids))])
-        category_filter = f" AND b.category_id IN ({placeholders})"
-        params.extend(category_ids)
-    
-    query = f"""
-    SELECT 
-        b.category_id,
-        c.name as category_name,
-        b.amount as budget_amount,
-        COALESCE(SUM(e.amount), 0) as spent_amount,
-        (b.amount - COALESCE(SUM(e.amount), 0)) as remaining_amount,
-        CASE 
-            WHEN b.amount > 0 THEN (COALESCE(SUM(e.amount), 0) / b.amount * 100)
-            ELSE 0
-        END as usage_percentage
-    FROM budgets b
-    JOIN categories c ON b.category_id = c.id
-    LEFT JOIN expenses e ON b.category_id = e.category_id 
-        AND b.user_id = e.user_id
-        AND e.transaction_date >= DATE_TRUNC('month', CURRENT_DATE)
-        AND e.transaction_date < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
-    WHERE b.user_id = $1 AND b.is_active = true
-    {category_filter}
-    GROUP BY b.category_id, c.name, b.amount
-    ORDER BY usage_percentage DESC
-    """
-    
-    results = await execute_query(query, *params)
-    
-    return [
-        BudgetStatus(
-            category_id=str(row["category_id"]),
-            category_name=row["category_name"],
-            budget_amount=Decimal(str(row["budget_amount"])),
-            spent_amount=Decimal(str(row["spent_amount"])),
-            remaining_amount=Decimal(str(row["remaining_amount"])),
-            usage_percentage=float(row["usage_percentage"]),
-            is_over_budget=float(row["usage_percentage"]) > 100
-        )
-        for row in results
-    ]
-
-async def _generate_budget_charts(budget_status: List[BudgetStatus]) -> List[ChartData]:
-    """Generate budget charts"""
-    charts = []
-    
-    if budget_status:
-        # Budget usage chart
-        charts.append(ChartData(
-            chart_type=ChartType.bar,
-            title="Budget Usage by Category",
-            data=[
-                {
-                    "category": status.category_name,
-                    "used": float(status.spent_amount),
-                    "budget": float(status.budget_amount),
-                    "percentage": status.usage_percentage
-                }
-                for status in budget_status
-            ],
-            config={"colors": ["#ef4444" if s.is_over_budget else "#22c55e" for s in budget_status]}
-        ))
-    
-    return charts
-
-async def _generate_budget_alerts(budget_status: List[BudgetStatus], threshold: float = 0.8) -> List[InsightItem]:
-    """Generate budget alerts"""
-    alerts = []
-    
-    for status in budget_status:
-        if status.is_over_budget:
-            alerts.append(InsightItem(
-                type="over_budget",
-                title="Budget Exceeded",
-                description=f"You've exceeded your budget for {status.category_name} by ${abs(status.remaining_amount):.2f}",
-                value=float(status.usage_percentage),
-                severity="critical",
-                action_suggested="Consider reducing spending in this category"
-            ))
-        elif status.usage_percentage > threshold * 100:
-            alerts.append(InsightItem(
-                type="approaching_budget",
-                title="Approaching Budget Limit",
-                description=f"You've used {status.usage_percentage:.1f}% of your budget for {status.category_name}",
-                value=float(status.usage_percentage),
-                severity="warning"
-            ))
-    
-    return alerts
-
-async def _generate_comprehensive_insights(user_id: str, date_range: dict, insight_types: Optional[str]) -> List[InsightItem]:
-    """Generate comprehensive insights"""
-    insights = []
-    
-    # Get data for insights
-    overview_data = await _get_overview_data(user_id, date_range)
-    top_categories = await _get_top_categories(user_id, date_range)
-    
-    # Basic insights
-    insights.extend(await _generate_overview_insights(overview_data, top_categories))
-    
-    # Budget insights
-    try:
-        budget_status = await _get_budget_status(user_id, date_range, [])
-        if budget_status:
-            insights.extend(await _generate_budget_alerts(budget_status))
-    except Exception:
-        pass  # Budget insights are optional
-    
-    return insights
-
-async def _generate_overview_charts(user_id: str, date_range: dict, overview_data: dict, top_categories: dict) -> List[ChartData]:
-    """Generate charts for overview"""
-    charts = []
-    
-    # Income vs Expenses chart
-    income_expense_chart = ChartData(
-        chart_type=ChartType.bar,
-        title="Income vs Expenses",
-        data=[
-            {"category": "Income", "amount": float(overview_data["total_income"])},
-            {"category": "Expenses", "amount": float(overview_data["total_expenses"])},
-            {"category": "Net", "amount": float(overview_data["net_amount"])}
-        ],
-        config={"colors": ["#22c55e", "#ef4444", "#3b82f6"]}
-    )
-    charts.append(income_expense_chart)
-    
-    # Top categories pie chart
-    if top_categories["expenses"]:
-        category_chart = ChartData(
-            chart_type=ChartType.pie,
-            title="Top Expense Categories",
-            data=[
-                {"category": cat.category_name, "amount": float(cat.total_amount)}
-                for cat in top_categories["expenses"][:5]
-            ]
-        )
-        charts.append(category_chart)
-    
-    return charts
-
-async def _generate_overview_insights(overview_data: dict, top_categories: dict) -> List[InsightItem]:
-    """Generate insights for overview"""
-    insights = []
-    
-    # Net amount insight
-    if overview_data["net_amount"] > 0:
-        insights.append(InsightItem(
-            type="savings",
-            title="Positive Cash Flow",
-            description=f"You saved ${overview_data['net_amount']:.2f} this period",
-            value=float(overview_data["net_amount"]),
-            severity="info"
-        ))
+async def get_real_category_time_series(user_id: str, date_range: dict, period: str, category_filter: Optional[List[str]]) -> List[dict]:
+    """Get category spending over time"""
+    # Determine time truncation based on period
+    if period == "daily":
+        trunc = "day"
+    elif period == "weekly":
+        trunc = "week"
+    elif period == "monthly":
+        trunc = "month"
     else:
-        insights.append(InsightItem(
-            type="overspending", 
-            title="Negative Cash Flow",
-            description=f"You spent ${abs(overview_data['net_amount']):.2f} more than you earned",
-            value=float(abs(overview_data["net_amount"])),
-            severity="warning",
-            action_suggested="Consider reviewing your expense categories"
-        ))
+        trunc = "month"
+    
+    where_clause = "AND e.category_id = ANY($4)" if category_filter else ""
+    params = [user_id, date_range["start"], date_range["end"]]
+    if category_filter:
+        params.append(category_filter)
+    
+    query = f"""
+    SELECT 
+        c.name as category_name,
+        c.color as category_color,
+        DATE_TRUNC('{trunc}', e.transaction_date) as period,
+        SUM(e.amount) as amount
+    FROM expenses e
+    JOIN categories c ON e.category_id = c.id
+    WHERE e.user_id = $1 AND e.transaction_date BETWEEN $2 AND $3 {where_clause}
+    GROUP BY c.name, c.color, DATE_TRUNC('{trunc}', e.transaction_date)
+    ORDER BY period, c.name
+    """
+    
+    results = await execute_query(query, *params)
+    
+    return [
+        {
+            "category_name": row["category_name"],
+            "category_color": row["category_color"],
+            "period": row["period"].isoformat(),
+            "amount": float(row["amount"])
+        }
+        for row in results
+    ]
+
+async def generate_category_comparison_charts(category_data: List[dict], time_series: List[dict], period: str) -> List[dict]:
+    """Generate category comparison charts"""
+    charts = []
+    
+    # Category comparison bar chart
+    if category_data:
+        charts.append({
+            "chart_type": "bar",
+            "title": "Category Comparison",
+            "data": [
+                {
+                    "category": cat["category_name"],
+                    "amount": cat["total_amount"],
+                    "color": cat["category_color"] or "#64748b"
+                }
+                for cat in category_data[:10]
+            ],
+            "config": {
+                "x_axis": "category",
+                "y_axis": "amount",
+                "horizontal": True
+            }
+        })
+    
+    # Time series chart for categories
+    if time_series:
+        charts.append({
+            "chart_type": "line",
+            "title": f"Category Trends ({period.title()})",
+            "data": time_series,
+            "config": {
+                "x_axis": "period",
+                "y_axis": "amount",
+                "group_by": "category_name",
+                "multi_line": True
+            }
+        })
+    
+    return charts
+
+async def generate_real_insights(overview_data: dict, top_categories: List[dict]) -> List[dict]:
+    """Generate REAL insights from actual data"""
+    insights = []
+    
+    total_expenses = overview_data["total_expenses"]
+    transaction_count = overview_data["transaction_count"]
+    avg_daily = overview_data["average_daily_spending"]
+    
+    # Spending level insight
+    if total_expenses > 0:
+        insights.append({
+            "type": "spending_summary",
+            "title": "Spending Summary",
+            "description": f"You spent ${total_expenses:.2f} across {transaction_count} transactions, averaging ${avg_daily:.2f} per day.",
+            "severity": "info",
+            "value": float(total_expenses)
+        })
+    
+    # Top category insight
+    if top_categories:
+        top_cat = top_categories[0]
+        insights.append({
+            "type": "top_category",
+            "title": f"Highest Spending: {top_cat['category_name']}",
+            "description": f"Your largest expense category is {top_cat['category_name']} at ${top_cat['total_amount']:.2f} ({top_cat['percentage_of_total']:.1f}% of total spending).",
+            "severity": "warning" if top_cat["percentage_of_total"] > 40 else "info",
+            "value": top_cat["total_amount"]
+        })
+    
+    # Transaction frequency insight
+    if transaction_count > 0:
+        avg_transaction = float(total_expenses) / transaction_count
+        insights.append({
+            "type": "transaction_pattern",
+            "title": "Transaction Pattern",
+            "description": f"You averaged ${avg_transaction:.2f} per transaction with {transaction_count} total transactions.",
+            "severity": "info",
+            "value": avg_transaction
+        })
     
     return insights
 
-async def _get_period_comparison(user_id: str, date_range: dict, period: PeriodType) -> dict:
-    """Get period-over-period comparison"""
-    # Implementation for period comparison
-    return {"comparison": "period_comparison_data"}
-
-async def _get_category_breakdown(user_id: str, date_range: dict, category_ids: List[str], group_by_type: bool) -> List[CategorySummary]:
-    """Get detailed category breakdown"""
-    # Implementation for category breakdown
-    return []
-
-async def _get_category_time_series(user_id: str, date_range: dict, category_ids: List[str], period: PeriodType) -> List[TimePeriodData]:
-    """Get category time series data"""
-    # Implementation for time series
-    return []
-
-async def _generate_category_charts(categories: List[CategorySummary], time_series: List[TimePeriodData]) -> List[ChartData]:
-    """Generate category charts"""
-    return []
-
-async def _generate_category_insights(categories: List[CategorySummary], time_series: List[TimePeriodData]) -> List[InsightItem]:
-    """Generate category insights"""
-    return []
-
-async def _get_budget_status(user_id: str, date_range: dict, category_ids: List[str]) -> List[BudgetStatus]:
-    """Get budget status data"""
-    return []
-
-async def _generate_budget_charts(budget_status: List[BudgetStatus]) -> List[ChartData]:
-    """Generate budget charts"""
-    return []
-
-async def _generate_budget_alerts(budget_status: List[BudgetStatus], threshold: float) -> List[InsightItem]:
-    """Generate budget alerts"""
-    return []
-
-async def _generate_comprehensive_insights(user_id: str, date_range: dict, insight_types: Optional[str]) -> List[InsightItem]:
-    """Generate comprehensive insights"""
-    return []
+async def get_real_period_comparison(user_id: str, date_range: dict, period: str) -> dict:
+    """Get real period-over-period comparison"""
+    # Calculate previous period
+    days_diff = (date_range["end"] - date_range["start"]).days
+    prev_end = date_range["start"] - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=days_diff)
+    
+    # Get current period data
+    current_query = """
+    SELECT COALESCE(SUM(amount), 0) as total_amount
+    FROM expenses 
+    WHERE user_id = $1 AND transaction_date BETWEEN $2 AND $3
+    """
+    
+    current_result = await execute_fetchrow(current_query, user_id, date_range["start"], date_range["end"])
+    previous_result = await execute_fetchrow(current_query, user_id, prev_start, prev_end)
+    
+    current_amount = float(current_result["total_amount"]) if current_result["total_amount"] else 0
+    previous_amount = float(previous_result["total_amount"]) if previous_result["total_amount"] else 0
+    
+    # Calculate percentage change
+    if previous_amount > 0:
+        change_percent = ((current_amount - previous_amount) / previous_amount) * 100
+    else:
+        change_percent = 100 if current_amount > 0 else 0
+    
+    return {
+        "current_period": current_amount,
+        "previous_period": previous_amount,
+        "change_amount": current_amount - previous_amount,
+        "change_percentage": change_percent,
+        "trend": "up" if change_percent > 0 else "down" if change_percent < 0 else "stable"
+    }

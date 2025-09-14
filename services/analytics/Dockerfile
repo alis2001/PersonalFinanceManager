@@ -63,11 +63,8 @@ WORKDIR /app
 COPY --from=build /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
 COPY --from=build /usr/local/bin/ /usr/local/bin/
 
-# Copy application source code
+# Copy ONLY the application source code (removed unnecessary files)
 COPY src/ ./src/
-COPY alembic/ ./alembic/ 
-COPY alembic.ini ./
-COPY pyproject.toml ./
 
 # Create necessary directories
 RUN mkdir -p logs cache exports && \

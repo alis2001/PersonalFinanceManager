@@ -1,5 +1,3 @@
-// CREATE NEW FILE: frontend/web/src/components/Analytics.tsx
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import analyticsService from '../services/analyticsService';
@@ -67,7 +65,8 @@ const Analytics: React.FC = () => {
       if (overviewResult.success) {
         setOverview(overviewResult.data);
       } else {
-        setError(overviewResult.error);
+        // Fix TypeScript error by handling undefined
+        setError(overviewResult.error || 'Failed to load analytics overview');
       }
 
       // Load spending trends
@@ -78,6 +77,9 @@ const Analytics: React.FC = () => {
 
       if (trendsResult.success) {
         setTrends(trendsResult.data);
+      } else if (!error) {
+        // Only set error if we don't already have one from overview
+        setError(trendsResult.error || 'Failed to load spending trends');
       }
 
     } catch (err) {
@@ -171,45 +173,24 @@ const Analytics: React.FC = () => {
               <div className={`overview-card net ${overview.net_amount >= 0 ? 'positive' : 'negative'}`}>
                 <h3>Net Amount</h3>
                 <p className="amount">{formatCurrency(overview.net_amount)}</p>
-                <span className="label">{overview.net_amount >= 0 ? 'Saved' : 'Overspent'}</span>
+                <span className="label">{overview.net_amount >= 0 ? 'Profit' : 'Loss'}</span>
               </div>
               <div className="overview-card transactions">
                 <h3>Transactions</h3>
                 <p className="amount">{overview.transaction_count}</p>
-                <span className="label">Total transactions</span>
+                <span className="label">Total count</span>
               </div>
             </div>
           </div>
 
-          {/* Trend Analysis */}
-          {trends && (
-            <div className="trends-section">
-              <h2>Spending Trends</h2>
-              <div className="trend-summary">
-                <div className="trend-indicator">
-                  <span className={`trend-arrow ${trends.trend_direction}`}>
-                    {trends.trend_direction === 'increasing' ? '📈' : 
-                     trends.trend_direction === 'decreasing' ? '📉' : '➡️'}
-                  </span>
-                  <div className="trend-details">
-                    <h3>{trends.trend_direction.toUpperCase()} TREND</h3>
-                    <p>{formatPercentage(trends.trend_percentage)} change</p>
-                    <p>Strength: {(trends.trend_strength * 100).toFixed(0)}%</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Top Categories */}
           {overview.top_expense_categories.length > 0 && (
             <div className="categories-section">
-              <h2>Top Spending Categories</h2>
+              <h2>🏷️ Top Expense Categories</h2>
               <div className="categories-list">
-                {overview.top_expense_categories.slice(0, 5).map((category, index) => (
-                  <div key={category.category_name} className="category-item">
+                {overview.top_expense_categories.map((category, index) => (
+                  <div key={index} className="category-item">
                     <div className="category-info">
-                      <span className="category-rank">#{index + 1}</span>
                       <span className="category-name">{category.category_name}</span>
                     </div>
                     <div className="category-amount">
@@ -262,6 +243,17 @@ const Analytics: React.FC = () => {
             </div>
           </div>
         </>
+      )}
+
+      {/* No Data State */}
+      {!overview && !error && (
+        <div className="error-message">
+          <h3>No Analytics Data Available</h3>
+          <p>Add some expenses and income to see your financial analytics.</p>
+          <button onClick={() => navigate('/dashboard')} className="btn-secondary">
+            Back to Dashboard
+          </button>
+        </div>
       )}
     </div>
   );
