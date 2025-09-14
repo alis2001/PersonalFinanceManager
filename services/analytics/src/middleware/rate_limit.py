@@ -4,7 +4,6 @@ Location: services/analytics/src/middleware/rate_limit.py
 """
 
 import time
-import json
 from typing import Dict, Optional
 from fastapi import Request, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -26,7 +25,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         """Apply rate limiting to requests"""
         
-        # Skip rate limiting for health checks
+        # Skip rate limiting for health checks and docs
         if request.url.path in ["/", "/health", "/docs", "/redoc", "/openapi.json"]:
             return await call_next(request)
         
@@ -150,7 +149,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return True, {"current_requests": 0, "reset_time": 0, "retry_after": 0}
 
 class AdvancedRateLimit:
-    """Advanced rate limiting with different tiers"""
+    """Advanced rate limiting with different endpoint tiers"""
     
     RATE_LIMITS = {
         "analytics": {"requests": 50, "window": 300},      # 50 requests per 5 minutes
@@ -199,35 +198,29 @@ class AdvancedRateLimit:
         return f"ip:{client_ip}"
 
 # Rate limiting decorators for specific endpoints
-def rate_limit_analytics():
-    """Decorator for analytics endpoints"""
-    async def decorator(request: Request):
-        if not await AdvancedRateLimit.check_endpoint_limit(request, "analytics"):
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Analytics rate limit exceeded. Try again in 5 minutes."
-            )
-    return decorator
+async def rate_limit_analytics(request: Request):
+    """Check analytics rate limit"""
+    if not await AdvancedRateLimit.check_endpoint_limit(request, "analytics"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Analytics rate limit exceeded. Try again in 5 minutes."
+        )
 
-def rate_limit_forecasting():
-    """Decorator for forecasting endpoints"""
-    async def decorator(request: Request):
-        if not await AdvancedRateLimit.check_endpoint_limit(request, "forecasting"):
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Forecasting rate limit exceeded. Try again in 10 minutes."
-            )
-    return decorator
+async def rate_limit_forecasting(request: Request):
+    """Check forecasting rate limit"""
+    if not await AdvancedRateLimit.check_endpoint_limit(request, "forecasting"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Forecasting rate limit exceeded. Try again in 10 minutes."
+        )
 
-def rate_limit_export():
-    """Decorator for export endpoints"""
-    async def decorator(request: Request):
-        if not await AdvancedRateLimit.check_endpoint_limit(request, "export"):
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Export rate limit exceeded. Try again in 1 hour."
-            )
-    return decorator
+async def rate_limit_export(request: Request):
+    """Check export rate limit"""
+    if not await AdvancedRateLimit.check_endpoint_limit(request, "export"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Export rate limit exceeded. Try again in 1 hour."
+        )
 
 # Utility functions
 async def get_rate_limit_status(client_id: str) -> Dict:

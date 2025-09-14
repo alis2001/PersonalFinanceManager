@@ -1,44 +1,31 @@
 """
-Logger Setup and Utilities for Analytics Service
+Logging Utilities for Analytics Service
 Location: services/analytics/src/utils/logger.py
 """
 
-import sys
 import logging
+import sys
+import time
+from typing import Dict, Any, Optional
 import structlog
-from typing import Any, Dict, Optional
-from datetime import datetime
-import json
+from structlog.stdlib import LoggerFactory
 
 from ..config.settings import settings
 
 def setup_logging():
     """Configure structured logging for the analytics service"""
     
-    # Configure structlog processors
-    processors = [
-        # Add log level
-        structlog.stdlib.add_log_level,
-        
-        # Add timestamp
-        structlog.processors.TimeStamper(fmt="iso"),
-        
-        # Add caller info in development
-        structlog.dev.set_exc_info if settings.is_development else structlog.processors.format_exc_info,
-        
-        # Add service context
-        add_service_context,
-        
-        # JSON formatting for production, pretty printing for development
-        structlog.dev.ConsoleRenderer(colors=True) if settings.is_development 
-        else structlog.processors.JSONRenderer()
-    ]
-    
     # Configure structlog
     structlog.configure(
-        processors=processors,
+        processors=[
+            # Add timestamp
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.dev.ConsoleRenderer() if settings.is_development else structlog.processors.JSONRenderer()
+        ],
         context_class=dict,
-        logger_factory=structlog.stdlib.LoggerFactory(),
+        logger_factory=LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
@@ -47,22 +34,22 @@ def setup_logging():
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
-        level=getattr(logging, settings.LOG_LEVEL.upper())
+        level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     )
     
-    # Set third-party library log levels
-    configure_third_party_loggers()
+    # Configure third-party library log levels
+    _configure_third_party_logs()
+    
+    # Log startup
+    logger = structlog.get_logger(__name__)
+    logger.info(
+        "Logging configured", 
+        level=settings.LOG_LEVEL,
+        format=settings.LOG_FORMAT,
+        environment=settings.ENVIRONMENT
+    )
 
-def add_service_context(logger, method_name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Add service-specific context to all log entries"""
-    event_dict.update({
-        "service": "analytics",
-        "version": settings.VERSION,
-        "environment": settings.ENVIRONMENT
-    })
-    return event_dict
-
-def configure_third_party_loggers():
+def _configure_third_party_logs():
     """Configure log levels for third-party libraries"""
     # Reduce noise from verbose libraries
     library_levels = {
@@ -123,50 +110,56 @@ class AnalyticsLogger:
             **kwargs
         )
     
-    def log_ml_operation(self, operation: str, model_type: str, 
-                        data_points: int, duration_ms: float, **kwargs):
-        """Log machine learning operations"""
-        self.logger.info(
-            "ML operation completed",
-            ml_operation=operation,
-            model_type=model_type,
-            data_points=data_points,
-            duration_ms=round(duration_ms, 2),
-            **kwargs
-        )
-    
-    def log_user_activity(self, user_id: str, action: str, 
-                         resource: str = None, **kwargs):
-        """Log user activities for analytics"""
+    def log_user_activity(self, user_id: str, action: str, resource: str, **kwargs):
+        """Log user activity for analytics"""
         self.logger.info(
             "User activity",
             user_id=user_id,
             action=action,
             resource=resource,
+            timestamp=time.time(),
             **kwargs
         )
+    
+    def log_forecast_generation(self, model_type: str, forecast_days: int, 
+                              accuracy: float = None, user_id: str = None, **kwargs):
+        """Log forecasting operations"""
+        log_data = {
+            "forecast_generated": True,
+            "model_type": model_type,
+            "forecast_days": forecast_days,
+            "user_id": user_id,
+            **kwargs
+        }
+        
+        if accuracy is not None:
+            log_data["model_accuracy"] = round(accuracy, 4)
+            
+        self.logger.info("Forecast generated", **log_data)
+    
+    def log_export_operation(self, export_format: str, record_count: int, 
+                           file_size_mb: float = None, user_id: str = None, **kwargs):
+        """Log data export operations"""
+        log_data = {
+            "data_exported": True,
+            "format": export_format,
+            "record_count": record_count,
+            "user_id": user_id,
+            **kwargs
+        }
+        
+        if file_size_mb is not None:
+            log_data["file_size_mb"] = round(file_size_mb, 2)
+            
+        self.logger.info("Data exported", **log_data)
     
     def log_error_with_context(self, error: Exception, context: Dict[str, Any]):
-        """Log errors with rich context"""
+        """Log error with contextual information"""
         self.logger.error(
-            "Error occurred",
+            "Operation failed",
+            error=str(error),
             error_type=type(error).__name__,
-            error_message=str(error),
-            **context,
-            exc_info=True
-        )
-    
-    def log_api_call(self, endpoint: str, method: str, status_code: int,
-                    duration_ms: float, user_id: str = None, **kwargs):
-        """Log API call metrics"""
-        self.logger.info(
-            "API call completed",
-            endpoint=endpoint,
-            method=method,
-            status_code=status_code,
-            duration_ms=round(duration_ms, 2),
-            user_id=user_id,
-            **kwargs
+            **context
         )
 
 class PerformanceLogger:
@@ -174,6 +167,19 @@ class PerformanceLogger:
     
     def __init__(self, logger_name: str = "performance"):
         self.logger = structlog.get_logger(logger_name)
+    
+    def log_request_performance(self, method: str, path: str, duration_ms: float, 
+                              status_code: int, user_id: str = None, **kwargs):
+        """Log HTTP request performance"""
+        self.logger.info(
+            "Request processed",
+            http_method=method,
+            path=path,
+            duration_ms=round(duration_ms, 2),
+            status_code=status_code,
+            user_id=user_id,
+            **kwargs
+        )
     
     def log_slow_query(self, query: str, duration_ms: float, threshold_ms: float = 1000):
         """Log slow database queries"""
