@@ -221,7 +221,7 @@
 
 .currency-symbol {
   position: absolute;
-  left: 18px;
+  right: 18px; /* Changed from left: 18px to right: 18px */
   top: 50%;
   transform: translateY(-50%);
   color: #4a5568;
@@ -230,12 +230,12 @@
   z-index: 2;
   pointer-events: none;
   background: white;
-  padding-right: 4px;
+  padding-left: 4px; /* Changed from padding-right to padding-left */
 }
 
 .amount-input {
   width: 100%;
-  padding: 16px 18px 16px 45px;
+  padding: 16px 45px 16px 18px; /* Changed from padding-left: 45px to padding-right: 45px */
   border: 2px solid #e2e8f0;
   border-radius: 12px;
   font-size: 1.1rem;
@@ -244,7 +244,7 @@
   background: #ffffff;
   color: #2d3748;
   font-family: inherit;
-  text-align: left;
+  text-align: left; /* Keep text aligned left for number entry */
 }
 
 .amount-input:focus {

@@ -135,6 +135,7 @@ class ExpenseService {
     categoryId?: string;
     dateFrom?: string;
     dateTo?: string;
+    search?: string;  // NEW: Add search parameter
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
   } = {}): Promise<ExpenseResponse> {
@@ -142,7 +143,7 @@ class ExpenseService {
       const queryParams = new URLSearchParams();
       
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
+        if (value !== undefined && value !== null && value !== '') {
           queryParams.append(key, value.toString());
         }
       });

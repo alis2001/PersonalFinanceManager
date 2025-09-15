@@ -1,3 +1,5 @@
+// Update frontend/web/src/App.tsx to add the new route
+
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Welcome from './components/Welcome';
@@ -6,6 +8,7 @@ import Register from './components/Register';
 import VerifyEmail from './components/VerifyEmail';
 import Dashboard from './components/Dashboard';
 import Analytics from './components/Analytics';
+import AllTransactions from './components/AllTransactions'; // NEW IMPORT
 import authService from './services/authService';
 import './styles/App.css';
 
@@ -46,6 +49,16 @@ function App() {
             element={
               <ProtectedRoute>
                 <Analytics />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* NEW ROUTE: All Transactions */}
+          <Route 
+            path="/transactions" 
+            element={
+              <ProtectedRoute>
+                <AllTransactions />
               </ProtectedRoute>
             } 
           />

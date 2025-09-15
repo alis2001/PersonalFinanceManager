@@ -210,6 +210,7 @@ app.get('/expenses', authenticateToken, async (req, res) => {
       categoryId, 
       dateFrom, 
       dateTo,
+      search,  // NEW: Add search parameter
       sortBy = 'transaction_date',
       sortOrder = 'desc'
     } = req.query;
@@ -238,6 +239,16 @@ app.get('/expenses', authenticateToken, async (req, res) => {
       query += ` AND e.transaction_date <= $${++paramCount}`;
       params.push(dateTo);
     }
+
+    // NEW: Add search functionality for description and notes
+    if (search && search.trim()) {
+      query += ` AND (
+        LOWER(e.description) LIKE LOWER($${++paramCount}) OR 
+        LOWER(e.notes) LIKE LOWER($${++paramCount})
+      )`;
+      const searchPattern = `%${search.trim()}%`;
+      params.push(searchPattern, searchPattern);
+    }
     
     const validSortFields = ['transaction_date', 'amount', 'created_at'];
     const validSortOrders = ['asc', 'desc'];
@@ -253,7 +264,7 @@ app.get('/expenses', authenticateToken, async (req, res) => {
     
     const result = await db.query(query, params);
     
-    // Get total count for pagination
+    // Update count query to include search filter
     let countQuery = `
       SELECT COUNT(*) 
       FROM expenses e 
@@ -276,6 +287,16 @@ app.get('/expenses', authenticateToken, async (req, res) => {
     if (dateTo) {
       countQuery += ` AND e.transaction_date <= $${++countParamCount}`;
       countParams.push(dateTo);
+    }
+
+    // NEW: Add search to count query
+    if (search && search.trim()) {
+      countQuery += ` AND (
+        LOWER(e.description) LIKE LOWER($${++countParamCount}) OR 
+        LOWER(e.notes) LIKE LOWER($${++countParamCount})
+      )`;
+      const searchPattern = `%${search.trim()}%`;
+      countParams.push(searchPattern, searchPattern);
     }
     
     const countResult = await db.query(countQuery, countParams);

@@ -147,6 +147,10 @@ const Dashboard: React.FC = () => {
   navigate('/analytics');
 };
 
+  const handleViewAllTransactions = () => {
+    navigate('/transactions');
+  };
+
   const handleManageCategories = () => {
     setShowManageCategories(true);
   };
@@ -173,7 +177,6 @@ const Dashboard: React.FC = () => {
       <header className="dashboard-header">
         <div className="header-content">
           <div className="logo">
-            <span className="logo-icon">💰</span>
             <h1>FinanceTracker</h1>
           </div>
           <div className="user-menu">
@@ -254,18 +257,21 @@ const Dashboard: React.FC = () => {
           <div className="quick-actions">
             <h2>Quick Actions</h2>
             <div className="action-buttons">
-              <button className="btn-action primary" onClick={handleAddExpense}>
-                <span>💰</span>
+                <button className="btn-action primary" onClick={handleAddExpense}>
                 Add Expense
-              </button>
-              <button className="btn-action" onClick={handleViewAnalytics}>
+                </button>
+                <button className="btn-action" onClick={handleViewAnalytics}>
                 <span>📊</span>
                 View Analytics
-              </button>
-              <button className="btn-action" onClick={handleManageCategories}>
+                </button>
+                <button className="btn-action" onClick={handleManageCategories}>
                 <span>🏷️</span>
                 Manage Categories
-              </button>
+                </button>
+                <button className="btn-action" onClick={handleViewAllTransactions}>
+                <span>📋</span>
+                View All Transactions
+                </button>
             </div>
           </div>
 
