@@ -249,28 +249,12 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       roleName: 'finance-tracker-task-role',
     });
 
-    // CloudWatch permissions for tasks
-    taskRole.addToPolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'cloudwatch:PutMetricData',
-        'logs:CreateLogGroup',
-        'logs:CreateLogStream',
-        'logs:PutLogEvents'
-      ],
-      resources: ['*']
-    }));
-
-    // Log group
-    const logGroup = new logs.LogGroup(this, 'ServiceLogs', {
-      logGroupName: '/finance-tracker/services',
+    // CloudWatch Log Group
+    const logGroup = new logs.LogGroup(this, 'FinanceTrackerLogs', {
+      logGroupName: '/aws/ecs/finance-tracker',
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
-
-    // ===================================================================
-    // ECS TASK DEFINITIONS (MISSING PRODUCTION COMPONENT)
-    // ===================================================================
 
     // Gateway Task Definition
     const gatewayTaskDefinition = new ecs.FargateTaskDefinition(this, 'GatewayTaskDefinition', {
@@ -298,7 +282,13 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         EXPENSE_SERVICE_URL: 'http://finance-tracker-expense.finance-tracker-cluster.local:3000',
         INCOME_SERVICE_URL: 'http://finance-tracker-income.finance-tracker-cluster.local:3000',
         CATEGORY_SERVICE_URL: 'http://finance-tracker-category.finance-tracker-cluster.local:3000',
-        ANALYTICS_SERVICE_URL: 'http://finance-tracker-analytics.finance-tracker-cluster.local:8000',
+        ANALYTICS_ENGINE_URL: 'http://finance-tracker-analytics-engine.finance-tracker-cluster.local:8080',
+        REPORTING_ENGINE_URL: 'http://finance-tracker-reporting.finance-tracker-cluster.local:8080',
+        ML_ENGINE_URL: 'http://finance-tracker-ml.finance-tracker-cluster.local:8080',
+        ENABLE_CORS: 'true',
+        RATE_LIMIT_WINDOW: '900000',
+        RATE_LIMIT_MAX_REQUESTS: '100',
+        LOG_LEVEL: 'info',
       },
       healthCheck: {
         command: ['CMD-SHELL', 'wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1'],
@@ -339,7 +329,8 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         JWT_SECRET: 'your-jwt-secret-change-in-production',
         JWT_EXPIRY: '1h',
         BCRYPT_ROUNDS: '12',
-        SESSION_TIMEOUT: '24h',
+        SESSION_TIMEOUT: '86400000',
+        LOG_LEVEL: 'info',
       },
       secrets: {
         DB_USER: ecs.Secret.fromSecretsManager(dbCredentials, 'username'),
@@ -379,6 +370,8 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         DB_HOST: database.instanceEndpoint.hostname,
         DB_PORT: '5432',
         DB_NAME: 'financetracker',
+        RABBITMQ_HOST: 'rabbitmq', // This will need to be updated when RabbitMQ is deployed
+        RABBITMQ_PORT: '5672',
         AUTH_SERVICE_URL: 'http://finance-tracker-auth.finance-tracker-cluster.local:3000',
         LOG_LEVEL: 'info',
       },
@@ -420,6 +413,8 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         DB_HOST: database.instanceEndpoint.hostname,
         DB_PORT: '5432',
         DB_NAME: 'financetracker',
+        RABBITMQ_HOST: 'rabbitmq', // This will need to be updated when RabbitMQ is deployed
+        RABBITMQ_PORT: '5672',
         AUTH_SERVICE_URL: 'http://finance-tracker-auth.finance-tracker-cluster.local:3000',
         LOG_LEVEL: 'info',
       },
@@ -521,7 +516,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
     });
 
     // ===================================================================
-    // ECS SERVICES (MISSING PRODUCTION COMPONENT)
+    // ECS SERVICES - SET DESIRED COUNT TO 0 INITIALLY
     // ===================================================================
 
     // Gateway Service
@@ -529,8 +524,8 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       cluster,
       taskDefinition: gatewayTaskDefinition,
       serviceName: 'finance-tracker-gateway',
-      desiredCount: 2,
-      minHealthyPercent: 50,
+      desiredCount: 0, // CHANGED: Start with 0 until images are available
+      minHealthyPercent: 0,
       maxHealthyPercent: 200,
       vpcSubnets: vpc.selectSubnets({
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
@@ -543,8 +538,8 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       cluster,
       taskDefinition: authTaskDefinition,
       serviceName: 'finance-tracker-auth',
-      desiredCount: 2,
-      minHealthyPercent: 50,
+      desiredCount: 0, // CHANGED: Start with 0 until images are available
+      minHealthyPercent: 0,
       maxHealthyPercent: 200,
       vpcSubnets: vpc.selectSubnets({
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
@@ -557,7 +552,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       cluster,
       taskDefinition: expenseTaskDefinition,
       serviceName: 'finance-tracker-expense',
-      desiredCount: 1,
+      desiredCount: 0, // CHANGED: Start with 0 until images are available
       minHealthyPercent: 0,
       maxHealthyPercent: 200,
       vpcSubnets: vpc.selectSubnets({
@@ -571,7 +566,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       cluster,
       taskDefinition: incomeTaskDefinition,
       serviceName: 'finance-tracker-income',
-      desiredCount: 1,
+      desiredCount: 0, // CHANGED: Start with 0 until images are available
       minHealthyPercent: 0,
       maxHealthyPercent: 200,
       vpcSubnets: vpc.selectSubnets({
@@ -585,7 +580,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       cluster,
       taskDefinition: categoryTaskDefinition,
       serviceName: 'finance-tracker-category',
-      desiredCount: 1,
+      desiredCount: 0, // CHANGED: Start with 0 until images are available
       minHealthyPercent: 0,
       maxHealthyPercent: 200,
       vpcSubnets: vpc.selectSubnets({
@@ -599,7 +594,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       cluster,
       taskDefinition: analyticsTaskDefinition,
       serviceName: 'finance-tracker-analytics',
-      desiredCount: 1,
+      desiredCount: 0, // CHANGED: Start with 0 until images are available
       minHealthyPercent: 0,
       maxHealthyPercent: 200,
       vpcSubnets: vpc.selectSubnets({
@@ -609,7 +604,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
     });
 
     // ===================================================================
-    // LOAD BALANCER TARGET GROUPS (MISSING PRODUCTION COMPONENT)
+    // LOAD BALANCER TARGET GROUPS
     // ===================================================================
 
     // Gateway Target Group
@@ -619,80 +614,27 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       protocol: elbv2.ApplicationProtocol.HTTP,
       targetType: elbv2.TargetType.IP,
       healthCheck: {
+        enabled: true,
         path: '/health',
-        interval: cdk.Duration.seconds(30),
-        timeout: cdk.Duration.seconds(5),
-        healthyThresholdCount: 2,
-        unhealthyThresholdCount: 3,
-        port: '3000',
         protocol: elbv2.Protocol.HTTP,
-      },
-      targetGroupName: 'finance-gateway-tg',
-    });
-
-    // Auth Target Group
-    const authTargetGroup = new elbv2.ApplicationTargetGroup(this, 'AuthTargetGroup', {
-      vpc,
-      port: 3000,
-      protocol: elbv2.ApplicationProtocol.HTTP,
-      targetType: elbv2.TargetType.IP,
-      healthCheck: {
-        path: '/health',
-        interval: cdk.Duration.seconds(30),
-        timeout: cdk.Duration.seconds(5),
+        port: '3000',
         healthyThresholdCount: 2,
-        unhealthyThresholdCount: 3,
-      },
-      targetGroupName: 'finance-auth-tg',
-    });
-
-    // Analytics Target Group
-    const analyticsTargetGroup = new elbv2.ApplicationTargetGroup(this, 'AnalyticsTargetGroup', {
-      vpc,
-      port: 8000,
-      protocol: elbv2.ApplicationProtocol.HTTP,
-      targetType: elbv2.TargetType.IP,
-      healthCheck: {
-        path: '/health',
-        interval: cdk.Duration.seconds(30),
+        unhealthyThresholdCount: 10,
         timeout: cdk.Duration.seconds(10),
-        healthyThresholdCount: 2,
-        unhealthyThresholdCount: 3,
+        interval: cdk.Duration.seconds(30),
       },
-      targetGroupName: 'finance-analytics-tg',
     });
 
-    // Attach services to target groups
     gatewayService.attachToApplicationTargetGroup(gatewayTargetGroup);
-    authService.attachToApplicationTargetGroup(authTargetGroup);
-    analyticsService.attachToApplicationTargetGroup(analyticsTargetGroup);
 
-    // ALB Listeners with routing
-    const listener = alb.addListener('DefaultListener', {
+    // Add listener to ALB
+    alb.addListener('HttpListener', {
       port: 80,
-      protocol: elbv2.ApplicationProtocol.HTTP,
       defaultTargetGroups: [gatewayTargetGroup],
     });
 
-    // Add routing rules
-    listener.addTargetGroups('AuthRouting', {
-      targetGroups: [authTargetGroup],
-      priority: 100,
-      conditions: [
-        elbv2.ListenerCondition.pathPatterns(['/api/auth/*'])
-      ],
-    });
-
-    listener.addTargetGroups('AnalyticsRouting', {
-      targetGroups: [analyticsTargetGroup],
-      priority: 200,
-      conditions: [
-        elbv2.ListenerCondition.pathPatterns(['/api/analytics/*'])
-      ],
-    });
-
     // ===================================================================
-    // AUTO-SCALING (MISSING PRODUCTION COMPONENT)
+    // AUTO SCALING - Keep existing configuration
     // ===================================================================
 
     // Gateway Auto-scaling
@@ -726,7 +668,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
     });
 
     // ===================================================================
-    // SECURITY GROUP RULES (MISSING PRODUCTION COMPONENT)
+    // SECURITY GROUP RULES
     // ===================================================================
 
     // Allow ECS services to access database
@@ -763,7 +705,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
     );
 
     // ===================================================================
-    // CLOUDWATCH MONITORING (MISSING PRODUCTION COMPONENT)
+    // CLOUDWATCH MONITORING
     // ===================================================================
 
     // Database CPU Alarm
@@ -794,7 +736,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
     });
 
     // ===================================================================
-    // OUTPUTS (ENHANCED)
+    // OUTPUTS
     // ===================================================================
 
     new cdk.CfnOutput(this, 'VPCId', {
