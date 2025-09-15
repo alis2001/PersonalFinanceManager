@@ -7,7 +7,13 @@ const app = new cdk.App();
 new RapilotInfrastructureStack(app, 'RapilotInfrastructureStack', {
   env: { 
     account: '819080195356', 
-    region: 'eu-west-1'  // Change from eu-south-1
+    region: 'eu-south-1'  // Milan region
   },
-  description: 'Rapilot Finance Tracker - Complete AWS Infrastructure'
+  description: 'Rapilot Finance Tracker - Complete AWS Infrastructure - Milan',
+  tags: {
+    Environment: 'Production',
+    Project: 'FinanceTracker',
+    Region: 'Milan',
+    CostCenter: 'Engineering'
+  }
 });
