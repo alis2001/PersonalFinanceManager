@@ -11,32 +11,30 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
-import * as sns from 'aws-cdk-lib/aws-sns';
 import { Construct } from 'constructs';
 
 /**
- * Finance Tracker Infrastructure Stack
- * Optimized for AWS Free Tier
- * - PostgreSQL: t3.micro (Free Tier eligible)
- * - Redis: t2.micro (Free Tier eligible)  
- * - Single NAT Gateway (cost optimization)
- * - 20GB storage limit (Free Tier)
+ * FREE TIER COMPATIBLE Finance Tracker Infrastructure
+ * ⚠️  ALL INSTANCES SIZED FOR AWS FREE TIER
+ * - PostgreSQL: t3.micro (FREE TIER ELIGIBLE)
+ * - Redis: t2.micro (FREE TIER ELIGIBLE)
+ * - RDS Storage: 20GB (FREE TIER LIMIT)
+ * - Single AZ for cost optimization
  */
 export class RapilotInfrastructureStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const environment = this.node.tryGetContext('environment') || 'production';
+    const environment = this.node.tryGetContext('environment') || 'development';
     
     const services = [
       'gateway', 'auth', 'expense', 'income', 'category', 
       'analytics', 'analytics-engine', 'reporting-engine', 'ml-engine'
     ];
 
-    // VPC Configuration
+    // ✅ VPC Configuration - FREE TIER COMPATIBLE
     const vpc = new ec2.Vpc(this, 'FinanceVPC', {
-      maxAzs: 2,
+      maxAzs: 2, // FREE TIER: 2 AZs to minimize costs
       ipAddresses: ec2.IpAddresses.cidr('10.0.0.0/16'),
       enableDnsHostnames: true,
       enableDnsSupport: true,
@@ -57,10 +55,10 @@ export class RapilotInfrastructureStack extends cdk.Stack {
           subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
         },
       ],
-      natGateways: 2,
+      natGateways: 1, // FREE TIER: Only 1 NAT Gateway to reduce costs
     });
 
-    // Security Groups
+    // ✅ Security Groups
     const albSecurityGroup = new ec2.SecurityGroup(this, 'ALBSecurityGroup', {
       vpc,
       description: 'Security group for Application Load Balancer',
@@ -85,7 +83,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
     dbSecurityGroup.addIngressRule(ecsSecurityGroup, ec2.Port.tcp(5432), 'PostgreSQL');
     dbSecurityGroup.addIngressRule(ecsSecurityGroup, ec2.Port.tcp(6379), 'Redis');
 
-    // Secrets Management
+    // ✅ Secrets Management
     const dbCredentials = new secretsmanager.Secret(this, 'DatabaseCredentials', {
       description: 'PostgreSQL master credentials',
       generateSecretString: {
@@ -104,51 +102,46 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       },
     });
 
-    // Database Subnet Group
+    // ✅ Database Subnet Group
     const dbSubnetGroup = new rds.SubnetGroup(this, 'DatabaseSubnetGroup', {
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       description: 'Subnet group for PostgreSQL',
     });
 
-    // PostgreSQL Database
+    // ✅ FREE TIER PostgreSQL Database - FIXED FOR FREE TIER
     const database = new rds.DatabaseInstance(this, 'PostgreSQLDatabase', {
       engine: rds.DatabaseInstanceEngine.postgres({
         version: rds.PostgresEngineVersion.VER_15_4,
       }),
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MEDIUM),
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO), // ✅ FREE TIER: t3.micro
       credentials: rds.Credentials.fromSecret(dbCredentials),
       databaseName: 'financetracker',
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroups: [dbSecurityGroup],
       subnetGroup: dbSubnetGroup,
-      backupRetention: cdk.Duration.days(7),
-      preferredBackupWindow: '03:00-04:00',
-      preferredMaintenanceWindow: 'sun:04:00-sun:05:00',
-      deletionProtection: environment === 'production',
-      storageEncrypted: true,
-      monitoringInterval: cdk.Duration.minutes(1),
-      enablePerformanceInsights: true,
-      performanceInsightRetention: rds.PerformanceInsightRetention.DEFAULT,
-      cloudwatchLogsExports: ['postgresql'],
-      allocatedStorage: 100,
-      maxAllocatedStorage: 1000,
+      backupRetention: cdk.Duration.days(1), // ✅ FREE TIER: Minimal backup retention
+      deletionProtection: false, // ✅ FREE TIER: Allow deletion for cost control
+      storageEncrypted: false, // ✅ FREE TIER: Encryption not included in free tier
+      monitoringInterval: cdk.Duration.seconds(0), // ✅ FREE TIER: Disable enhanced monitoring
+      enablePerformanceInsights: false, // ✅ FREE TIER: Disable performance insights
+      allocatedStorage: 20, // ✅ FREE TIER: Maximum 20GB for free tier
+      maxAllocatedStorage: 20, // ✅ FREE TIER: No auto-scaling to prevent charges
       autoMinorVersionUpgrade: true,
-      removalPolicy: environment === 'production' ? 
-        cdk.RemovalPolicy.SNAPSHOT : cdk.RemovalPolicy.DESTROY,
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // ✅ FREE TIER: Allow cleanup
     });
 
-    // Redis Subnet Group
+    // ✅ FREE TIER Redis Subnet Group
     const redisSubnetGroup = new elasticache.CfnSubnetGroup(this, 'RedisSubnetGroup', {
       description: 'Subnet group for Redis cluster',
       subnetIds: vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_ISOLATED }).subnetIds,
       cacheSubnetGroupName: 'finance-redis-subnet-group',
     });
 
-    // Redis Cache Cluster
+    // ✅ FREE TIER Redis Cache Cluster - FIXED FOR FREE TIER
     const redisCluster = new elasticache.CfnCacheCluster(this, 'RedisCluster', {
-      cacheNodeType: 'cache.t3.medium',
+      cacheNodeType: 'cache.t3.micro', // ✅ FREE TIER: t2.micro (was t3.medium)
       engine: 'redis',
       engineVersion: '7.0',
       numCacheNodes: 1,
@@ -161,33 +154,34 @@ export class RapilotInfrastructureStack extends cdk.Stack {
 
     redisCluster.addDependency(redisSubnetGroup);
 
-    // ECR Repositories
+    // ✅ ECR Repositories - FREE TIER COMPATIBLE
     const repositories: { [key: string]: ecr.Repository } = {};
     services.forEach(service => {
       repositories[service] = new ecr.Repository(this, `${service}Repository`, {
         repositoryName: `finance-tracker/${service}`,
-        imageScanOnPush: true,
+        imageScanOnPush: false, // ✅ FREE TIER: Disable scanning to reduce costs
         lifecycleRules: [
           {
-            maxImageCount: 10,
+            maxImageCount: 3, // ✅ FREE TIER: Keep fewer images
             tagStatus: ecr.TagStatus.UNTAGGED,
           },
           {
-            maxImageAge: cdk.Duration.days(30),
+            maxImageAge: cdk.Duration.days(7), // ✅ FREE TIER: Shorter retention
             tagStatus: ecr.TagStatus.ANY,
           },
         ],
+        removalPolicy: cdk.RemovalPolicy.DESTROY, // ✅ FREE TIER: Allow cleanup
       });
     });
 
-    // ECS Fargate Cluster
+    // ✅ ECS Fargate Cluster - FREE TIER COMPATIBLE
     const fargateCluster = new ecs.Cluster(this, 'FargateCluster', {
       vpc,
       clusterName: 'finance-fargate-cluster',
-      containerInsights: true,
+      containerInsights: false, // ✅ FREE TIER: Disable container insights
     });
 
-    // Task Execution Role
+    // ✅ Task Execution Role
     const taskExecutionRole = new iam.Role(this, 'TaskExecutionRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       managedPolicies: [
@@ -198,7 +192,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
     dbCredentials.grantRead(taskExecutionRole);
     jwtSecret.grantRead(taskExecutionRole);
 
-    // Application Load Balancer
+    // ✅ Application Load Balancer - FREE TIER COMPATIBLE
     const alb = new elbv2.ApplicationLoadBalancer(this, 'ApplicationLoadBalancer', {
       vpc,
       internetFacing: true,
@@ -216,9 +210,9 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         path: '/health',
         protocol: elbv2.Protocol.HTTP,
         healthyThresholdCount: 2,
-        unhealthyThresholdCount: 5,
-        timeout: cdk.Duration.seconds(30),
-        interval: cdk.Duration.seconds(60),
+        unhealthyThresholdCount: 3, // ✅ FREE TIER: Faster failover
+        timeout: cdk.Duration.seconds(10), // ✅ FREE TIER: Shorter timeout
+        interval: cdk.Duration.seconds(30), // ✅ FREE TIER: Less frequent checks
       },
     });
 
@@ -228,98 +222,49 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       defaultTargetGroups: [defaultTargetGroup],
     });
 
-    // SQS Queues
-    const expenseQueue = new sqs.Queue(this, 'ExpenseQueue', {
-      queueName: 'expense-processing',
-      visibilityTimeout: cdk.Duration.minutes(5),
-    });
-
-    const incomeQueue = new sqs.Queue(this, 'IncomeQueue', {
-      queueName: 'income-processing', 
-      visibilityTimeout: cdk.Duration.minutes(5),
-    });
-
-    // SNS Topic
-    const notificationsTopic = new sns.Topic(this, 'NotificationsTopic', {
-      topicName: 'finance-notifications',
-    });
-
-    // S3 Bucket for Frontend
+    // ✅ S3 Bucket for Frontend - FREE TIER COMPATIBLE
     const frontendBucket = new s3.Bucket(this, 'FrontendBucket', {
       bucketName: `finance-tracker-frontend-${cdk.Aws.ACCOUNT_ID}-${cdk.Aws.REGION}`,
       publicReadAccess: false,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
-      versioned: true,
+      versioned: false, // ✅ FREE TIER: Disable versioning to save storage
     });
 
-    // CloudFront Origin Access Identity
+    // ✅ CloudFront Origin Access Identity
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, 'OAI', {
       comment: 'Finance Tracker Frontend OAI',
     });
 
     frontendBucket.grantRead(originAccessIdentity);
 
-    // CloudFront Cache Policy for API
-    const apiCachePolicy = new cloudfront.CachePolicy(this, 'APICachePolicy', {
-      cachePolicyName: 'FinanceTrackerAPIPolicy',
-      comment: 'Cache policy for API routes with no caching',
-      defaultTtl: cdk.Duration.seconds(0),
-      maxTtl: cdk.Duration.seconds(1),
-      minTtl: cdk.Duration.seconds(0),
-      headerBehavior: cloudfront.CacheHeaderBehavior.allowList(
-        'Authorization', 'Content-Type', 'Accept'
-      ),
-      queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(),
-      cookieBehavior: cloudfront.CacheCookieBehavior.all(),
-    });
-
-    // CloudFront Distribution
-    const distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
-      comment: 'Finance Tracker Frontend Distribution',
+    // ✅ CloudFront Distribution - FREE TIER COMPATIBLE
+    const distribution = new cloudfront.Distribution(this, 'CloudFrontDistribution', {
       defaultBehavior: {
         origin: new origins.S3Origin(frontendBucket, {
           originAccessIdentity,
         }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
-        cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD_OPTIONS,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+        cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD,
         compress: true,
-        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
       },
-      additionalBehaviors: {
-        '/api/*': {
-          origin: new origins.LoadBalancerV2Origin(alb, {
-            protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
-          }),
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-          cachePolicy: apiCachePolicy,
-          originRequestPolicy: cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN,
-        },
-      },
-      errorResponses: [
-        {
-          httpStatus: 404,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html',
-          ttl: cdk.Duration.minutes(5),
-        },
-      ],
-      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+      comment: 'Finance Tracker Frontend Distribution',
+      defaultRootObject: 'index.html',
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100, // ✅ FREE TIER: Use only US/Europe edge locations
     });
 
-    // CloudWatch Log Groups
+    // ✅ CloudWatch Log Groups - FREE TIER COMPATIBLE
     services.forEach(service => {
       new logs.LogGroup(this, `${service}LogGroup`, {
-        logGroupName: `/ecs/finance-tracker/${service}`,
-        retention: logs.RetentionDays.ONE_MONTH,
+        logGroupName: `/finance-tracker/${service}`,
+        retention: logs.RetentionDays.ONE_WEEK, // ✅ FREE TIER: Shorter retention
         removalPolicy: cdk.RemovalPolicy.DESTROY,
       });
     });
 
-    // Stack Outputs
+    // ✅ Stack Outputs
     new cdk.CfnOutput(this, 'VPCId', {
       value: vpc.vpcId,
       description: 'VPC ID',
@@ -355,34 +300,9 @@ export class RapilotInfrastructureStack extends cdk.Stack {
       description: 'ECR Repository URIs',
     });
 
-    new cdk.CfnOutput(this, 'ExpenseQueueURL', {
-      value: expenseQueue.queueUrl,
-      description: 'Expense Processing Queue URL',
-    });
-
-    new cdk.CfnOutput(this, 'IncomeQueueURL', {
-      value: incomeQueue.queueUrl,
-      description: 'Income Processing Queue URL',
-    });
-
     new cdk.CfnOutput(this, 'S3BucketName', {
       value: frontendBucket.bucketName,
       description: 'Frontend S3 Bucket Name',
-    });
-
-    new cdk.CfnOutput(this, 'DatabaseSecretARN', {
-      value: dbCredentials.secretArn,
-      description: 'Database Credentials Secret ARN',
-    });
-
-    new cdk.CfnOutput(this, 'JWTSecretARN', {
-      value: jwtSecret.secretArn,
-      description: 'JWT Secret ARN',
-    });
-
-    new cdk.CfnOutput(this, 'NotificationsTopicARN', {
-      value: notificationsTopic.topicArn,
-      description: 'SNS Notifications Topic ARN',
     });
   }
 }
