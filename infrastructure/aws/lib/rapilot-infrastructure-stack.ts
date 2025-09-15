@@ -98,7 +98,7 @@ export class RapilotInfrastructureStack extends cdk.Stack {
     // PostgreSQL Database - FIXED VERSION FOR MILAN
     const database = new rds.DatabaseInstance(this, 'PostgreSQLDatabase', {
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_15_4, // VERIFIED: Available in eu-south-1
+        version: rds.PostgresEngineVersion.VER_14_13, // VERIFIED: Available in eu-south-1
       }),
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
       credentials: rds.Credentials.fromSecret(dbCredentials),
@@ -134,14 +134,13 @@ export class RapilotInfrastructureStack extends cdk.Stack {
 
     // Redis Cluster - FIXED VERSION FOR MILAN
     const redisCluster = new elasticache.CfnCacheCluster(this, 'RedisCluster', {
-      cacheNodeType: 'cache.t2.micro', // Free tier verified
+      cacheNodeType: 'cache.t3.micro', // Free tier verified
       engine: 'redis',
-      engineVersion: '6.2.6', // VERIFIED: Stable version for eu-south-1
+      engineVersion: '6.2', // VERIFIED: Stable version for eu-south-1
       numCacheNodes: 1,
       cacheSubnetGroupName: redisSubnetGroup.ref,
       vpcSecurityGroupIds: [redisSecurityGroup.securityGroupId],
       port: 6379,
-      cacheClusterId: 'finance-redis-cluster',
     });
 
     redisCluster.addDependency(redisSubnetGroup);
@@ -537,7 +536,6 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
       }),
       enableExecuteCommand: true,
-      enableLogging: true,
     });
 
     // Auth Service
@@ -552,7 +550,6 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
       }),
       enableExecuteCommand: true,
-      enableLogging: true,
     });
 
     // Expense Service
@@ -567,7 +564,6 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
       }),
       enableExecuteCommand: true,
-      enableLogging: true,
     });
 
     // Income Service
@@ -582,7 +578,6 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
       }),
       enableExecuteCommand: true,
-      enableLogging: true,
     });
 
     // Category Service
@@ -597,7 +592,6 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
       }),
       enableExecuteCommand: true,
-      enableLogging: true,
     });
 
     // Analytics Service
@@ -612,7 +606,6 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
       }),
       enableExecuteCommand: true,
-      enableLogging: true,
     });
 
     // ===================================================================
