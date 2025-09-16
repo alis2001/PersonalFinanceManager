@@ -65,7 +65,7 @@ services:
       timeout: 30s
       retries: 3
 
-  # API Gateway (Node.js)
+  # API Gateway (Node.js) - UPDATED WITH SERVICE URLs
   gateway:
     build:
       context: ./services/gateway
@@ -93,6 +93,7 @@ services:
       - EXPENSE_SERVICE_URL=${EXPENSE_SERVICE_URL}
       - INCOME_SERVICE_URL=${INCOME_SERVICE_URL}
       - CATEGORY_SERVICE_URL=${CATEGORY_SERVICE_URL}
+      - ANALYTICS_SERVICE_URL=${ANALYTICS_SERVICE_URL}
       - ANALYTICS_ENGINE_URL=${ANALYTICS_ENGINE_URL}
       - REPORTING_ENGINE_URL=${REPORTING_ENGINE_URL}
       - ML_ENGINE_URL=${ML_ENGINE_URL}
