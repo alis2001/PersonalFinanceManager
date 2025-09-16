@@ -11,10 +11,6 @@ const authLimiter = rateLimit({
   // FIXED: Use only IP address, not req.body (which isn't parsed yet)
   keyGenerator: (req) => {
     return req.ip || req.connection.remoteAddress || 'unknown';
-  },
-  // Add timeout handler
-  onLimitReached: (req, res) => {
-    console.log(`Rate limit exceeded for IP: ${req.ip}`);
   }
 });
 

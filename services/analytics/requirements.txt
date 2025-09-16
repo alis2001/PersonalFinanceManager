@@ -33,3 +33,6 @@ orjson==3.9.10
 
 # Template engine
 jinja2==3.1.2
+
+
+TA-Lib==0.4.25

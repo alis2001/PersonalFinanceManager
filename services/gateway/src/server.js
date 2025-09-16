@@ -11,11 +11,11 @@ console.log('🚀 Starting Finance Gateway...');
 
 // Load service URLs from environment variables
 const serviceUrls = {
-  auth: process.env.AUTH_SERVICE_URL || 'http://auth:3000',
-  category: process.env.CATEGORY_SERVICE_URL || 'http://category:3000',
-  expense: process.env.EXPENSE_SERVICE_URL || 'http://expense:3000',
-  income: process.env.INCOME_SERVICE_URL || 'http://income:3000',
-  analytics: process.env.ANALYTICS_SERVICE_URL || 'http://analytics:8000'
+  auth: process.env.AUTH_SERVICE_URL || 'http://10.0.4.141:3000',
+  category: process.env.CATEGORY_SERVICE_URL || 'http://10.0.4.238:3000',
+  expense: process.env.EXPENSE_SERVICE_URL || 'http://10.0.4.7:3000',
+  income: process.env.INCOME_SERVICE_URL || 'http://10.0.3.16:3000',
+  analytics: process.env.ANALYTICS_SERVICE_URL || 'http://10.0.3.165:8000'
 };
 
 // CORS configuration - FIXED for browser compatibility

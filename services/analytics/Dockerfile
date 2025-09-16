@@ -26,12 +26,19 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     make \
+    autoconf \
+    automake \
+    libtool \
     && rm -rf /var/lib/apt/lists/*
 
-# Install TA-Lib (required for technical analysis)
+# Install TA-Lib with ARM64 support - THE FIX
 RUN wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz && \
     tar -xvzf ta-lib-0.4.0-src.tar.gz && \
     cd ta-lib/ && \
+    # Download updated config files that support ARM64
+    wget -O config.guess 'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.guess;hb=HEAD' && \
+    wget -O config.sub 'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=HEAD' && \
+    chmod +x config.guess config.sub && \
     ./configure --prefix=/usr && \
     make && \
     make install && \
@@ -63,7 +70,7 @@ WORKDIR /app
 COPY --from=build /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
 COPY --from=build /usr/local/bin/ /usr/local/bin/
 
-# Copy ONLY the application source code (removed unnecessary files)
+# Copy application source code
 COPY src/ ./src/
 
 # Create necessary directories
@@ -80,5 +87,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 # Expose port
 EXPOSE 8000
 
-# Start command with proper async support
+# Start command
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--loop", "asyncio"]
