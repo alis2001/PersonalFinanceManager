@@ -1,22 +1,31 @@
-# Production Web Frontend Dockerfile - React.js
+# Production Web Frontend Dockerfile - React.js - NETWORK RESILIENT
 FROM node:18-alpine as builder
+
+# Set npm configurations for better reliability
+RUN npm config set fetch-retry-mintimeout 20000
+RUN npm config set fetch-retry-maxtimeout 120000
+RUN npm config set fetch-retries 3
+RUN npm config set registry https://registry.npmjs.org/
 
 # Create app directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
+# Copy package files first for better caching
+COPY package.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies with retry logic
+RUN npm install --no-optional --loglevel=error --progress=false
+
+# Copy TypeScript config
+COPY tsconfig.json ./
 
 # Copy source code
 COPY src/ ./src/
 COPY public/ ./public/
 
-# Set production API URL
-ENV REACT_APP_API_URL=http://finance-tracker-alb-1958020418.eu-south-1.elb.amazonaws.com
+# Set production API URL - FIXED to include /api/auth path
+ENV REACT_APP_API_URL=http://finance-tracker-alb-1958020418.eu-south-1.elb.amazonaws.com/api/auth
+ENV NODE_ENV=production
 
 # Build for production
 RUN npm run build

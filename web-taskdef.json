@@ -2,8 +2,8 @@
   "family": "finance-tracker-web",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
-  "cpu": "256",
-  "memory": "512",
+  "cpu": "512",
+  "memory": "1024",
   "executionRoleArn": "arn:aws:iam::819080195356:role/finance-tracker-task-execution-role",
   "taskRoleArn": "arn:aws:iam::819080195356:role/finance-tracker-task-role",
   "containerDefinitions": [
@@ -11,10 +11,21 @@
       "name": "web",
       "image": "819080195356.dkr.ecr.eu-south-1.amazonaws.com/finance-tracker/web:latest",
       "essential": true,
-      "portMappings": [{"containerPort": 3000, "protocol": "tcp"}],
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
       "environment": [
-        {"name": "NODE_ENV", "value": "production"},
-        {"name": "REACT_APP_API_URL", "value": "http://finance-tracker-alb-1958020418.eu-south-1.elb.amazonaws.com"}
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "REACT_APP_API_URL",
+          "value": "http://finance-tracker-alb-1958020418.eu-south-1.elb.amazonaws.com/api/auth"
+        }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
@@ -23,7 +34,9 @@
           "awslogs-region": "eu-south-1",
           "awslogs-stream-prefix": "web"
         }
-      }
+      },
+      "memory": 1024,
+      "cpu": 512
     }
   ]
 }
