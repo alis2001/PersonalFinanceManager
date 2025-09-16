@@ -14,32 +14,38 @@ const {
 
 const router = express.Router();
 
-// Public authentication routes
+// FIXED: Public authentication routes with proper middleware order
 router.post('/register', 
+  authLimiter,  // Rate limiting AFTER body parsing (now safe)
   validateRequest(registerSchema), 
   authController.register
 );
 
 router.post('/login', 
+  authLimiter,  // Rate limiting AFTER body parsing (now safe)
   validateRequest(loginSchema), 
   authController.login
 );
 
 router.post('/verify-email', 
+  authLimiter,  // Add rate limiting to prevent abuse
   authController.verifyEmail
 );
 
 router.post('/resend-verification', 
+  authLimiter,  // Add rate limiting to prevent spam
   validateRequest(resendVerificationSchema), 
   authController.resendVerification
 );
 
 router.post('/request-password-reset', 
+  authLimiter,  // Add rate limiting to prevent abuse
   validateRequest(passwordResetRequestSchema), 
   authController.requestPasswordReset
 );
 
 router.post('/reset-password', 
+  authLimiter,  // Add rate limiting to prevent abuse
   validateRequest(passwordResetSchema), 
   authController.resetPassword
 );
@@ -49,7 +55,7 @@ router.post('/refresh',
   authController.refresh
 );
 
-// Internal service route (for other microservices)
+// Internal service route (for other microservices) - no rate limiting
 router.post('/verify', 
   authController.verifyToken
 );
@@ -65,7 +71,7 @@ router.get('/profile',
   authController.getProfile
 );
 
-// Health check route
+// Health check route - no middleware needed
 router.get('/health', 
   authController.health
 );

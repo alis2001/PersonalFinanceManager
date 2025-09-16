@@ -53,21 +53,25 @@ const initializeConnections = async () => {
   }
 };
 
-// Security middleware
 app.use(helmet());
 app.use(cors());
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: 'Too many requests, please try again later.' },
-});
+// ADDED: Request timeout middleware (early in stack)
+const { requestTimeout, generalLimiter, authLimiter } = require('./middleware/auth');
+app.use(requestTimeout(30000)); // 30 second timeout for all requests
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
-app.use(limiter);
+// Body parsing middleware (MUST be before rate limiting that accesses req.body)
+app.use(express.json({ 
+  limit: '10mb',
+  timeout: 15000 // 15 second timeout for JSON parsing
+}));
+app.use(express.urlencoded({ 
+  extended: true,
+  timeout: 15000 // 15 second timeout for URL encoding
+}));
+
+// General rate limiting (after body parsing)
+app.use(generalLimiter);
 
 // Request logging
 app.use(requestLogger);

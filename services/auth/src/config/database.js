@@ -11,7 +11,7 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-// PostgreSQL connection
+// PostgreSQL connection with proper timeouts
 const db = new Pool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
@@ -20,13 +20,19 @@ const db = new Pool({
   password: process.env.DB_PASSWORD,
   max: 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000, // Increased from 2000 to 10000
+  statement_timeout: 15000, // Add query timeout of 15 seconds
+  query_timeout: 15000, // Additional query timeout
 });
 
-// Redis connection
+// Redis connection with proper timeout handling
 const redisClient = redis.createClient({
   url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
   password: process.env.REDIS_PASSWORD || undefined,
+  socket: {
+    connectTimeout: 10000, // 10 second connection timeout
+    commandTimeout: 5000   // 5 second command timeout
+  },
   retry_strategy: (options) => {
     if (options.error && options.error.code === 'ECONNREFUSED') {
       logger.error('Redis connection refused');
@@ -46,7 +52,10 @@ redisClient.on('connect', () => logger.info('Redis connected'));
 
 const connectDatabase = async () => {
   try {
-    await db.query('SELECT 1');
+    // Test database connection with timeout
+    const client = await db.connect();
+    await client.query('SELECT 1');
+    client.release();
     logger.info('PostgreSQL connected');
   } catch (error) {
     logger.error('PostgreSQL connection failed:', error);

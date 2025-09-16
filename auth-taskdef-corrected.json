@@ -18,6 +18,8 @@
         {"name": "DB_HOST", "value": "rapilotinfrastructurestac-postgresqldatabase03fc65-zrasrqb81zq9.c5okeeiy4qu1.eu-south-1.rds.amazonaws.com"},
         {"name": "DB_PORT", "value": "5432"},
         {"name": "DB_NAME", "value": "financetracker"},
+        {"name": "DB_USER", "value": "financeadmin"},
+        {"name": "DB_PASSWORD", "value": "PLACEHOLDER_WILL_BE_REPLACED"},
         {"name": "REDIS_HOST", "value": "rap-re-1t79a0nfsw3jy.gyhrve.0001.eus1.cache.amazonaws.com"},
         {"name": "REDIS_PORT", "value": "6379"},
         {"name": "JWT_SECRET", "value": "your-jwt-secret-change-in-production"},
@@ -25,10 +27,6 @@
         {"name": "BCRYPT_ROUNDS", "value": "12"},
         {"name": "SESSION_TIMEOUT", "value": "86400000"},
         {"name": "LOG_LEVEL", "value": "info"}
-      ],
-      "secrets": [
-        {"name": "DB_USER", "valueFrom": "arn:aws:secretsmanager:eu-south-1:819080195356:secret:RapilotInfrastructureStack-DatabaseCredentials063D25A4-7wPr4kR:username::"},
-        {"name": "DB_PASSWORD", "valueFrom": "arn:aws:secretsmanager:eu-south-1:819080195356:secret:RapilotInfrastructureStack-DatabaseCredentials063D25A4-7wPr4kR:password::"}
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
