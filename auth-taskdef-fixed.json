@@ -1,0 +1,39 @@
+{
+  "family": "finance-tracker-auth",
+  "taskRoleArn": "arn:aws:iam::819080195356:role/finance-tracker-task-role",
+  "executionRoleArn": "arn:aws:iam::819080195356:role/finance-tracker-task-execution-role",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "auth",
+      "image": "819080195356.dkr.ecr.eu-south-1.amazonaws.com/finance-tracker/auth:fixed",
+      "essential": true,
+      "portMappings": [{"containerPort": 3000, "protocol": "tcp"}],
+      "environment": [
+        {"name": "NODE_ENV", "value": "production"},
+        {"name": "PORT", "value": "3000"},
+        {"name": "DB_HOST", "value": "rapilotinfrastructurestac-postgresqldatabase03fc65-zrasrqb81zq9.c5okeeiy4qu1.eu-south-1.rds.amazonaws.com"},
+        {"name": "DB_PORT", "value": "5432"},
+        {"name": "DB_NAME", "value": "financetracker"},
+        {"name": "REDIS_HOST", "value": "rap-re-1t79a0nfsw3jy.gyhrve.0001.eus1.cache.amazonaws.com"},
+        {"name": "REDIS_PORT", "value": "6379"},
+        {"name": "JWT_SECRET", "value": "your-jwt-secret-change-in-production"},
+        {"name": "JWT_EXPIRY", "value": "1h"},
+        {"name": "BCRYPT_ROUNDS", "value": "12"},
+        {"name": "SESSION_TIMEOUT", "value": "86400000"},
+        {"name": "LOG_LEVEL", "value": "info"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/aws/ecs/finance-tracker",
+          "awslogs-region": "eu-south-1",
+          "awslogs-stream-prefix": "auth"
+        }
+      }
+    }
+  ]
+}

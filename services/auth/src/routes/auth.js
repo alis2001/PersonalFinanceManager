@@ -16,36 +16,30 @@ const router = express.Router();
 
 // Public authentication routes
 router.post('/register', 
-  authLimiter, 
   validateRequest(registerSchema), 
   authController.register
 );
 
 router.post('/login', 
-  authLimiter, 
   validateRequest(loginSchema), 
   authController.login
 );
 
 router.post('/verify-email', 
-  authLimiter,
   authController.verifyEmail
 );
 
 router.post('/resend-verification', 
-  authLimiter,
   validateRequest(resendVerificationSchema), 
   authController.resendVerification
 );
 
 router.post('/request-password-reset', 
-  authLimiter,
   validateRequest(passwordResetRequestSchema), 
   authController.requestPasswordReset
 );
 
 router.post('/reset-password', 
-  authLimiter,
   validateRequest(passwordResetSchema), 
   authController.resetPassword
 );
