@@ -128,162 +128,6 @@ jobs:
             echo "env_file=.env.staging" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create production environment file
-        run: |
-          cat > ${{ steps.env.outputs.env_file }} << 'EOF'
-          # Application
-          APP_ENV=${{ steps.env.outputs.environment }}
-          NODE_ENV=production
-          
-          # Database Configuration
-          DB_HOST=postgres
-          DB_PORT=5432
-          DB_NAME=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_NAME || secrets.DB_NAME }}
-          DB_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_USER || secrets.DB_USER }}
-          DB_PASSWORD=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_PASSWORD || secrets.DB_PASSWORD }}
-          DB_EXTERNAL_PORT=5433
-          
-          # PostgreSQL
-          POSTGRES_DB=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_NAME || secrets.DB_NAME }}
-          POSTGRES_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_USER || secrets.DB_USER }}
-          POSTGRES_PASSWORD=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_PASSWORD || secrets.DB_PASSWORD }}
-          
-          # Redis
-          REDIS_HOST=redis
-          REDIS_PORT=6379
-          
-          # RabbitMQ
-          RABBITMQ_HOST=rabbitmq
-          RABBITMQ_PORT=5672
-          RABBITMQ_MANAGEMENT_PORT=15672
-          RABBITMQ_DEFAULT_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_RABBITMQ_USER || secrets.RABBITMQ_USER }}
-          RABBITMQ_DEFAULT_PASS=${{ steps.env.outputs.environment == 'production' && secrets.PROD_RABBITMQ_PASS || secrets.RABBITMQ_PASS }}
-          
-          # JWT Configuration
-          JWT_SECRET=${{ steps.env.outputs.environment == 'production' && secrets.PROD_JWT_SECRET || secrets.JWT_SECRET }}
-          JWT_EXPIRY=1h
-          BCRYPT_ROUNDS=12
-          
-          # Service URLs (Internal Docker Network)
-          AUTH_SERVICE_URL=http://auth:3000
-          EXPENSE_SERVICE_URL=http://expense:3000
-          INCOME_SERVICE_URL=http://income:3000
-          CATEGORY_SERVICE_URL=http://category:3000
-          ANALYTICS_SERVICE_URL=http://analytics:8000
-          ANALYTICS_ENGINE_URL=http://analytics-engine:8080
-          REPORTING_ENGINE_URL=http://reporting-engine:8080
-          ML_ENGINE_URL=http://ml-engine:8080
-          
-          # Service Ports (External Access)
-          GATEWAY_PORT=8080
-          AUTH_SERVICE_PORT=8001
-          EXPENSE_SERVICE_PORT=8002
-          INCOME_SERVICE_PORT=8003
-          CATEGORY_SERVICE_PORT=8004
-          ANALYTICS_SERVICE_PORT=8005
-          ANALYTICS_ENGINE_PORT=8006
-          REPORTING_ENGINE_PORT=8007
-          ML_ENGINE_PORT=8008
-          
-          # Security & Rate Limiting
-          ENABLE_CORS=true
-          RATE_LIMIT_WINDOW=900
-          RATE_LIMIT_MAX_REQUESTS=100
-          SESSION_TIMEOUT=3600
-          
-          # Logging
-          LOG_LEVEL=info
-          
-          # Email Service Configuration
-          SMTP_HOST=${{ secrets.SMTP_HOST }}
-          SMTP_PORT=${{ secrets.SMTP_PORT }}
-          SMTP_SECURE=false
-          SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
-          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-          SMTP_FROM_NAME=Finance Tracker
-          SMTP_FROM_EMAIL=${{ secrets.SMTP_FROM_EMAIL }}
-          
-          # Email Settings
-          EMAIL_VERIFICATION_EXPIRY_HOURS=24
-          LOGIN_VERIFICATION_EXPIRY_MINUTES=10
-          PASSWORD_RESET_EXPIRY_HOURS=2
-          EMAIL_MAX_RETRIES=3
-          EMAIL_RETRY_DELAY=5000
-          
-          # Application URLs - DYNAMIC EC2 IP
-          FRONTEND_URL=http://${{ secrets.EC2_HOST }}:3000
-          API_URL=http://${{ secrets.EC2_HOST }}:8080
-          
-          # Company Information
-          APP_NAME=Finance Tracker
-          COMPANY_NAME=Finance Tracker Inc
-          SUPPORT_EMAIL=support@financetracker.com
-          BRAND_COLOR=#1a1a1a
-          LOGO_URL=
-          
-          # Analytics Service Configuration (Python FastAPI)
-          PYTHON_ENV=${{ steps.env.outputs.environment }}
-          ASYNC_POOL_SIZE=20
-          REQUEST_TIMEOUT=30
-          BATCH_SIZE=1000
-          MAX_CONCURRENT_REQUESTS=100
-          
-          # Analytics Features
-          ANALYTICS_DEFAULT_PERIOD=monthly
-          ANALYTICS_SUPPORTED_PERIODS=daily,weekly,monthly,quarterly,yearly
-          ANALYTICS_MAX_DATA_POINTS=10000
-          
-          # ML & Forecasting
-          ML_MODEL_PATH=/app/models
-          ML_RETRAIN_INTERVAL=86400
-          ML_MIN_DATA_POINTS=30
-          FORECAST_DAYS_DEFAULT=30
-          FORECAST_DAYS_MAX=365
-          FORECAST_CONFIDENCE_INTERVAL=0.95
-          
-          # Data Export
-          EXPORT_MAX_RECORDS=100000
-          EXPORT_FORMATS=csv,xlsx,json,pdf
-          EXPORT_CACHE_TTL=1800
-          
-          # Cache TTL Settings (Analytics)
-          CACHE_TTL_DEFAULT=3600
-          CACHE_TTL_SHORT=300
-          CACHE_TTL_LONG=86400
-          
-          # Frontend Analytics Configuration - DYNAMIC EC2 IP
-          REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api
-          REACT_APP_ANALYTICS_API_URL=http://${{ secrets.EC2_HOST }}:8080/api/analytics
-          
-          # CORS Configuration - DYNAMIC EC2 IP
-          ALLOWED_ORIGINS=http://${{ secrets.EC2_HOST }}:3000,http://localhost:3000
-          CORS_ORIGIN=http://${{ secrets.EC2_HOST }}:3000
-          CORS_ORIGINS=http://${{ secrets.EC2_HOST }}:3000,http://localhost:3000
-          ORIGIN=http://${{ secrets.EC2_HOST }}:3000
-          
-          # Performance & Timeout Settings
-          REQUEST_TIMEOUT=75000
-          PROXY_TIMEOUT=70000
-          SERVICE_REQUEST_TIMEOUT=60000
-          DATABASE_TIMEOUT=30000
-          
-          # Docker Configuration
-          DOCKER_RESTART_POLICY=unless-stopped
-          ENABLE_HEALTH_CHECKS=true
-          HEALTH_CHECK_INTERVAL=30s
-          HEALTH_CHECK_TIMEOUT=10s
-          HEALTH_CHECK_RETRIES=3
-          EOF
-
-      - name: Verify files exist
-        run: |
-          echo "📁 Verifying deployment files..."
-          ls -la
-          echo "✅ docker-compose.yml exists: $(test -f docker-compose.yml && echo 'YES' || echo 'NO')"
-          echo "✅ ${{ steps.env.outputs.env_file }} exists: $(test -f ${{ steps.env.outputs.env_file }} && echo 'YES' || echo 'NO')"
-          echo "📝 Environment file content preview:"
-          head -20 ${{ steps.env.outputs.env_file }}
-
       - name: Prepare EC2 environment
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -291,7 +135,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "🏗️ Preparing EC2 environment..."
+            echo "Preparing EC2 environment..."
             
             # Create directory structure
             sudo mkdir -p /home/ubuntu/finance-tracker/infrastructure/database/init
@@ -301,12 +145,12 @@ jobs:
             cd /home/ubuntu/finance-tracker
             
             # Stop any existing containers
-            echo "🛑 Stopping existing services..."
+            echo "Stopping existing services..."
             docker-compose down --remove-orphans 2>/dev/null || true
             
-            echo "✅ EC2 environment prepared"
+            echo "EC2 environment prepared"
 
-      - name: Copy deployment files to EC2
+      - name: Create deployment files on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -315,8 +159,8 @@ jobs:
           script: |
             cd /home/ubuntu/finance-tracker
             
-            # Create environment file on server
-            cat > .env.production << 'ENVEOF'
+            # Create environment file with all variables including PUBLIC_IP
+            cat > ${{ steps.env.outputs.env_file }} << 'ENVEOF'
             # Application
             APP_ENV=${{ steps.env.outputs.environment }}
             NODE_ENV=production
@@ -396,7 +240,8 @@ jobs:
             EMAIL_MAX_RETRIES=3
             EMAIL_RETRY_DELAY=5000
             
-            # Application URLs - DYNAMIC EC2 IP
+            # Application URLs - FIXED WITH PUBLIC_IP
+            PUBLIC_IP=${{ secrets.EC2_HOST }}
             FRONTEND_URL=http://${{ secrets.EC2_HOST }}:3000
             API_URL=http://${{ secrets.EC2_HOST }}:8080
             
@@ -437,11 +282,11 @@ jobs:
             CACHE_TTL_SHORT=300
             CACHE_TTL_LONG=86400
             
-            # Frontend Analytics Configuration - DYNAMIC EC2 IP
+            # Frontend Analytics Configuration
             REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api
             REACT_APP_ANALYTICS_API_URL=http://${{ secrets.EC2_HOST }}:8080/api/analytics
             
-            # CORS Configuration - DYNAMIC EC2 IP
+            # CORS Configuration
             ALLOWED_ORIGINS=http://${{ secrets.EC2_HOST }}:3000,http://localhost:3000
             CORS_ORIGIN=http://${{ secrets.EC2_HOST }}:3000
             CORS_ORIGINS=http://${{ secrets.EC2_HOST }}:3000,http://localhost:3000
@@ -460,18 +305,378 @@ jobs:
             HEALTH_CHECK_TIMEOUT=10s
             HEALTH_CHECK_RETRIES=3
             ENVEOF
+            
+            # Create production docker-compose.yml with ONLY pre-built images
+            cat > docker-compose.yml << 'DOCKEREOF'
+            version: '3.8'
 
-      - name: Create docker-compose.yml on EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.yml"
-          target: "/home/ubuntu/finance-tracker/"
-          overwrite: true
+            services:
+              # Database Services
+              postgres:
+                image: postgres:15-alpine
+                container_name: finance-postgres
+                env_file:
+                  - .env
+                environment:
+                  POSTGRES_DB: ${POSTGRES_DB}
+                  POSTGRES_USER: ${POSTGRES_USER}
+                  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+                  POSTGRES_MAX_CONNECTIONS: 200
+                  POSTGRES_SHARED_BUFFERS: 256MB
+                ports:
+                  - "${DB_EXTERNAL_PORT}:5432"
+                volumes:
+                  - postgres_data:/var/lib/postgresql/data
+                  - ./infrastructure/database/init:/docker-entrypoint-initdb.d
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+                  interval: 15s
+                  timeout: 10s
+                  retries: 5
+                  start_period: 30s
 
-      - name: Create database init files on EC2
+              redis:
+                image: redis:7-alpine
+                container_name: finance-redis
+                env_file:
+                  - .env
+                ports:
+                  - "${REDIS_PORT}:6379"
+                volumes:
+                  - redis_data:/data
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "redis-cli", "ping"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+                command: >
+                  redis-server 
+                  --maxmemory 512mb 
+                  --maxmemory-policy allkeys-lru 
+                  --tcp-keepalive 60
+                  --timeout 300
+
+              rabbitmq:
+                image: rabbitmq:3-management-alpine
+                container_name: finance-rabbitmq
+                env_file:
+                  - .env
+                environment:
+                  RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+                  RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+                ports:
+                  - "${RABBITMQ_PORT}:5672"
+                  - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+                volumes:
+                  - rabbitmq_data:/var/lib/rabbitmq
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: rabbitmq-diagnostics -q ping
+                  interval: 30s
+                  timeout: 30s
+                  retries: 3
+
+              # API Gateway - PRE-BUILT IMAGE ONLY
+              gateway:
+                image: alis2001/finance-gateway:latest
+                container_name: finance-gateway
+                env_file:
+                  - .env
+                ports:
+                  - "${GATEWAY_PORT}:3000"
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                  redis:
+                    condition: service_healthy
+                  auth:
+                    condition: service_started
+                  expense:
+                    condition: service_started
+                  income:
+                    condition: service_started
+                environment:
+                  - NODE_ENV=${NODE_ENV}
+                  - PORT=3000
+                  - AUTH_SERVICE_URL=http://auth:3000
+                  - EXPENSE_SERVICE_URL=http://expense:3000
+                  - INCOME_SERVICE_URL=http://income:3000
+                  - CATEGORY_SERVICE_URL=http://category:3000
+                  - ANALYTICS_SERVICE_URL=http://analytics:8000
+                  - ENABLE_CORS=${ENABLE_CORS}
+                  - PUBLIC_IP=${PUBLIC_IP}
+                  - FRONTEND_URL=${FRONTEND_URL}
+                  - API_URL=${API_URL}
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                deploy:
+                  resources:
+                    limits:
+                      memory: 512M
+
+              # Node.js Services - PRE-BUILT IMAGES ONLY
+              auth:
+                image: alis2001/finance-auth:latest
+                container_name: finance-auth
+                env_file:
+                  - .env
+                ports:
+                  - "${AUTH_SERVICE_PORT}:3000"
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                  redis:
+                    condition: service_healthy
+                environment:
+                  - NODE_ENV=${NODE_ENV}
+                  - PORT=3000
+                  - DB_HOST=postgres
+                  - DB_PORT=5432
+                  - DB_NAME=${DB_NAME}
+                  - DB_USER=${DB_USER}
+                  - DB_PASSWORD=${DB_PASSWORD}
+                  - REDIS_HOST=redis
+                  - REDIS_PORT=6379
+                  - JWT_SECRET=${JWT_SECRET}
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+
+              expense:
+                image: alis2001/finance-expense:latest
+                container_name: finance-expense
+                env_file:
+                  - .env
+                ports:
+                  - "${EXPENSE_SERVICE_PORT}:3000"
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                environment:
+                  - NODE_ENV=${NODE_ENV}
+                  - PORT=3000
+                  - DB_HOST=postgres
+                  - DB_PORT=5432
+                  - DB_NAME=${DB_NAME}
+                  - DB_USER=${DB_USER}
+                  - DB_PASSWORD=${DB_PASSWORD}
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+
+              income:
+                image: alis2001/finance-income:latest
+                container_name: finance-income
+                env_file:
+                  - .env
+                ports:
+                  - "${INCOME_SERVICE_PORT}:3000"
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                environment:
+                  - NODE_ENV=${NODE_ENV}
+                  - PORT=3000
+                  - DB_HOST=postgres
+                  - DB_PORT=5432
+                  - DB_NAME=${DB_NAME}
+                  - DB_USER=${DB_USER}
+                  - DB_PASSWORD=${DB_PASSWORD}
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+
+              category:
+                image: alis2001/finance-category:latest
+                container_name: finance-category
+                env_file:
+                  - .env
+                ports:
+                  - "${CATEGORY_SERVICE_PORT}:3000"
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                environment:
+                  - NODE_ENV=${NODE_ENV}
+                  - PORT=3000
+                  - DB_HOST=postgres
+                  - DB_PORT=5432
+                  - DB_NAME=${DB_NAME}
+                  - DB_USER=${DB_USER}
+                  - DB_PASSWORD=${DB_PASSWORD}
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+
+              # Analytics Services - PRE-BUILT IMAGES ONLY
+              analytics:
+                image: alis2001/finance-analytics:latest
+                container_name: finance-analytics-api
+                env_file:
+                  - .env
+                ports:
+                  - "${ANALYTICS_SERVICE_PORT}:8000"
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                  redis:
+                    condition: service_healthy
+                environment:
+                  - PYTHON_ENV=${PYTHON_ENV}
+                  - DB_HOST=postgres
+                  - DB_PORT=5432
+                  - DB_NAME=${DB_NAME}
+                  - DB_USER=${DB_USER}
+                  - DB_PASSWORD=${DB_PASSWORD}
+                  - REDIS_HOST=redis
+                  - REDIS_PORT=6379
+                  - JWT_SECRET=${JWT_SECRET}
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+
+              # C++ Engines - PRE-BUILT IMAGES ONLY
+              analytics-engine:
+                image: alis2001/finance-analytics-engine:latest
+                container_name: finance-analytics-engine
+                env_file:
+                  - .env
+                ports:
+                  - "${ANALYTICS_ENGINE_PORT}:8080"
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                environment:
+                  - DB_HOST=postgres
+                  - DB_PORT=5432
+                  - DB_NAME=${DB_NAME}
+                  - DB_USER=${DB_USER}
+                  - DB_PASSWORD=${DB_PASSWORD}
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+
+              reporting-engine:
+                image: alis2001/finance-reporting-engine:latest
+                container_name: finance-reporting-engine
+                env_file:
+                  - .env
+                ports:
+                  - "${REPORTING_ENGINE_PORT}:8080"
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                environment:
+                  - DB_HOST=postgres
+                  - DB_PORT=5432
+                  - DB_NAME=${DB_NAME}
+                  - DB_USER=${DB_USER}
+                  - DB_PASSWORD=${DB_PASSWORD}
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+
+              ml-engine:
+                image: alis2001/finance-ml-engine:latest
+                container_name: finance-ml-engine
+                env_file:
+                  - .env
+                ports:
+                  - "${ML_ENGINE_PORT}:8080"
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                environment:
+                  - DB_HOST=postgres
+                  - DB_PORT=5432
+                  - DB_NAME=${DB_NAME}
+                  - DB_USER=${DB_USER}
+                  - DB_PASSWORD=${DB_PASSWORD}
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+
+              # Frontend - PRE-BUILT IMAGE ONLY
+              web:
+                image: alis2001/finance-web:latest
+                container_name: finance-web
+                env_file:
+                  - .env
+                ports:
+                  - "3000:3000"
+                environment:
+                  - REACT_APP_API_URL=http://${PUBLIC_IP}:8080/api
+                networks:
+                  - finance-network
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:3000"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+
+            volumes:
+              postgres_data:
+              redis_data:
+              rabbitmq_data:
+
+            networks:
+              finance-network:
+                driver: bridge
+            DOCKEREOF
+            
+            echo "Production deployment files created successfully"
+
+      - name: Copy database init files
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -492,54 +697,49 @@ jobs:
             set -e
             cd /home/ubuntu/finance-tracker
             
-            echo "🚀 Starting ${{ steps.env.outputs.environment }} deployment..."
+            echo "Starting ${{ steps.env.outputs.environment }} deployment..."
             
             # Use the correct environment file
             cp ${{ steps.env.outputs.env_file }} .env
             
-            echo "📋 Environment configuration:"
-            echo "  Environment: ${{ steps.env.outputs.environment }}"
-            echo "  EC2 Host: ${{ secrets.EC2_HOST }}"
-            echo "  Docker Registry: ${{ env.DOCKER_REGISTRY }}"
+            echo "Environment: ${{ steps.env.outputs.environment }}"
+            echo "EC2 Host: ${{ secrets.EC2_HOST }}"
+            echo "Docker Registry: ${{ env.DOCKER_REGISTRY }}"
             
-            echo "🔄 Pulling latest Docker images..."
-            docker pull ${{ env.DOCKER_REGISTRY }}/finance-gateway:latest || echo "⚠️ Failed to pull gateway image"
-            docker pull ${{ env.DOCKER_REGISTRY }}/finance-auth:latest || echo "⚠️ Failed to pull auth image"
-            docker pull ${{ env.DOCKER_REGISTRY }}/finance-expense:latest || echo "⚠️ Failed to pull expense image"
-            docker pull ${{ env.DOCKER_REGISTRY }}/finance-income:latest || echo "⚠️ Failed to pull income image"
-            docker pull ${{ env.DOCKER_REGISTRY }}/finance-category:latest || echo "⚠️ Failed to pull category image"
-            docker pull ${{ env.DOCKER_REGISTRY }}/finance-analytics:latest || echo "⚠️ Failed to pull analytics image"
-            docker pull ${{ env.DOCKER_REGISTRY }}/finance-analytics-engine:latest || echo "⚠️ Failed to pull analytics-engine image"
-            docker pull ${{ env.DOCKER_REGISTRY }}/finance-reporting-engine:latest || echo "⚠️ Failed to pull reporting-engine image"
-            docker pull ${{ env.DOCKER_REGISTRY }}/finance-ml-engine:latest || echo "⚠️ Failed to pull ml-engine image"
-            docker pull ${{ env.DOCKER_REGISTRY }}/finance-web:latest || echo "⚠️ Failed to pull web image"
+            echo "Pulling latest Docker images..."
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-gateway:latest || echo "Failed to pull gateway image"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-auth:latest || echo "Failed to pull auth image"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-expense:latest || echo "Failed to pull expense image"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-income:latest || echo "Failed to pull income image"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-category:latest || echo "Failed to pull category image"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-analytics:latest || echo "Failed to pull analytics image"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-analytics-engine:latest || echo "Failed to pull analytics-engine image"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-reporting-engine:latest || echo "Failed to pull reporting-engine image"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-ml-engine:latest || echo "Failed to pull ml-engine image"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-web:latest || echo "Failed to pull web image"
             
-            echo "🧹 Cleaning up unused resources..."
+            echo "Cleaning up unused resources..."
             docker system prune -f || true
             
-            echo "🚀 Starting services with updated configuration..."
+            echo "Starting services with updated configuration..."
             docker-compose up -d
             
-            echo "⏳ Waiting for services to be healthy..."
-            sleep 45
+            echo "Waiting for services to be healthy..."
+            sleep 60
             
-            echo "🔍 Checking service health..."
+            echo "Checking service health..."
             docker-compose ps
             
-            # Verify services are responding with better error handling
-            echo "🏥 Testing service endpoints..."
+            # Test service endpoints
+            echo "Testing service endpoints..."
             
-            # Test Gateway
-            timeout 120 bash -c 'until curl -f http://localhost:8080/health; do echo "Waiting for gateway..."; sleep 3; done' || echo "⚠️ Gateway health check failed"
+            timeout 120 bash -c 'until curl -f http://localhost:8080/health; do echo "Waiting for gateway..."; sleep 3; done' || echo "Gateway health check failed"
+            timeout 120 bash -c 'until curl -f http://localhost:3000; do echo "Waiting for web app..."; sleep 3; done' || echo "Web app health check failed"
             
-            # Test Web App
-            timeout 120 bash -c 'until curl -f http://localhost:3000; do echo "Waiting for web app..."; sleep 3; done' || echo "⚠️ Web app health check failed"
-            
-            # Show final status
-            echo "📊 Final service status:"
+            echo "Final service status:"
             docker-compose ps
             
-            echo "✅ ${{ steps.env.outputs.environment }} deployment completed!"
+            echo "${{ steps.env.outputs.environment }} deployment completed!"
 
       - name: Post-deployment verification
         uses: appleboy/ssh-action@v1.0.3
@@ -548,42 +748,40 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "🔍 Running post-deployment verification..."
+            echo "Running post-deployment verification..."
             
-            # Wait a bit more for services to stabilize
             sleep 15
             
-            # Test main endpoints with better error reporting
             echo "Testing Gateway API..."
             if curl -f -m 10 http://localhost:8080/health; then
-              echo "✅ Gateway API is responding"
+              echo "Gateway API is responding"
             else
-              echo "❌ Gateway API failed"
+              echo "Gateway API failed"
             fi
             
             echo "Testing Web Application..."
             if curl -f -m 10 http://localhost:3000; then
-              echo "✅ Web Application is responding"
+              echo "Web Application is responding"
             else
-              echo "❌ Web Application failed"
+              echo "Web Application failed"
             fi
             
-            echo "🌐 Application URLs:"
+            echo "Application URLs:"
             echo "  Frontend: http://${{ secrets.EC2_HOST }}:3000"
             echo "  API Gateway: http://${{ secrets.EC2_HOST }}:8080"
             echo "  API Health: http://${{ secrets.EC2_HOST }}:8080/health"
             
-            echo "📊 Container Status:"
+            echo "Container Status:"
             docker-compose ps
 
       - name: Deployment notification
         if: always()
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "🎉 ${{ steps.env.outputs.environment }} deployment successful!"
-            echo "🌐 Application URL: http://${{ secrets.EC2_HOST }}:3000"
-            echo "🔗 API Gateway: http://${{ secrets.EC2_HOST }}:8080"
+            echo "${{ steps.env.outputs.environment }} deployment successful!"
+            echo "Application URL: http://${{ secrets.EC2_HOST }}:3000"
+            echo "API Gateway: http://${{ secrets.EC2_HOST }}:8080"
           else
-            echo "❌ ${{ steps.env.outputs.environment }} deployment failed!"
+            echo "${{ steps.env.outputs.environment }} deployment failed!"
             echo "Please check the logs above for details."
           fi
