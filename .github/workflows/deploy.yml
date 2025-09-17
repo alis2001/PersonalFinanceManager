@@ -231,8 +231,6 @@ jobs:
           source: |
             docker-compose.yml
             ${{ steps.env.outputs.env_file }}
-            infrastructure/
-            Makefile
           target: "/home/ubuntu/finance-tracker/"
           overwrite: true
 
