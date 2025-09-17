@@ -102,16 +102,8 @@ jobs:
               ;;
           esac
 
-      - name: Set build arguments
-        id: build_args
-        run: |
-          if [[ "${{ matrix.service }}" == "web" ]]; then
-            echo "build_args=REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api" >> $GITHUB_OUTPUT
-          else
-            echo "build_args=" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build and push
+      - name: Build and push (web with build args)
+        if: matrix.service == 'web'
         uses: docker/build-push-action@v5
         with:
           context: ${{ steps.context.outputs.context }}
@@ -122,7 +114,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
-          build-args: ${{ steps.build_args.outputs.build_args }}
+          build-args: |
+            REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api
+
+      - name: Build and push (other services)
+        if: matrix.service != 'web'
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ steps.context.outputs.context }}
+          file: ${{ steps.context.outputs.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
   deploy:
     name: Deploy to Environment
