@@ -9,7 +9,7 @@ const port = process.env.PORT || 3000;
 
 console.log('🚀 Starting Finance Gateway...');
 
-// FIXED: Load service URLs from environment variables with Docker service names as defaults
+// Load service URLs from environment variables
 const serviceUrls = {
   auth: process.env.AUTH_SERVICE_URL || 'http://auth:3000',
   category: process.env.CATEGORY_SERVICE_URL || 'http://category:3000',
@@ -18,7 +18,7 @@ const serviceUrls = {
   analytics: process.env.ANALYTICS_SERVICE_URL || 'http://analytics:8000'
 };
 
-// FIXED: Dynamic CORS configuration based on environment
+// CORS configuration with proper origin matching
 const getAllowedOrigins = () => {
   const origins = ['http://localhost:3000', 'http://localhost:8080'];
   
@@ -34,9 +34,9 @@ const getAllowedOrigins = () => {
     origins.push(`http://${process.env.PUBLIC_IP}:8080`);
   }
   
-  // Development wildcard if specified
+  // For development or when explicitly enabled, allow all origins
   if (process.env.NODE_ENV === 'development' || process.env.ENABLE_CORS === 'true') {
-    origins.push('*');
+    return '*';
   }
   
   return origins;
@@ -68,7 +68,7 @@ app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Enhanced health check
+// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
@@ -117,7 +117,7 @@ const createEnhancedProxy = (path, target, pathRewrite) => {
     },
     onProxyRes: (proxyRes, req, res) => {
       // Add CORS headers to proxy response
-      proxyRes.headers['Access-Control-Allow-Origin'] = req.headers.origin || '*';
+      proxyRes.headers['Access-Control-Allow-Origin'] = req.headers.origin || corsOptions.origin;
       proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
       console.log(`✅ ${path} Response: ${proxyRes.statusCode}`);
     },
@@ -141,7 +141,7 @@ app.use('/api/expenses', createEnhancedProxy('Expenses', serviceUrls.expense, { 
 app.use('/api/income', createEnhancedProxy('Income', serviceUrls.income, { '^/api/income': '' }));
 app.use('/api/analytics', createEnhancedProxy('Analytics', serviceUrls.analytics, { '^/api/analytics': '' }));
 
-// Enhanced 404 handler
+// 404 handler
 app.use('*', (req, res) => {
   console.log(`❌ Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({ 
@@ -162,7 +162,7 @@ app.use('*', (req, res) => {
   });
 });
 
-// Enhanced error handler
+// Error handler
 app.use((err, req, res, next) => {
   console.error('Gateway Error:', err);
   res.status(500).json({
@@ -175,7 +175,7 @@ app.use((err, req, res, next) => {
 app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Finance Gateway running on port ${port}`);
   console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`✅ CORS enabled for: ${corsOptions.origin.join(', ')}`);
+  console.log(`✅ CORS enabled for: ${Array.isArray(corsOptions.origin) ? corsOptions.origin.join(', ') : corsOptions.origin}`);
   console.log(`✅ Service mappings:`);
   console.log(`   📡 Auth proxy: /api/auth/* → ${serviceUrls.auth}`);
   console.log(`   📁 Categories proxy: /api/categories/* → ${serviceUrls.category}`);

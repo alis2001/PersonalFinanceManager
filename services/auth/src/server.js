@@ -57,8 +57,8 @@ app.use(helmet());
 app.use(cors());
 
 // ADDED: Request timeout middleware (early in stack)
-const { requestTimeout, generalLimiter, authLimiter } = require('./middleware/auth');
-app.use(requestTimeout(30000)); // 30 second timeout for all requests
+const { generalLimiter, authLimiter } = require('./middleware/auth');
+// app.use(requestTimeout(30000)); // 30 second timeout for all requests
 
 // Body parsing middleware (MUST be before rate limiting that accesses req.body)
 app.use(express.json({ 

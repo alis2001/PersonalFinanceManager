@@ -67,7 +67,9 @@ services:
 
   # API Gateway - FROM DOCKERHUB v3
   gateway:
-    image: alis2001/finance-gateway:v3
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
     container_name: finance-gateway
     env_file:
       - .env
@@ -85,9 +87,8 @@ services:
       income:
         condition: service_started
     environment:
-      - NODE_ENV=${APP_ENV}
+      - NODE_ENV=${NODE_ENV}
       - PORT=3000
-      # FIXED: Proper Docker service URLs
       - AUTH_SERVICE_URL=http://auth:3000
       - EXPENSE_SERVICE_URL=http://expense:3000
       - INCOME_SERVICE_URL=http://income:3000
@@ -96,11 +97,10 @@ services:
       - ANALYTICS_ENGINE_URL=http://analytics-engine:8080
       - REPORTING_ENGINE_URL=http://reporting-engine:8080
       - ML_ENGINE_URL=http://ml-engine:8080
-      # FIXED: Dynamic CORS configuration
       - ENABLE_CORS=${ENABLE_CORS}
       - PUBLIC_IP=${PUBLIC_IP}
-      - FRONTEND_URL=http://${PUBLIC_IP}:3000
-      - API_URL=http://${PUBLIC_IP}:8080
+      - FRONTEND_URL=${FRONTEND_URL}
+      - API_URL=${API_URL}
       - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW}
       - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS}
     networks:
