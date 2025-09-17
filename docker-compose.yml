@@ -457,7 +457,6 @@ services:
         reservations:
           memory: 512M
 
-  # Frontend
   web:
     image: alis2001/finance-web:v4
     container_name: finance-web
