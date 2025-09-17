@@ -294,7 +294,7 @@ jobs:
             echo "🏗️ Preparing EC2 environment..."
             
             # Create directory structure
-            sudo mkdir -p /home/ubuntu/finance-tracker
+            sudo mkdir -p /home/ubuntu/finance-tracker/infrastructure/database/init
             sudo chown -R ubuntu:ubuntu /home/ubuntu/finance-tracker
             
             # Navigate to app directory
@@ -307,19 +307,179 @@ jobs:
             echo "✅ EC2 environment prepared"
 
       - name: Copy deployment files to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/finance-tracker
+            
+            # Create environment file on server
+            cat > .env.production << 'ENVEOF'
+            # Application
+            APP_ENV=${{ steps.env.outputs.environment }}
+            NODE_ENV=production
+            
+            # Database Configuration
+            DB_HOST=postgres
+            DB_PORT=5432
+            DB_NAME=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_NAME || secrets.DB_NAME }}
+            DB_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_USER || secrets.DB_USER }}
+            DB_PASSWORD=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_PASSWORD || secrets.DB_PASSWORD }}
+            DB_EXTERNAL_PORT=5433
+            
+            # PostgreSQL
+            POSTGRES_DB=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_NAME || secrets.DB_NAME }}
+            POSTGRES_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_USER || secrets.DB_USER }}
+            POSTGRES_PASSWORD=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_PASSWORD || secrets.DB_PASSWORD }}
+            
+            # Redis
+            REDIS_HOST=redis
+            REDIS_PORT=6379
+            
+            # RabbitMQ
+            RABBITMQ_HOST=rabbitmq
+            RABBITMQ_PORT=5672
+            RABBITMQ_MANAGEMENT_PORT=15672
+            RABBITMQ_DEFAULT_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_RABBITMQ_USER || secrets.RABBITMQ_USER }}
+            RABBITMQ_DEFAULT_PASS=${{ steps.env.outputs.environment == 'production' && secrets.PROD_RABBITMQ_PASS || secrets.RABBITMQ_PASS }}
+            
+            # JWT Configuration
+            JWT_SECRET=${{ steps.env.outputs.environment == 'production' && secrets.PROD_JWT_SECRET || secrets.JWT_SECRET }}
+            JWT_EXPIRY=1h
+            BCRYPT_ROUNDS=12
+            
+            # Service URLs (Internal Docker Network)
+            AUTH_SERVICE_URL=http://auth:3000
+            EXPENSE_SERVICE_URL=http://expense:3000
+            INCOME_SERVICE_URL=http://income:3000
+            CATEGORY_SERVICE_URL=http://category:3000
+            ANALYTICS_SERVICE_URL=http://analytics:8000
+            ANALYTICS_ENGINE_URL=http://analytics-engine:8080
+            REPORTING_ENGINE_URL=http://reporting-engine:8080
+            ML_ENGINE_URL=http://ml-engine:8080
+            
+            # Service Ports (External Access)
+            GATEWAY_PORT=8080
+            AUTH_SERVICE_PORT=8001
+            EXPENSE_SERVICE_PORT=8002
+            INCOME_SERVICE_PORT=8003
+            CATEGORY_SERVICE_PORT=8004
+            ANALYTICS_SERVICE_PORT=8005
+            ANALYTICS_ENGINE_PORT=8006
+            REPORTING_ENGINE_PORT=8007
+            ML_ENGINE_PORT=8008
+            
+            # Security & Rate Limiting
+            ENABLE_CORS=true
+            RATE_LIMIT_WINDOW=900
+            RATE_LIMIT_MAX_REQUESTS=100
+            SESSION_TIMEOUT=3600
+            
+            # Logging
+            LOG_LEVEL=info
+            
+            # Email Service Configuration
+            SMTP_HOST=${{ secrets.SMTP_HOST }}
+            SMTP_PORT=${{ secrets.SMTP_PORT }}
+            SMTP_SECURE=false
+            SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
+            SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+            SMTP_FROM_NAME=Finance Tracker
+            SMTP_FROM_EMAIL=${{ secrets.SMTP_FROM_EMAIL }}
+            
+            # Email Settings
+            EMAIL_VERIFICATION_EXPIRY_HOURS=24
+            LOGIN_VERIFICATION_EXPIRY_MINUTES=10
+            PASSWORD_RESET_EXPIRY_HOURS=2
+            EMAIL_MAX_RETRIES=3
+            EMAIL_RETRY_DELAY=5000
+            
+            # Application URLs - DYNAMIC EC2 IP
+            FRONTEND_URL=http://${{ secrets.EC2_HOST }}:3000
+            API_URL=http://${{ secrets.EC2_HOST }}:8080
+            
+            # Company Information
+            APP_NAME=Finance Tracker
+            COMPANY_NAME=Finance Tracker Inc
+            SUPPORT_EMAIL=support@financetracker.com
+            BRAND_COLOR=#1a1a1a
+            LOGO_URL=
+            
+            # Analytics Service Configuration (Python FastAPI)
+            PYTHON_ENV=${{ steps.env.outputs.environment }}
+            ASYNC_POOL_SIZE=20
+            REQUEST_TIMEOUT=30
+            BATCH_SIZE=1000
+            MAX_CONCURRENT_REQUESTS=100
+            
+            # Analytics Features
+            ANALYTICS_DEFAULT_PERIOD=monthly
+            ANALYTICS_SUPPORTED_PERIODS=daily,weekly,monthly,quarterly,yearly
+            ANALYTICS_MAX_DATA_POINTS=10000
+            
+            # ML & Forecasting
+            ML_MODEL_PATH=/app/models
+            ML_RETRAIN_INTERVAL=86400
+            ML_MIN_DATA_POINTS=30
+            FORECAST_DAYS_DEFAULT=30
+            FORECAST_DAYS_MAX=365
+            FORECAST_CONFIDENCE_INTERVAL=0.95
+            
+            # Data Export
+            EXPORT_MAX_RECORDS=100000
+            EXPORT_FORMATS=csv,xlsx,json,pdf
+            EXPORT_CACHE_TTL=1800
+            
+            # Cache TTL Settings (Analytics)
+            CACHE_TTL_DEFAULT=3600
+            CACHE_TTL_SHORT=300
+            CACHE_TTL_LONG=86400
+            
+            # Frontend Analytics Configuration - DYNAMIC EC2 IP
+            REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api
+            REACT_APP_ANALYTICS_API_URL=http://${{ secrets.EC2_HOST }}:8080/api/analytics
+            
+            # CORS Configuration - DYNAMIC EC2 IP
+            ALLOWED_ORIGINS=http://${{ secrets.EC2_HOST }}:3000,http://localhost:3000
+            CORS_ORIGIN=http://${{ secrets.EC2_HOST }}:3000
+            CORS_ORIGINS=http://${{ secrets.EC2_HOST }}:3000,http://localhost:3000
+            ORIGIN=http://${{ secrets.EC2_HOST }}:3000
+            
+            # Performance & Timeout Settings
+            REQUEST_TIMEOUT=75000
+            PROXY_TIMEOUT=70000
+            SERVICE_REQUEST_TIMEOUT=60000
+            DATABASE_TIMEOUT=30000
+            
+            # Docker Configuration
+            DOCKER_RESTART_POLICY=unless-stopped
+            ENABLE_HEALTH_CHECKS=true
+            HEALTH_CHECK_INTERVAL=30s
+            HEALTH_CHECK_TIMEOUT=10s
+            HEALTH_CHECK_RETRIES=3
+            ENVEOF
+
+      - name: Create docker-compose.yml on EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: |
-            docker-compose.yml
-            ${{ steps.env.outputs.env_file }}
-            Makefile
-            infrastructure/database/init/
+          source: "docker-compose.yml"
           target: "/home/ubuntu/finance-tracker/"
           overwrite: true
-          rm: false
+
+      - name: Create database init files on EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "infrastructure/database/init/"
+          target: "/home/ubuntu/finance-tracker/infrastructure/database/"
+          overwrite: true
 
       - name: Deploy to ${{ steps.env.outputs.environment }}
         uses: appleboy/ssh-action@v1.0.3
