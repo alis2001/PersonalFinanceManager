@@ -758,7 +758,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "infrastructure/database/init/"
-          target: "/home/ubuntu/finance-tracker/infrastructure/database/"
+          target: "/home/ubuntu/finance-tracker/"
           overwrite: true
 
       - name: Deploy to ${{ steps.env.outputs.environment }}
