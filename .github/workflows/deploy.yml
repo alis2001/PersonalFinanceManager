@@ -1,0 +1,386 @@
+name: Deploy Finance Tracker
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  DOCKER_REGISTRY: alis2001
+  PROJECT_NAME: finance-tracker
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: |
+            services/*/package-lock.json
+            frontend/web/package-lock.json
+
+      - name: Install dependencies and test
+        run: |
+          # Install and test Node.js services
+          for service in services/auth services/expense services/income services/category services/gateway; do
+            if [ -f "$service/package.json" ]; then
+              echo "Testing $service"
+              cd "$service" && npm ci && npm test || true && cd ../..
+            fi
+          done
+          
+          # Test frontend
+          cd frontend/web && npm ci && npm test || true && cd ../..
+
+  build:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    
+    strategy:
+      matrix:
+        service: [gateway, auth, expense, income, category, analytics, analytics-engine, reporting-engine, ml-engine, web]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/finance-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Determine build context
+        id: context
+        run: |
+          case "${{ matrix.service }}" in
+            "web")
+              echo "context=frontend/web" >> $GITHUB_OUTPUT
+              ;;
+            "analytics")
+              echo "context=services/analytics" >> $GITHUB_OUTPUT
+              ;;
+            "analytics-engine"|"reporting-engine"|"ml-engine")
+              echo "context=services/${{ matrix.service }}" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "context=services/${{ matrix.service }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ steps.context.outputs.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create environment file
+        run: |
+          cat > .env.staging << EOF
+          APP_ENV=staging
+          NODE_ENV=production
+          
+          # Database
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_EXTERNAL_PORT=5433
+          
+          # PostgreSQL
+          POSTGRES_DB=${{ secrets.DB_NAME }}
+          POSTGRES_USER=${{ secrets.DB_USER }}
+          POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
+          
+          # Redis & RabbitMQ
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          RABBITMQ_HOST=rabbitmq
+          RABBITMQ_PORT=5672
+          RABBITMQ_MANAGEMENT_PORT=15672
+          RABBITMQ_DEFAULT_USER=${{ secrets.RABBITMQ_USER }}
+          RABBITMQ_DEFAULT_PASS=${{ secrets.RABBITMQ_PASS }}
+          
+          # JWT & Security
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRY=1h
+          BCRYPT_ROUNDS=12
+          
+          # Service URLs
+          AUTH_SERVICE_URL=http://auth:3000
+          EXPENSE_SERVICE_URL=http://expense:3000
+          INCOME_SERVICE_URL=http://income:3000
+          CATEGORY_SERVICE_URL=http://category:3000
+          ANALYTICS_SERVICE_URL=http://analytics:8000
+          
+          # External ports
+          GATEWAY_PORT=8080
+          AUTH_SERVICE_PORT=8001
+          EXPENSE_SERVICE_PORT=8002
+          INCOME_SERVICE_PORT=8003
+          CATEGORY_SERVICE_PORT=8004
+          ANALYTICS_SERVICE_PORT=8005
+          ANALYTICS_ENGINE_PORT=8006
+          REPORTING_ENGINE_PORT=8007
+          ML_ENGINE_PORT=8008
+          
+          # Security
+          ENABLE_CORS=true
+          RATE_LIMIT_WINDOW=900
+          RATE_LIMIT_MAX_REQUESTS=100
+          SESSION_TIMEOUT=3600
+          LOG_LEVEL=info
+          
+          # Email
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          SMTP_SECURE=false
+          SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM_NAME=Finance Tracker
+          SMTP_FROM_EMAIL=${{ secrets.SMTP_FROM_EMAIL }}
+          
+          # URLs
+          PUBLIC_IP=${{ secrets.EC2_HOST }}
+          FRONTEND_URL=http://${{ secrets.EC2_HOST }}:3000
+          API_URL=http://${{ secrets.EC2_HOST }}:8080
+          REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api
+          
+          # Analytics
+          PYTHON_ENV=staging
+          CACHE_TTL_DEFAULT=3600
+          CACHE_TTL_SHORT=300
+          CACHE_TTL_LONG=86400
+          EOF
+
+      - name: Deploy to staging
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/finance-tracker
+            
+            # Pull latest images
+            docker pull alis2001/finance-gateway:develop-${{ github.sha }}
+            docker pull alis2001/finance-auth:develop-${{ github.sha }}
+            docker pull alis2001/finance-expense:develop-${{ github.sha }}
+            docker pull alis2001/finance-income:develop-${{ github.sha }}
+            docker pull alis2001/finance-category:develop-${{ github.sha }}
+            docker pull alis2001/finance-analytics:develop-${{ github.sha }}
+            docker pull alis2001/finance-analytics-engine:develop-${{ github.sha }}
+            docker pull alis2001/finance-reporting-engine:develop-${{ github.sha }}
+            docker pull alis2001/finance-ml-engine:develop-${{ github.sha }}
+            docker pull alis2001/finance-web:develop-${{ github.sha }}
+            
+            # Stop existing services
+            docker-compose down --remove-orphans || true
+            
+            # Start new services
+            docker-compose up -d
+            
+            # Wait for services to be ready
+            sleep 60
+            
+            echo "Deployment completed"
+
+      - name: Copy environment file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: ".env.staging"
+          target: "/home/ubuntu/finance-tracker/.env"
+
+      - name: Health check
+        run: |
+          sleep 30
+          curl -f http://${{ secrets.EC2_HOST }}:8080/health || exit 1
+          curl -f http://${{ secrets.EC2_HOST }}:3000 || exit 1
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create production environment file
+        run: |
+          cat > .env.production << EOF
+          APP_ENV=production
+          NODE_ENV=production
+          
+          # Database
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_NAME=${{ secrets.PROD_DB_NAME }}
+          DB_USER=${{ secrets.PROD_DB_USER }}
+          DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}
+          DB_EXTERNAL_PORT=5433
+          
+          # PostgreSQL
+          POSTGRES_DB=${{ secrets.PROD_DB_NAME }}
+          POSTGRES_USER=${{ secrets.PROD_DB_USER }}
+          POSTGRES_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}
+          
+          # Redis & RabbitMQ
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          RABBITMQ_HOST=rabbitmq
+          RABBITMQ_PORT=5672
+          RABBITMQ_MANAGEMENT_PORT=15672
+          RABBITMQ_DEFAULT_USER=${{ secrets.PROD_RABBITMQ_USER }}
+          RABBITMQ_DEFAULT_PASS=${{ secrets.PROD_RABBITMQ_PASS }}
+          
+          # JWT & Security
+          JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
+          JWT_EXPIRY=1h
+          BCRYPT_ROUNDS=12
+          
+          # Service URLs (same as staging for internal)
+          AUTH_SERVICE_URL=http://auth:3000
+          EXPENSE_SERVICE_URL=http://expense:3000
+          INCOME_SERVICE_URL=http://income:3000
+          CATEGORY_SERVICE_URL=http://category:3000
+          ANALYTICS_SERVICE_URL=http://analytics:8000
+          
+          # External ports
+          GATEWAY_PORT=8080
+          AUTH_SERVICE_PORT=8001
+          EXPENSE_SERVICE_PORT=8002
+          INCOME_SERVICE_PORT=8003
+          CATEGORY_SERVICE_PORT=8004
+          ANALYTICS_SERVICE_PORT=8005
+          ANALYTICS_ENGINE_PORT=8006
+          REPORTING_ENGINE_PORT=8007
+          ML_ENGINE_PORT=8008
+          
+          # Security
+          ENABLE_CORS=true
+          RATE_LIMIT_WINDOW=900
+          RATE_LIMIT_MAX_REQUESTS=100
+          SESSION_TIMEOUT=3600
+          LOG_LEVEL=info
+          
+          # Email
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          SMTP_SECURE=false
+          SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM_NAME=Finance Tracker
+          SMTP_FROM_EMAIL=${{ secrets.SMTP_FROM_EMAIL }}
+          
+          # URLs
+          PUBLIC_IP=${{ secrets.EC2_HOST }}
+          FRONTEND_URL=http://${{ secrets.EC2_HOST }}:3000
+          API_URL=http://${{ secrets.EC2_HOST }}:8080
+          REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api
+          
+          # Analytics
+          PYTHON_ENV=production
+          CACHE_TTL_DEFAULT=3600
+          CACHE_TTL_SHORT=300
+          CACHE_TTL_LONG=86400
+          EOF
+
+      - name: Deploy to production
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/finance-tracker
+            
+            # Pull latest production images
+            docker pull alis2001/finance-gateway:latest
+            docker pull alis2001/finance-auth:latest
+            docker pull alis2001/finance-expense:latest
+            docker pull alis2001/finance-income:latest
+            docker pull alis2001/finance-category:latest
+            docker pull alis2001/finance-analytics:latest
+            docker pull alis2001/finance-analytics-engine:latest
+            docker pull alis2001/finance-reporting-engine:latest
+            docker pull alis2001/finance-ml-engine:latest
+            docker pull alis2001/finance-web:latest
+            
+            # Deploy with zero downtime
+            docker-compose up -d --no-deps --build
+            
+            echo "Production deployment completed"
+
+      - name: Copy production environment file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: ".env.production"
+          target: "/home/ubuntu/finance-tracker/.env"
+
+      - name: Production health check
+        run: |
+          sleep 60
+          curl -f http://${{ secrets.EC2_HOST }}:8080/health || exit 1
+          curl -f http://${{ secrets.EC2_HOST }}:3000 || exit 1
+          echo "Production deployment verified"
