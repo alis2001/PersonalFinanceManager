@@ -9,27 +9,48 @@ const port = process.env.PORT || 3000;
 
 console.log('🚀 Starting Finance Gateway...');
 
-// Load service URLs from environment variables
+// FIXED: Load service URLs from environment variables with Docker service names as defaults
 const serviceUrls = {
-  auth: process.env.AUTH_SERVICE_URL || 'http://10.0.4.141:3000',
-  category: process.env.CATEGORY_SERVICE_URL || 'http://10.0.4.238:3000',
-  expense: process.env.EXPENSE_SERVICE_URL || 'http://10.0.4.7:3000',
-  income: process.env.INCOME_SERVICE_URL || 'http://10.0.3.16:3000',
-  analytics: process.env.ANALYTICS_SERVICE_URL || 'http://10.0.3.165:8000'
+  auth: process.env.AUTH_SERVICE_URL || 'http://auth:3000',
+  category: process.env.CATEGORY_SERVICE_URL || 'http://category:3000',
+  expense: process.env.EXPENSE_SERVICE_URL || 'http://expense:3000',
+  income: process.env.INCOME_SERVICE_URL || 'http://income:3000',
+  analytics: process.env.ANALYTICS_SERVICE_URL || 'http://analytics:8000'
 };
 
-// CORS configuration - FIXED for browser compatibility
+// FIXED: Dynamic CORS configuration based on environment
+const getAllowedOrigins = () => {
+  const origins = ['http://localhost:3000', 'http://localhost:8080'];
+  
+  // Add production origins based on environment
+  if (process.env.FRONTEND_URL) {
+    origins.push(process.env.FRONTEND_URL);
+  }
+  if (process.env.API_URL) {
+    origins.push(process.env.API_URL);
+  }
+  if (process.env.PUBLIC_IP) {
+    origins.push(`http://${process.env.PUBLIC_IP}:3000`);
+    origins.push(`http://${process.env.PUBLIC_IP}:8080`);
+  }
+  
+  // Development wildcard if specified
+  if (process.env.NODE_ENV === 'development' || process.env.ENABLE_CORS === 'true') {
+    origins.push('*');
+  }
+  
+  return origins;
+};
+
 const corsOptions = {
-  origin: [
-    'http://finance-tracker-alb-1958020418.eu-south-1.elb.amazonaws.com',
-    'http://localhost:3000',
-    'http://localhost:8080'
-  ],
+  origin: getAllowedOrigins(),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,
   optionsSuccessStatus: 200
 };
+
+console.log('🔒 CORS Origins:', corsOptions.origin);
 
 // Security middleware
 app.use(helmet({
@@ -47,12 +68,15 @@ app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
+// Enhanced health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     service: 'Finance Gateway',
-    timestamp: new Date().toISOString()
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    serviceUrls: serviceUrls
   });
 });
 
@@ -61,150 +85,102 @@ app.get('/', (req, res) => {
   res.json({
     service: 'Finance Gateway',
     version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
     routes: {
       auth: '/api/auth/*',
       categories: '/api/categories/*',
       expenses: '/api/expenses/*',
       income: '/api/income/*',
       analytics: '/api/analytics/*'
+    },
+    serviceHealth: {
+      auth: serviceUrls.auth,
+      category: serviceUrls.category,
+      expense: serviceUrls.expense,
+      income: serviceUrls.income,
+      analytics: serviceUrls.analytics
     }
   });
 });
 
-// Auth Service Proxy - FIXED CORS headers
-app.use('/api/auth', createProxyMiddleware({
-  target: serviceUrls.auth,
-  changeOrigin: true,
-  pathRewrite: { '^/api/auth': '' },
-  logLevel: 'info',
-  onProxyReq: (proxyReq, req, res) => {
-    console.log(`✅ Auth: ${req.method} ${req.originalUrl} → ${serviceUrls.auth}${proxyReq.path}`);
-  },
-  onProxyRes: (proxyRes, req, res) => {
-    // Add CORS headers to proxy response
-    proxyRes.headers['Access-Control-Allow-Origin'] = req.headers.origin || '*';
-    proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
-    console.log(`✅ Auth Response: ${proxyRes.statusCode}`);
-  },
-  onError: (err, req, res) => {
-    console.error('❌ Auth Proxy Error:', err.message);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Auth service unavailable' });
+// Enhanced proxy middleware with better error handling
+const createEnhancedProxy = (path, target, pathRewrite) => {
+  return createProxyMiddleware({
+    target: target,
+    changeOrigin: true,
+    pathRewrite: pathRewrite,
+    logLevel: process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info',
+    timeout: 30000,
+    proxyTimeout: 30000,
+    onProxyReq: (proxyReq, req, res) => {
+      console.log(`✅ ${path}: ${req.method} ${req.originalUrl} → ${target}${proxyReq.path}`);
+    },
+    onProxyRes: (proxyRes, req, res) => {
+      // Add CORS headers to proxy response
+      proxyRes.headers['Access-Control-Allow-Origin'] = req.headers.origin || '*';
+      proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
+      console.log(`✅ ${path} Response: ${proxyRes.statusCode}`);
+    },
+    onError: (err, req, res) => {
+      console.error(`❌ ${path} Proxy Error:`, err.message);
+      if (!res.headersSent) {
+        res.status(503).json({ 
+          error: `${path} service unavailable`,
+          message: `Unable to connect to ${target}`,
+          timestamp: new Date().toISOString()
+        });
+      }
     }
-  }
-}));
+  });
+};
 
-// Category Service Proxy
-app.use('/api/categories', createProxyMiddleware({
-  target: serviceUrls.category,
-  changeOrigin: true,
-  pathRewrite: { '^/api/categories': '' },
-  logLevel: 'info',
-  onProxyReq: (proxyReq, req, res) => {
-    console.log(`✅ Categories: ${req.method} ${req.originalUrl} → ${serviceUrls.category}${proxyReq.path}`);
-  },
-  onProxyRes: (proxyRes, req, res) => {
-    proxyRes.headers['Access-Control-Allow-Origin'] = req.headers.origin || '*';
-    proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
-    console.log(`✅ Categories Response: ${proxyRes.statusCode}`);
-  },
-  onError: (err, req, res) => {
-    console.error('❌ Categories Proxy Error:', err.message);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Category service unavailable' });
-    }
-  }
-}));
+// Service Proxies with enhanced error handling
+app.use('/api/auth', createEnhancedProxy('Auth', serviceUrls.auth, { '^/api/auth': '' }));
+app.use('/api/categories', createEnhancedProxy('Categories', serviceUrls.category, { '^/api/categories': '' }));
+app.use('/api/expenses', createEnhancedProxy('Expenses', serviceUrls.expense, { '^/api/expenses': '' }));
+app.use('/api/income', createEnhancedProxy('Income', serviceUrls.income, { '^/api/income': '' }));
+app.use('/api/analytics', createEnhancedProxy('Analytics', serviceUrls.analytics, { '^/api/analytics': '' }));
 
-// Expense Service Proxy
-app.use('/api/expenses', createProxyMiddleware({
-  target: serviceUrls.expense,
-  changeOrigin: true,
-  pathRewrite: { '^/api/expenses': '' },
-  logLevel: 'info',
-  onProxyReq: (proxyReq, req, res) => {
-    console.log(`✅ Expenses: ${req.method} ${req.originalUrl} → ${serviceUrls.expense}${proxyReq.path}`);
-  },
-  onProxyRes: (proxyRes, req, res) => {
-    proxyRes.headers['Access-Control-Allow-Origin'] = req.headers.origin || '*';
-    proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
-    console.log(`✅ Expenses Response: ${proxyRes.statusCode}`);
-  },
-  onError: (err, req, res) => {
-    console.error('❌ Expenses Proxy Error:', err.message);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Expense service unavailable' });
-    }
-  }
-}));
-
-// Income Service Proxy
-app.use('/api/income', createProxyMiddleware({
-  target: serviceUrls.income,
-  changeOrigin: true,
-  pathRewrite: { '^/api/income': '' },
-  logLevel: 'info',
-  onProxyReq: (proxyReq, req, res) => {
-    console.log(`✅ Income: ${req.method} ${req.originalUrl} → ${serviceUrls.income}${proxyReq.path}`);
-  },
-  onProxyRes: (proxyRes, req, res) => {
-    proxyRes.headers['Access-Control-Allow-Origin'] = req.headers.origin || '*';
-    proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
-    console.log(`✅ Income Response: ${proxyRes.statusCode}`);
-  },
-  onError: (err, req, res) => {
-    console.error('❌ Income Proxy Error:', err.message);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Income service unavailable' });
-    }
-  }
-}));
-
-// Analytics Service Proxy
-app.use('/api/analytics', createProxyMiddleware({
-  target: serviceUrls.analytics,
-  changeOrigin: true,
-  pathRewrite: { '^/api/analytics': '' },
-  logLevel: 'info',
-  timeout: 30000,
-  onProxyReq: (proxyReq, req, res) => {
-    console.log(`📊 Analytics: ${req.method} ${req.originalUrl} → ${serviceUrls.analytics}${proxyReq.path}`);
-  },
-  onProxyRes: (proxyRes, req, res) => {
-    proxyRes.headers['Access-Control-Allow-Origin'] = req.headers.origin || '*';
-    proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
-    console.log(`📊 Analytics Response: ${proxyRes.statusCode}`);
-  },
-  onError: (err, req, res) => {
-    console.error('❌ Analytics Proxy Error:', err.message);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Analytics service unavailable' });
-    }
-  }
-}));
-
-// 404 handler
+// Enhanced 404 handler
 app.use('*', (req, res) => {
   console.log(`❌ Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({ 
     error: 'Route not found',
+    path: req.originalUrl,
+    method: req.method,
     available: [
-      '/api/auth/*', 
-      '/api/categories/*', 
-      '/api/expenses/*', 
-      '/api/income/*',
-      '/api/analytics/*',
-      '/health'
-    ]
+      'GET  /health',
+      'GET  /',
+      'POST /api/auth/login',
+      'POST /api/auth/register',
+      'GET  /api/categories',
+      'GET  /api/expenses',
+      'GET  /api/income',
+      'GET  /api/analytics/*'
+    ],
+    timestamp: new Date().toISOString()
   });
 });
 
-// Start server
+// Enhanced error handler
+app.use((err, req, res, next) => {
+  console.error('Gateway Error:', err);
+  res.status(500).json({
+    error: 'Internal gateway error',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Start server with enhanced logging
 app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Finance Gateway running on port ${port}`);
-  console.log(`✅ Auth proxy: /api/auth/* → ${serviceUrls.auth}`);
-  console.log(`✅ Categories proxy: /api/categories/* → ${serviceUrls.category}`);
-  console.log(`✅ Expenses proxy: /api/expenses/* → ${serviceUrls.expense}`);
-  console.log(`✅ Income proxy: /api/income/* → ${serviceUrls.income}`);
-  console.log(`📊 Analytics proxy: /api/analytics/* → ${serviceUrls.analytics}`);
+  console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ CORS enabled for: ${corsOptions.origin.join(', ')}`);
+  console.log(`✅ Service mappings:`);
+  console.log(`   📡 Auth proxy: /api/auth/* → ${serviceUrls.auth}`);
+  console.log(`   📁 Categories proxy: /api/categories/* → ${serviceUrls.category}`);
+  console.log(`   💰 Expenses proxy: /api/expenses/* → ${serviceUrls.expense}`);
+  console.log(`   📈 Income proxy: /api/income/* → ${serviceUrls.income}`);
+  console.log(`   📊 Analytics proxy: /api/analytics/* → ${serviceUrls.analytics}`);
+  console.log(`🌐 Gateway ready at http://localhost:${port}`);
 });

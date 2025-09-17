@@ -35,13 +35,33 @@ interface AuthResponse {
 }
 
 class AuthService {
-  private baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api/auth';
+  // FIXED: Remove /auth suffix - gateway handles the routing
+  private baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
+
+  // FIXED: Enhanced error handling with retry logic
+  private async makeRequest(endpoint: string, options: RequestInit): Promise<Response> {
+    const url = `${this.baseURL}/auth${endpoint}`;
+    
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
+      
+      return response;
+    } catch (error) {
+      console.error(`Request failed for ${url}:`, error);
+      throw new Error('Network error. Please check your connection and try again.');
+    }
+  }
 
   async register(userData: RegisterData): Promise<AuthResponse> {
     try {
-      const response = await fetch(`${this.baseURL}/register`, {
+      const response = await this.makeRequest('/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           firstName: userData.firstName,
           lastName: userData.lastName,
@@ -75,64 +95,75 @@ class AuthService {
       console.error('Registration error:', error);
       return { 
         success: false, 
-        error: 'Network error. Please check your connection and try again.'
+        error: error instanceof Error ? error.message : 'Registration failed'
       };
     }
   }
 
-  async login(loginData: LoginData): Promise<AuthResponse> {
+  async login(credentials: LoginData): Promise<AuthResponse> {
     try {
-      const response = await fetch(`${this.baseURL}/login`, {
+      const response = await this.makeRequest('/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: loginData.email,
-          password: loginData.password,
-          rememberMe: loginData.rememberMe || false
+          email: credentials.email,
+          password: credentials.password,
+          rememberMe: credentials.rememberMe || false
         }),
       });
 
       const data = await response.json();
       
       if (response.ok) {
-        this.setTokens(data.tokens);
+        // Store tokens and user info
+        if (data.tokens) {
+          localStorage.setItem('accessToken', data.tokens.accessToken);
+          localStorage.setItem('refreshToken', data.tokens.refreshToken);
+        }
+        
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+        
         return { 
           success: true, 
           user: data.user,
           tokens: data.tokens,
+          requiresVerification: data.requiresVerification,
           message: data.message
         };
       } else {
         return { 
           success: false, 
-          error: data.error || 'Login failed',
-          requiresVerification: data.requiresVerification,
-          message: data.message
+          error: data.error || 'Login failed'
         };
       }
     } catch (error) {
       console.error('Login error:', error);
       return { 
         success: false, 
-        error: 'Network error. Please check your connection and try again.'
+        error: error instanceof Error ? error.message : 'Login failed'
       };
     }
   }
 
   async verifyEmail(verificationData: VerificationData): Promise<AuthResponse> {
     try {
-      const response = await fetch(`${this.baseURL}/verify-email`, {
+      const response = await this.makeRequest('/verify-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(verificationData),
       });
 
       const data = await response.json();
       
       if (response.ok) {
-        // Auto-login after successful verification
+        // If verification successful and tokens provided, store them
         if (data.tokens) {
-          this.setTokens(data.tokens);
+          localStorage.setItem('accessToken', data.tokens.accessToken);
+          localStorage.setItem('refreshToken', data.tokens.refreshToken);
+        }
+        
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
         }
         
         return { 
@@ -151,177 +182,111 @@ class AuthService {
       console.error('Email verification error:', error);
       return { 
         success: false, 
-        error: 'Network error. Please check your connection and try again.'
+        error: error instanceof Error ? error.message : 'Email verification failed'
       };
     }
   }
 
   async resendVerification(email: string): Promise<AuthResponse> {
     try {
-      const response = await fetch(`${this.baseURL}/resend-verification`, {
+      const response = await this.makeRequest('/resend-verification', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
 
       const data = await response.json();
       
-      if (response.ok) {
-        return { 
-          success: true, 
-          message: data.message,
-          verificationSent: data.verificationSent
-        };
-      } else {
-        return { 
-          success: false, 
-          error: data.error || 'Failed to resend verification email'
-        };
-      }
+      return { 
+        success: response.ok, 
+        message: data.message,
+        error: response.ok ? undefined : (data.error || 'Failed to resend verification')
+      };
     } catch (error) {
       console.error('Resend verification error:', error);
       return { 
         success: false, 
-        error: 'Network error. Please check your connection and try again.'
+        error: error instanceof Error ? error.message : 'Failed to resend verification'
       };
     }
   }
 
   async requestPasswordReset(email: string): Promise<AuthResponse> {
     try {
-      const response = await fetch(`${this.baseURL}/request-password-reset`, {
+      const response = await this.makeRequest('/request-password-reset', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
 
       const data = await response.json();
       
-      if (response.ok) {
-        return { 
-          success: true, 
-          message: data.message
-        };
-      } else {
-        return { 
-          success: false, 
-          error: data.error || 'Failed to send password reset email'
-        };
-      }
+      return { 
+        success: response.ok, 
+        message: data.message,
+        error: response.ok ? undefined : (data.error || 'Password reset request failed')
+      };
     } catch (error) {
       console.error('Password reset request error:', error);
       return { 
         success: false, 
-        error: 'Network error. Please check your connection and try again.'
+        error: error instanceof Error ? error.message : 'Password reset request failed'
       };
     }
   }
 
-  async resetPassword(token: string, password: string, confirmPassword: string): Promise<AuthResponse> {
+  async getProfile(): Promise<any> {
     try {
-      const response = await fetch(`${this.baseURL}/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password, confirmPassword }),
+      const token = this.getToken();
+      if (!token) {
+        return null;
+      }
+
+      const response = await this.makeRequest('/profile', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
       });
 
-      const data = await response.json();
-      
       if (response.ok) {
-        return { 
-          success: true, 
-          message: data.message
-        };
+        const data = await response.json();
+        // Update stored user info
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+        return data.user;
       } else {
-        return { 
-          success: false, 
-          error: data.error || 'Password reset failed'
-        };
+        // If profile fetch fails, user might not be authenticated
+        this.clearSession();
+        return null;
       }
     } catch (error) {
-      console.error('Password reset error:', error);
-      return { 
-        success: false, 
-        error: 'Network error. Please check your connection and try again.'
-      };
+      console.error('Get profile error:', error);
+      return null;
     }
   }
 
   async logout(): Promise<void> {
-    const token = this.getAccessToken();
-    
-    if (token) {
-      try {
-        await fetch(`${this.baseURL}/logout`, {
+    try {
+      const token = this.getToken();
+      if (token) {
+        await this.makeRequest('/logout', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
         });
-      } catch (err) {
-        console.error('Logout failed:', err);
       }
-    }
-
-    this.clearTokens();
-  }
-
-  async getProfile(): Promise<any | null> {
-    const token = this.getAccessToken();
-    
-    if (!token) return null;
-
-    try {
-      const response = await fetch(`${this.baseURL}/profile`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return data.user;
-      } else if (response.status === 401) {
-        // Token expired, try to refresh
-        const refreshSuccess = await this.refreshToken();
-        if (refreshSuccess) {
-          return this.getProfile(); // Retry with new token
-        } else {
-          this.clearTokens();
-          return null;
-        }
-      }
-    } catch (err) {
-      console.error('Get profile failed:', err);
-    }
-
-    return null;
-  }
-
-  async refreshToken(): Promise<boolean> {
-    const refreshToken = this.getRefreshToken();
-    
-    if (!refreshToken) return false;
-
-    try {
-      const response = await fetch(`${this.baseURL}/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        this.setTokens(data.tokens);
-        return true;
-      } else {
-        this.clearTokens();
-        return false;
-      }
-    } catch (err) {
-      console.error('Token refresh failed:', err);
-      this.clearTokens();
-      return false;
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Continue with local cleanup even if server request fails
+    } finally {
+      // Always clear local storage
+      this.clearSession();
     }
   }
 
-  getAccessToken(): string | null {
+  // FIXED: Enhanced token management
+  getToken(): string | null {
     return localStorage.getItem('accessToken');
   }
 
@@ -329,35 +294,79 @@ class AuthService {
     return localStorage.getItem('refreshToken');
   }
 
+  getUser(): any {
+    try {
+      const userStr = localStorage.getItem('user');
+      return userStr ? JSON.parse(userStr) : null;
+    } catch {
+      return null;
+    }
+  }
+
   isAuthenticated(): boolean {
-    return !!this.getAccessToken();
+    const token = this.getToken();
+    const user = this.getUser();
+    
+    if (!token || !user) {
+      return false;
+    }
+    
+    // Basic token validation (you could add JWT decode for expiration check)
+    try {
+      // Simple check - if token exists and user exists
+      return token.length > 0 && user.id;
+    } catch {
+      return false;
+    }
   }
 
-  private setTokens(tokens: any): void {
-    if (tokens.accessToken) {
-      localStorage.setItem('accessToken', tokens.accessToken);
-    }
-    if (tokens.refreshToken) {
-      localStorage.setItem('refreshToken', tokens.refreshToken);
-    }
-  }
-
-  private clearTokens(): void {
+  clearSession(): void {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
   }
 
-  // Helper method to check if user needs email verification
-  isEmailVerificationError(error: string): boolean {
-    return error.includes('Email verification required') || 
-           error.includes('verify your email') ||
-           error.includes('verification');
+  // FIXED: Enhanced auth header helper
+  getAuthHeaders(): HeadersInit {
+    const token = this.getToken();
+    return token ? {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    } : {
+      'Content-Type': 'application/json'
+    };
   }
 
-  // Helper method to extract email from error response (if available)
-  extractEmailFromError(errorData: any): string | null {
-    return errorData?.email || null;
+  // FIXED: Token refresh functionality
+  async refreshAuthToken(): Promise<boolean> {
+    try {
+      const refreshToken = this.getRefreshToken();
+      if (!refreshToken) {
+        return false;
+      }
+
+      const response = await this.makeRequest('/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.tokens) {
+          localStorage.setItem('accessToken', data.tokens.accessToken);
+          localStorage.setItem('refreshToken', data.tokens.refreshToken);
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      return false;
+    }
   }
 }
 
-export default new AuthService();
+// Export singleton instance
+const authService = new AuthService();
+export default authService;

@@ -1,4 +1,4 @@
-# Production Web Frontend Dockerfile - React.js - NETWORK RESILIENT
+# Production Web Frontend Dockerfile - React.js - FIXED API URL
 FROM node:18-alpine as builder
 
 # Set npm configurations for better reliability
@@ -23,8 +23,9 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 COPY public/ ./public/
 
-# Set production API URL - FIXED to include /api/auth path
-ENV REACT_APP_API_URL=http://finance-tracker-alb-1958020418.eu-south-1.elb.amazonaws.com/api/auth
+# FIXED: Use build argument for API URL (allows dev/prod flexibility)
+ARG REACT_APP_API_URL=http://localhost:8080/api
+ENV REACT_APP_API_URL=${REACT_APP_API_URL}
 ENV NODE_ENV=production
 
 # Build for production

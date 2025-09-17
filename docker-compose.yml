@@ -65,11 +65,9 @@ services:
       timeout: 30s
       retries: 3
 
-  # API Gateway (Node.js) - UPDATED WITH SERVICE URLs
+  # API Gateway - FROM DOCKERHUB v3
   gateway:
-    build:
-      context: ./services/gateway
-      dockerfile: Dockerfile
+    image: alis2001/finance-gateway:v3
     container_name: finance-gateway
     env_file:
       - .env
@@ -89,25 +87,29 @@ services:
     environment:
       - NODE_ENV=${APP_ENV}
       - PORT=3000
-      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL}
-      - EXPENSE_SERVICE_URL=${EXPENSE_SERVICE_URL}
-      - INCOME_SERVICE_URL=${INCOME_SERVICE_URL}
-      - CATEGORY_SERVICE_URL=${CATEGORY_SERVICE_URL}
-      - ANALYTICS_SERVICE_URL=${ANALYTICS_SERVICE_URL}
-      - ANALYTICS_ENGINE_URL=${ANALYTICS_ENGINE_URL}
-      - REPORTING_ENGINE_URL=${REPORTING_ENGINE_URL}
-      - ML_ENGINE_URL=${ML_ENGINE_URL}
+      # FIXED: Proper Docker service URLs
+      - AUTH_SERVICE_URL=http://auth:3000
+      - EXPENSE_SERVICE_URL=http://expense:3000
+      - INCOME_SERVICE_URL=http://income:3000
+      - CATEGORY_SERVICE_URL=http://category:3000
+      - ANALYTICS_SERVICE_URL=http://analytics:8000
+      - ANALYTICS_ENGINE_URL=http://analytics-engine:8080
+      - REPORTING_ENGINE_URL=http://reporting-engine:8080
+      - ML_ENGINE_URL=http://ml-engine:8080
+      # FIXED: Dynamic CORS configuration
       - ENABLE_CORS=${ENABLE_CORS}
+      - PUBLIC_IP=${PUBLIC_IP}
+      - FRONTEND_URL=http://${PUBLIC_IP}:3000
+      - API_URL=http://${PUBLIC_IP}:8080
       - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW}
       - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS}
     networks:
       - finance-network
     restart: unless-stopped
 
+  # Analytics Service - FROM DOCKERHUB v3
   analytics:
-    build:
-      context: ./services/analytics
-      dockerfile: Dockerfile
+    image: alis2001/finance-analytics:v3
     container_name: finance-analytics-api
     env_file:
       - .env
@@ -120,24 +122,22 @@ services:
         condition: service_healthy
     environment:
       - PYTHON_ENV=${APP_ENV}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - LOG_LEVEL=${LOG_LEVEL}
-      - JWT_SECRET=${JWT_SECRET} 
+      - JWT_SECRET=${JWT_SECRET}
     networks:
       - finance-network
     restart: unless-stopped
 
-  # Node.js Microservices
+  # Node.js Microservices - FROM DOCKERHUB v3
   auth:
-    build:
-      context: ./services/auth
-      dockerfile: Dockerfile
+    image: alis2001/finance-auth:v3
     container_name: finance-auth
     env_file:
       - .env
@@ -151,25 +151,31 @@ services:
     environment:
       - NODE_ENV=${APP_ENV}
       - PORT=3000
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRY=${JWT_EXPIRY}
       - BCRYPT_ROUNDS=${BCRYPT_ROUNDS}
       - SESSION_TIMEOUT=${SESSION_TIMEOUT}
+      # Email configuration
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_SECURE=${SMTP_SECURE}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
     networks:
       - finance-network
     restart: unless-stopped
 
   expense:
-    build:
-      context: ./services/expense
-      dockerfile: Dockerfile
+    image: alis2001/finance-expense:v3
     container_name: finance-expense
     env_file:
       - .env
@@ -183,13 +189,13 @@ services:
     environment:
       - NODE_ENV=${APP_ENV}
       - PORT=3000
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
-      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
     networks:
@@ -197,9 +203,7 @@ services:
     restart: unless-stopped
 
   income:
-    build:
-      context: ./services/income
-      dockerfile: Dockerfile
+    image: alis2001/finance-income:v3
     container_name: finance-income
     env_file:
       - .env
@@ -213,13 +217,13 @@ services:
     environment:
       - NODE_ENV=${APP_ENV}
       - PORT=3000
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
-      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
     networks:
@@ -227,9 +231,7 @@ services:
     restart: unless-stopped
 
   category:
-    build:
-      context: ./services/category
-      dockerfile: Dockerfile
+    image: alis2001/finance-category:v3
     container_name: finance-category
     env_file:
       - .env
@@ -241,8 +243,8 @@ services:
     environment:
       - NODE_ENV=${APP_ENV}
       - PORT=3000
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
@@ -250,11 +252,9 @@ services:
       - finance-network
     restart: unless-stopped
 
-  # C++ Engines
+  # C++ Engines - FROM DOCKERHUB v3
   analytics-engine:
-    build:
-      context: ./services/analytics-engine
-      dockerfile: Dockerfile
+    image: alis2001/finance-analytics-engine:v3
     container_name: finance-analytics
     env_file:
       - .env
@@ -264,8 +264,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
@@ -276,9 +276,7 @@ services:
     restart: unless-stopped
 
   reporting-engine:
-    build:
-      context: ./services/reporting-engine
-      dockerfile: Dockerfile
+    image: alis2001/finance-reporting-engine:v3
     container_name: finance-reporting
     env_file:
       - .env
@@ -288,8 +286,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
@@ -300,9 +298,7 @@ services:
     restart: unless-stopped
 
   ml-engine:
-    build:
-      context: ./services/ml-engine
-      dockerfile: Dockerfile
+    image: alis2001/finance-ml-engine:v3
     container_name: finance-ml
     env_file:
       - .env
@@ -312,8 +308,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
@@ -323,10 +319,9 @@ services:
       - finance-network
     restart: unless-stopped
 
+  # FIXED: Web Frontend with correct API URL
   web:
-    build:
-      context: ./frontend/web
-      dockerfile: Dockerfile
+    image: alis2001/finance-web:v4
     container_name: finance-web
     env_file:
       - .env
@@ -334,7 +329,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=${APP_ENV}
-      - REACT_APP_API_URL=http://localhost:8080/api/auth
+      # FIXED: This won't work at runtime, but v4 image will have correct build-time URL
     networks:
       - finance-network
     restart: unless-stopped
