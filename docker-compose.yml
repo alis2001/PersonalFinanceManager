@@ -11,6 +11,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Connection optimization
+      POSTGRES_MAX_CONNECTIONS: 200
+      POSTGRES_SHARED_BUFFERS: 256MB
     ports:
       - "${DB_EXTERNAL_PORT}:5432"
     volumes:
@@ -19,11 +22,19 @@ services:
     networks:
       - finance-network
     restart: unless-stopped
+    # Optimized health check
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
+      interval: 15s
+      timeout: 10s
       retries: 5
+      start_period: 30s
+    # Network optimization
+    sysctls:
+      - net.core.somaxconn=65536
+      - net.ipv4.tcp_max_syn_backlog=65536
+      - net.ipv4.tcp_fin_timeout=10
+      - net.ipv4.tcp_keepalive_time=600
 
   redis:
     image: redis:7-alpine
@@ -40,8 +51,15 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 5
+    # Redis configuration for better performance
+    command: >
+      redis-server 
+      --maxmemory 512mb 
+      --maxmemory-policy allkeys-lru 
+      --tcp-keepalive 60
+      --timeout 300
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -51,6 +69,8 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      # Connection optimization
+      RABBITMQ_TCP_LISTEN_OPTIONS: '[{nodelay, true}, {keepalive, true}]'
     ports:
       - "${RABBITMQ_PORT}:5672"
       - "${RABBITMQ_MANAGEMENT_PORT}:15672"
@@ -65,7 +85,7 @@ services:
       timeout: 30s
       retries: 3
 
-  # API Gateway - FROM DOCKERHUB v3
+  # API Gateway - FIXED WITH TIMEOUT CONFIGURATION
   gateway:
     build:
       context: ./services/gateway
@@ -89,6 +109,7 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV}
       - PORT=3000
+      # Service URLs (internal Docker networking)
       - AUTH_SERVICE_URL=http://auth:3000
       - EXPENSE_SERVICE_URL=http://expense:3000
       - INCOME_SERVICE_URL=http://income:3000
@@ -97,45 +118,34 @@ services:
       - ANALYTICS_ENGINE_URL=http://analytics-engine:8080
       - REPORTING_ENGINE_URL=http://reporting-engine:8080
       - ML_ENGINE_URL=http://ml-engine:8080
+      # CORS & Security
       - ENABLE_CORS=${ENABLE_CORS}
       - PUBLIC_IP=${PUBLIC_IP}
       - FRONTEND_URL=${FRONTEND_URL}
       - API_URL=${API_URL}
       - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW}
       - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS}
+      # Timeout configuration (highest in cascade)
+      - REQUEST_TIMEOUT=75000
+      - PROXY_TIMEOUT=70000
     networks:
       - finance-network
     restart: unless-stopped
+    # Network optimization for gateway
+    sysctls:
+      - net.core.somaxconn=65536
+      - net.ipv4.tcp_max_syn_backlog=65536
+      - net.ipv4.tcp_fin_timeout=10
+      - net.ipv4.tcp_keepalive_time=600
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
-  # Analytics Service - FROM DOCKERHUB v3
-  analytics:
-    image: alis2001/finance-analytics:v3
-    container_name: finance-analytics-api
-    env_file:
-      - .env
-    ports:
-      - "${ANALYTICS_SERVICE_PORT}:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      - PYTHON_ENV=${APP_ENV}
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - LOG_LEVEL=${LOG_LEVEL}
-      - JWT_SECRET=${JWT_SECRET}
-    networks:
-      - finance-network
-    restart: unless-stopped
-
-  # Node.js Microservices - FROM DOCKERHUB v3
+  # Node.js Microservices with Timeout Configuration
   auth:
     image: alis2001/finance-auth:v3
     container_name: finance-auth
@@ -151,6 +161,7 @@ services:
     environment:
       - NODE_ENV=${APP_ENV}
       - PORT=3000
+      # Database configuration
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME}
@@ -158,6 +169,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # JWT configuration
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRY=${JWT_EXPIRY}
       - BCRYPT_ROUNDS=${BCRYPT_ROUNDS}
@@ -170,9 +182,24 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_FROM_NAME=${SMTP_FROM_NAME}
       - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
+      # Timeout configuration (lower than gateway)
+      - REQUEST_TIMEOUT=60000
+      - DB_TIMEOUT=30000
     networks:
       - finance-network
     restart: unless-stopped
+    # Health check for auth service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
   expense:
     image: alis2001/finance-expense:v3
@@ -198,9 +225,21 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+      # Timeout configuration
+      - REQUEST_TIMEOUT=60000
+      - DB_TIMEOUT=30000
     networks:
       - finance-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   income:
     image: alis2001/finance-income:v3
@@ -226,9 +265,21 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+      # Timeout configuration
+      - REQUEST_TIMEOUT=60000
+      - DB_TIMEOUT=30000
     networks:
       - finance-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   category:
     image: alis2001/finance-category:v3
@@ -248,11 +299,65 @@ services:
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
+      # Timeout configuration
+      - REQUEST_TIMEOUT=60000
+      - DB_TIMEOUT=30000
     networks:
       - finance-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
-  # C++ Engines - FROM DOCKERHUB v3
+  # Analytics Service
+  analytics:
+    image: alis2001/finance-analytics:v3
+    container_name: finance-analytics-api
+    env_file:
+      - .env
+    ports:
+      - "${ANALYTICS_SERVICE_PORT}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - PYTHON_ENV=${APP_ENV}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=${LOG_LEVEL}
+      - JWT_SECRET=${JWT_SECRET}
+      # Python-specific timeout configuration
+      - REQUEST_TIMEOUT=60
+      - DB_TIMEOUT=30
+    networks:
+      - finance-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
+
+  # C++ Engines with Timeout Configuration
   analytics-engine:
     image: alis2001/finance-analytics-engine:v3
     container_name: finance-analytics
@@ -271,9 +376,20 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - LOG_LEVEL=${LOG_LEVEL}
       - APP_ENV=${APP_ENV}
+      # C++ timeout configuration
+      - REQUEST_TIMEOUT=60
     networks:
       - finance-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   reporting-engine:
     image: alis2001/finance-reporting-engine:v3
@@ -293,9 +409,19 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - LOG_LEVEL=${LOG_LEVEL}
       - APP_ENV=${APP_ENV}
+      - REQUEST_TIMEOUT=60
     networks:
       - finance-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   ml-engine:
     image: alis2001/finance-ml-engine:v3
@@ -315,11 +441,23 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - LOG_LEVEL=${LOG_LEVEL}
       - APP_ENV=${APP_ENV}
+      - REQUEST_TIMEOUT=60
     networks:
       - finance-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
 
-  # FIXED: Web Frontend with correct API URL
+  # Frontend
   web:
     image: alis2001/finance-web:v4
     container_name: finance-web
@@ -329,12 +467,16 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=${APP_ENV}
-      # FIXED: This won't work at runtime, but v4 image will have correct build-time URL
+      - REACT_APP_API_URL=http://localhost:${GATEWAY_PORT}/api
     networks:
       - finance-network
     restart: unless-stopped
     depends_on:
       - gateway
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 volumes:
   postgres_data:
@@ -350,3 +492,9 @@ networks:
     ipam:
       config:
         - subnet: 172.20.0.0/16
+    # Network optimization
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.bridge.host_binding_ipv4: "0.0.0.0"
+      com.docker.network.driver.mtu: "1450"

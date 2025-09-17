@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const { createProxyMiddleware, fixRequestBody } = require('http-proxy-middleware');
 require('dotenv').config();
 
 const app = express();
@@ -18,11 +18,10 @@ const serviceUrls = {
   analytics: process.env.ANALYTICS_SERVICE_URL || 'http://analytics:8000'
 };
 
-// CORS configuration with proper origin matching
+// CORS configuration
 const getAllowedOrigins = () => {
   const origins = ['http://localhost:3000', 'http://localhost:8080'];
   
-  // Add production origins based on environment
   if (process.env.FRONTEND_URL) {
     origins.push(process.env.FRONTEND_URL);
   }
@@ -34,7 +33,6 @@ const getAllowedOrigins = () => {
     origins.push(`http://${process.env.PUBLIC_IP}:8080`);
   }
   
-  // For development or when explicitly enabled, allow all origins
   if (process.env.NODE_ENV === 'development' || process.env.ENABLE_CORS === 'true') {
     return '*';
   }
@@ -58,15 +56,81 @@ app.use(helmet({
   contentSecurityPolicy: false
 }));
 
-// Apply CORS BEFORE other middleware
+// Apply CORS first
 app.use(cors(corsOptions));
-
-// Handle preflight requests explicitly
 app.options('*', cors(corsOptions));
 
-// Body parsing middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Enhanced proxy middleware with body handling
+const createEnhancedProxy = (path, target, pathRewrite) => {
+  return createProxyMiddleware({
+    target: target,
+    changeOrigin: true,
+    pathRewrite: pathRewrite,
+    logLevel: process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info',
+    timeout: 60000,
+    proxyTimeout: 60000,
+    onProxyReq: (proxyReq, req, res) => {
+      // Fix request body for forwarding
+      fixRequestBody(proxyReq, req, res);
+      console.log(`✅ ${path}: ${req.method} ${req.originalUrl} → ${target}${proxyReq.path}`);
+    },
+    onProxyRes: (proxyRes, req, res) => {
+      // Add CORS headers to proxy response
+      proxyRes.headers['Access-Control-Allow-Origin'] = req.headers.origin || corsOptions.origin;
+      proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
+      console.log(`✅ ${path} Response: ${proxyRes.statusCode}`);
+    },
+    onError: (err, req, res) => {
+      console.error(`❌ ${path} Proxy Error:`, err.message);
+      if (!res.headersSent) {
+        res.status(503).json({ 
+          error: `${path} service unavailable`,
+          message: `Unable to connect to ${target}`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+  });
+};
+
+// Body parser error handler
+const bodyParserErrorHandler = () => {
+  return (err, req, res, next) => {
+    if (err.type === 'request.aborted') {
+      console.log('Client disconnected:', req.path);
+      return res.status(400).json({ error: 'Request aborted' });
+    }
+    if (err.code === 'ECONNRESET') {
+      return res.status(502).json({ error: 'Connection reset' });
+    }
+    if (err.name === 'PayloadTooLargeError') {
+      return res.status(413).json({ error: 'Request too large' });
+    }
+    next(err);
+  };
+};
+
+// Apply proxies BEFORE body parsing to avoid conflicts
+app.use('/api/auth', createEnhancedProxy('Auth', serviceUrls.auth, { '^/api/auth': '' }));
+app.use('/api/categories', createEnhancedProxy('Categories', serviceUrls.category, { '^/api/categories': '' }));
+app.use('/api/expenses', createEnhancedProxy('Expenses', serviceUrls.expense, { '^/api/expenses': '' }));
+app.use('/api/income', createEnhancedProxy('Income', serviceUrls.income, { '^/api/income': '' }));
+app.use('/api/analytics', createEnhancedProxy('Analytics', serviceUrls.analytics, { '^/api/analytics': '' }));
+
+// Body parsing AFTER proxy routes (for gateway-specific routes only)
+app.use(express.json({ 
+  limit: '50mb',
+  verify: (req, res, buf, encoding) => {
+    req.rawBody = buf; // Preserve original buffer for debugging
+  }
+}));
+app.use(express.urlencoded({ 
+  limit: '50mb', 
+  extended: true 
+}));
+
+// Add body parser error handler
+app.use(bodyParserErrorHandler());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -103,44 +167,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// Enhanced proxy middleware with better error handling
-const createEnhancedProxy = (path, target, pathRewrite) => {
-  return createProxyMiddleware({
-    target: target,
-    changeOrigin: true,
-    pathRewrite: pathRewrite,
-    logLevel: process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info',
-    timeout: 30000,
-    proxyTimeout: 30000,
-    onProxyReq: (proxyReq, req, res) => {
-      console.log(`✅ ${path}: ${req.method} ${req.originalUrl} → ${target}${proxyReq.path}`);
-    },
-    onProxyRes: (proxyRes, req, res) => {
-      // Add CORS headers to proxy response
-      proxyRes.headers['Access-Control-Allow-Origin'] = req.headers.origin || corsOptions.origin;
-      proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
-      console.log(`✅ ${path} Response: ${proxyRes.statusCode}`);
-    },
-    onError: (err, req, res) => {
-      console.error(`❌ ${path} Proxy Error:`, err.message);
-      if (!res.headersSent) {
-        res.status(503).json({ 
-          error: `${path} service unavailable`,
-          message: `Unable to connect to ${target}`,
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-  });
-};
-
-// Service Proxies with enhanced error handling
-app.use('/api/auth', createEnhancedProxy('Auth', serviceUrls.auth, { '^/api/auth': '' }));
-app.use('/api/categories', createEnhancedProxy('Categories', serviceUrls.category, { '^/api/categories': '' }));
-app.use('/api/expenses', createEnhancedProxy('Expenses', serviceUrls.expense, { '^/api/expenses': '' }));
-app.use('/api/income', createEnhancedProxy('Income', serviceUrls.income, { '^/api/income': '' }));
-app.use('/api/analytics', createEnhancedProxy('Analytics', serviceUrls.analytics, { '^/api/analytics': '' }));
-
 // 404 handler
 app.use('*', (req, res) => {
   console.log(`❌ Route not found: ${req.method} ${req.originalUrl}`);
@@ -162,17 +188,19 @@ app.use('*', (req, res) => {
   });
 });
 
-// Error handler
+// Final error handler
 app.use((err, req, res, next) => {
   console.error('Gateway Error:', err);
-  res.status(500).json({
-    error: 'Internal gateway error',
-    timestamp: new Date().toISOString()
-  });
+  if (!res.headersSent) {
+    res.status(500).json({
+      error: 'Internal gateway error',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
-// Start server with enhanced logging
-app.listen(port, '0.0.0.0', () => {
+// Server timeout configuration
+const server = app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Finance Gateway running on port ${port}`);
   console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✅ CORS enabled for: ${Array.isArray(corsOptions.origin) ? corsOptions.origin.join(', ') : corsOptions.origin}`);
@@ -184,3 +212,9 @@ app.listen(port, '0.0.0.0', () => {
   console.log(`   📊 Analytics proxy: /api/analytics/* → ${serviceUrls.analytics}`);
   console.log(`🌐 Gateway ready at http://localhost:${port}`);
 });
+
+// Configure server timeouts (cascading approach)
+server.requestTimeout = 75000; // 75 seconds for full request
+server.headersTimeout = 76000; // Must be > requestTimeout
+server.keepAliveTimeout = 76000; // AWS ALB compatibility
+server.timeout = 0; // Disable socket inactivity timeout

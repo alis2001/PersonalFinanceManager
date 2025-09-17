@@ -34,7 +34,7 @@ const initializeConnections = async () => {
     await connectRedis();
     logger.info('Database and Redis connections established');
 
-    // FIXED EMAIL SERVICE INITIALIZATION
+    // Initialize email service
     logger.info('Initializing email service...');
     try {
       const emailInitialized = await emailService.initialize();
@@ -53,28 +53,156 @@ const initializeConnections = async () => {
   }
 };
 
+// Security middleware
 app.use(helmet());
 app.use(cors());
 
-// ADDED: Request timeout middleware (early in stack)
-const { generalLimiter, authLimiter } = require('./middleware/auth');
-// app.use(requestTimeout(30000)); // 30 second timeout for all requests
+// Body parser error handler middleware
+const bodyParserErrorHandler = () => {
+  return (err, req, res, next) => {
+    if (err.type === 'request.aborted') {
+      logger.warn('Request aborted by client', { 
+        path: req.path, 
+        method: req.method,
+        ip: req.ip 
+      });
+      return res.status(400).json({ 
+        error: 'Request was cancelled by client',
+        message: 'The request was interrupted before completion'
+      });
+    }
+    
+    if (err.code === 'ECONNRESET') {
+      logger.warn('Connection reset', { 
+        path: req.path, 
+        method: req.method,
+        ip: req.ip 
+      });
+      return res.status(502).json({ 
+        error: 'Connection interrupted',
+        message: 'The connection was reset during request processing'
+      });
+    }
+    
+    if (err.name === 'PayloadTooLargeError') {
+      logger.warn('Payload too large', { 
+        path: req.path, 
+        method: req.method,
+        limit: err.limit,
+        received: err.received 
+      });
+      return res.status(413).json({ 
+        error: 'Request payload too large',
+        message: 'The request body exceeds the maximum allowed size'
+      });
+    }
+    
+    if (err.type === 'entity.parse.failed') {
+      logger.warn('JSON parse error', { 
+        path: req.path, 
+        method: req.method,
+        body: err.body 
+      });
+      return res.status(400).json({ 
+        error: 'Invalid JSON format',
+        message: 'The request body contains malformed JSON'
+      });
+    }
+    
+    next(err);
+  };
+};
 
-// Body parsing middleware (MUST be before rate limiting that accesses req.body)
+// Request timeout middleware
+const requestTimeout = (timeoutMs = 60000) => {
+  return (req, res, next) => {
+    const timeout = setTimeout(() => {
+      if (!res.headersSent) {
+        logger.error(`Request timeout: ${req.method} ${req.path} from ${req.ip}`);
+        res.status(408).json({ 
+          error: 'Request timeout',
+          message: 'The server did not receive a complete request within the expected time'
+        });
+      }
+    }, timeoutMs);
+
+    // Clear timeout when response is sent
+    const originalSend = res.send;
+    res.send = function(...args) {
+      clearTimeout(timeout);
+      return originalSend.apply(this, args);
+    };
+
+    const originalJson = res.json;
+    res.json = function(...args) {
+      clearTimeout(timeout);
+      return originalJson.apply(this, args);
+    };
+
+    const originalEnd = res.end;
+    res.end = function(...args) {
+      clearTimeout(timeout);
+      return originalEnd.apply(this, args);
+    };
+
+    next();
+  };
+};
+
+// Apply request timeout early in middleware stack
+app.use(requestTimeout(60000)); // 60 second timeout
+
+// Body parsing middleware with enhanced configuration
 app.use(express.json({ 
   limit: '10mb',
-  timeout: 15000 // 15 second timeout for JSON parsing
-}));
-app.use(express.urlencoded({ 
-  extended: true,
-  timeout: 15000 // 15 second timeout for URL encoding
+  timeout: 45000, // 45 second parsing timeout
+  verify: (req, res, buf, encoding) => {
+    // Preserve raw body for debugging
+    req.rawBody = buf;
+  }
 }));
 
+app.use(express.urlencoded({ 
+  extended: true,
+  limit: '10mb',
+  timeout: 45000 // 45 second parsing timeout
+}));
+
+// Apply body parser error handler immediately after body parsing
+app.use(bodyParserErrorHandler());
+
 // General rate limiting (after body parsing)
+const { generalLimiter } = require('./middleware/auth');
 app.use(generalLimiter);
 
 // Request logging
 app.use(requestLogger);
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT received, shutting down gracefully');
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
+});
+
+// Unhandled error logging (but don't crash)
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+});
 
 // Routes
 app.use('/health', healthRoutes);
@@ -84,54 +212,44 @@ app.use('/', authRoutes);
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    service: 'Finance Tracker Auth Service',
+    service: 'Finance Tracker Authentication Service',
     version: '1.0.0',
+    status: 'operational',
+    environment: process.env.NODE_ENV || 'development',
     endpoints: {
       auth: {
-        register: 'POST /register',
         login: 'POST /login',
-        logout: 'POST /logout',
+        register: 'POST /register',
         refresh: 'POST /refresh',
+        logout: 'POST /logout',
+        verify: 'POST /verify-email',
         profile: 'GET /profile'
       },
       health: 'GET /health'
-    }
+    },
+    timestamp: new Date().toISOString()
   });
 });
 
-// Error handling middleware
+// Final error handler
 app.use(errorHandler);
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Endpoint not found' });
-});
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
-
-// Start server
-const startServer = async () => {
+// Start server with timeout configuration
+const server = app.listen(port, '0.0.0.0', async () => {
   await initializeConnections();
   
-  app.listen(port, '0.0.0.0', () => {
-    logger.info(`Auth Service listening on port ${port}`);
-    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    logger.info(`Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
-    logger.info(`Redis: ${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`);
-    logger.info(`Email Service: ${process.env.SMTP_USERNAME ? 'Configured with ' + process.env.SMTP_USERNAME : 'Not configured'}`);
-  });
-};
-
-startServer().catch(error => {
-  logger.error('Failed to start server:', error);
-  process.exit(1);
+  logger.info(`Auth Service listening on port ${port}`);
+  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
+  logger.info(`Redis: ${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`);
+  logger.info(`Email Service: Configured with ${process.env.SMTP_USERNAME}`);
 });
+
+// Configure server timeouts (cascading approach - lower than gateway)
+server.requestTimeout = 60000; // 60 seconds for full request  
+server.headersTimeout = 61000; // Must be > requestTimeout
+server.keepAliveTimeout = 61000; // Connection keep-alive
+server.timeout = 0; // Disable socket inactivity timeout
+
+// Export server for testing
+module.exports = { app, server };

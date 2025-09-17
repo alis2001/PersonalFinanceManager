@@ -1,22 +1,45 @@
 {
   "name": "finance-gateway",
   "version": "1.0.0",
-  "description": "Finance Tracker API Gateway with Fixed CORS",
+  "description": "Finance Tracker API Gateway with Fixed Body Parser Conflicts",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "test": "jest",
+    "docker:build": "docker build -t finance-gateway .",
+    "docker:run": "docker run -p 8080:3000 finance-gateway"
   },
   "dependencies": {
     "express": "^4.18.2",
     "helmet": "^7.1.0",
     "cors": "^2.8.5",
     "http-proxy-middleware": "^2.0.6",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "winston": "^3.11.0",
+    "express-rate-limit": "^7.1.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
   },
   "engines": {
     "node": ">=18.0.0"
   },
+  "keywords": [
+    "finance",
+    "gateway",
+    "proxy",
+    "microservices",
+    "nodejs",
+    "express",
+    "docker"
+  ],
   "author": "Finance Tracker Team",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alis2001/finance-tracker"
+  }
 }
