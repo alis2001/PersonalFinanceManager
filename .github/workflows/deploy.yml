@@ -102,6 +102,15 @@ jobs:
               ;;
           esac
 
+      - name: Set build arguments
+        id: build_args
+        run: |
+          if [[ "${{ matrix.service }}" == "web" ]]; then
+            echo "build_args=REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api" >> $GITHUB_OUTPUT
+          else
+            echo "build_args=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
@@ -113,6 +122,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+          build-args: ${{ steps.build_args.outputs.build_args }}
 
   deploy:
     name: Deploy to Environment
@@ -711,7 +721,7 @@ jobs:
                 ports:
                   - "3000:3000"
                 environment:
-                  - REACT_APP_API_URL=http://${PUBLIC_IP}:8080/api
+                  - NODE_ENV=production
                 networks:
                   - finance-network
                 restart: unless-stopped

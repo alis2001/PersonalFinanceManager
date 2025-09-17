@@ -467,7 +467,6 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=${APP_ENV}
-      - REACT_APP_API_URL=http://localhost:${GATEWAY_PORT}/api
     networks:
       - finance-network
     restart: unless-stopped
