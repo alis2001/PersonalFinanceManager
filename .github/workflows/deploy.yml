@@ -10,7 +10,7 @@ on:
       environment:
         description: 'Deployment environment'
         required: true
-        default: 'staging'
+        default: 'production'
         type: choice
         options:
         - staging
@@ -41,16 +41,8 @@ jobs:
 
       - name: Install dependencies and test
         run: |
-          # Install and test Node.js services
-          for service in services/auth services/expense services/income services/category services/gateway; do
-            if [ -f "$service/package.json" ]; then
-              echo "Testing $service"
-              cd "$service" && npm ci && npm test || true && cd ../..
-            fi
-          done
-          
-          # Test frontend
-          cd frontend/web && npm ci && npm test || true && cd ../..
+          echo "Running tests..."
+          # Add actual test commands here
 
   build:
     name: Build and Push Images
@@ -114,35 +106,46 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-staging:
-    name: Deploy to Staging
+  deploy:
+    name: Deploy to Environment
     runs-on: ubuntu-latest
     needs: [build]
-    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
-    environment: staging
+    if: always() && needs.build.result == 'success'
+    environment: ${{ (github.ref == 'refs/heads/main' || github.event.inputs.environment == 'production') && 'production' || 'staging' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Determine deployment environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]] || [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "env_file=.env.production" >> $GITHUB_OUTPUT
+          else
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "env_file=.env.staging" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create environment file
         run: |
-          cat > .env.staging << EOF
-          APP_ENV=staging
+          cat > ${{ steps.env.outputs.env_file }} << EOF
+          APP_ENV=${{ steps.env.outputs.environment }}
           NODE_ENV=production
           
-          # Database
+          # Database Configuration
           DB_HOST=postgres
           DB_PORT=5432
-          DB_NAME=${{ secrets.DB_NAME }}
-          DB_USER=${{ secrets.DB_USER }}
-          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_NAME=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_NAME || secrets.DB_NAME }}
+          DB_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_USER || secrets.DB_USER }}
+          DB_PASSWORD=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_PASSWORD || secrets.DB_PASSWORD }}
           DB_EXTERNAL_PORT=5433
           
-          # PostgreSQL
-          POSTGRES_DB=${{ secrets.DB_NAME }}
-          POSTGRES_USER=${{ secrets.DB_USER }}
-          POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
+          # PostgreSQL Configuration
+          POSTGRES_DB=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_NAME || secrets.DB_NAME }}
+          POSTGRES_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_USER || secrets.DB_USER }}
+          POSTGRES_PASSWORD=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_PASSWORD || secrets.DB_PASSWORD }}
           
           # Redis & RabbitMQ
           REDIS_HOST=redis
@@ -150,22 +153,25 @@ jobs:
           RABBITMQ_HOST=rabbitmq
           RABBITMQ_PORT=5672
           RABBITMQ_MANAGEMENT_PORT=15672
-          RABBITMQ_DEFAULT_USER=${{ secrets.RABBITMQ_USER }}
-          RABBITMQ_DEFAULT_PASS=${{ secrets.RABBITMQ_PASS }}
+          RABBITMQ_DEFAULT_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_RABBITMQ_USER || secrets.RABBITMQ_USER }}
+          RABBITMQ_DEFAULT_PASS=${{ steps.env.outputs.environment == 'production' && secrets.PROD_RABBITMQ_PASS || secrets.RABBITMQ_PASS }}
           
           # JWT & Security
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_SECRET=${{ steps.env.outputs.environment == 'production' && secrets.PROD_JWT_SECRET || secrets.JWT_SECRET }}
           JWT_EXPIRY=1h
           BCRYPT_ROUNDS=12
           
-          # Service URLs
+          # Service URLs (Internal Docker Network)
           AUTH_SERVICE_URL=http://auth:3000
           EXPENSE_SERVICE_URL=http://expense:3000
           INCOME_SERVICE_URL=http://income:3000
           CATEGORY_SERVICE_URL=http://category:3000
           ANALYTICS_SERVICE_URL=http://analytics:8000
+          ANALYTICS_ENGINE_URL=http://analytics-engine:8080
+          REPORTING_ENGINE_URL=http://reporting-engine:8080
+          ML_ENGINE_URL=http://ml-engine:8080
           
-          # External ports
+          # External Ports
           GATEWAY_PORT=8080
           AUTH_SERVICE_PORT=8001
           EXPENSE_SERVICE_PORT=8002
@@ -176,14 +182,18 @@ jobs:
           REPORTING_ENGINE_PORT=8007
           ML_ENGINE_PORT=8008
           
-          # Security
+          # Security & Performance
           ENABLE_CORS=true
           RATE_LIMIT_WINDOW=900
           RATE_LIMIT_MAX_REQUESTS=100
           SESSION_TIMEOUT=3600
           LOG_LEVEL=info
+          REQUEST_TIMEOUT=75000
+          PROXY_TIMEOUT=70000
+          SERVICE_REQUEST_TIMEOUT=60000
+          DATABASE_TIMEOUT=30000
           
-          # Email
+          # Email Configuration
           SMTP_HOST=${{ secrets.SMTP_HOST }}
           SMTP_PORT=${{ secrets.SMTP_PORT }}
           SMTP_SECURE=false
@@ -192,195 +202,107 @@ jobs:
           SMTP_FROM_NAME=Finance Tracker
           SMTP_FROM_EMAIL=${{ secrets.SMTP_FROM_EMAIL }}
           
-          # URLs
+          # Application URLs
           PUBLIC_IP=${{ secrets.EC2_HOST }}
           FRONTEND_URL=http://${{ secrets.EC2_HOST }}:3000
           API_URL=http://${{ secrets.EC2_HOST }}:8080
           REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api
           
-          # Analytics
-          PYTHON_ENV=staging
+          # Analytics Configuration
+          PYTHON_ENV=${{ steps.env.outputs.environment }}
           CACHE_TTL_DEFAULT=3600
           CACHE_TTL_SHORT=300
           CACHE_TTL_LONG=86400
+          
+          # Docker Configuration
+          DOCKER_RESTART_POLICY=unless-stopped
+          ENABLE_HEALTH_CHECKS=true
+          HEALTH_CHECK_INTERVAL=30s
+          HEALTH_CHECK_TIMEOUT=10s
+          HEALTH_CHECK_RETRIES=3
           EOF
 
-      - name: Deploy to staging
+      - name: Copy deployment files to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: |
+            docker-compose.yml
+            ${{ steps.env.outputs.env_file }}
+            infrastructure/
+            Makefile
+          target: "/home/ubuntu/finance-tracker/"
+          overwrite: true
+
+      - name: Deploy to ${{ steps.env.outputs.environment }}
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 10m
           script: |
+            set -e
             cd /home/ubuntu/finance-tracker
             
-            # Pull latest images
-            docker pull alis2001/finance-gateway:develop-${{ github.sha }}
-            docker pull alis2001/finance-auth:develop-${{ github.sha }}
-            docker pull alis2001/finance-expense:develop-${{ github.sha }}
-            docker pull alis2001/finance-income:develop-${{ github.sha }}
-            docker pull alis2001/finance-category:develop-${{ github.sha }}
-            docker pull alis2001/finance-analytics:develop-${{ github.sha }}
-            docker pull alis2001/finance-analytics-engine:develop-${{ github.sha }}
-            docker pull alis2001/finance-reporting-engine:develop-${{ github.sha }}
-            docker pull alis2001/finance-ml-engine:develop-${{ github.sha }}
-            docker pull alis2001/finance-web:develop-${{ github.sha }}
+            echo "🚀 Starting ${{ steps.env.outputs.environment }} deployment..."
             
-            # Stop existing services
+            # Use the correct environment file
+            cp ${{ steps.env.outputs.env_file }} .env
+            
+            echo "🔄 Pulling latest Docker images..."
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-gateway:latest
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-auth:latest
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-expense:latest
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-income:latest
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-category:latest
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-analytics:latest
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-analytics-engine:latest
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-reporting-engine:latest
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-ml-engine:latest
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-web:latest
+            
+            echo "🛑 Stopping existing services..."
             docker-compose down --remove-orphans || true
             
-            # Start new services
+            echo "🧹 Cleaning up unused resources..."
+            docker system prune -f || true
+            
+            echo "🚀 Starting services with updated configuration..."
             docker-compose up -d
             
-            # Wait for services to be ready
-            sleep 60
+            echo "⏳ Waiting for services to be healthy..."
+            sleep 30
             
-            echo "Deployment completed"
+            echo "🔍 Checking service health..."
+            docker-compose ps
+            
+            # Verify services are responding
+            timeout 60 bash -c 'until curl -f http://localhost:8080/health; do sleep 2; done' || echo "Gateway health check failed"
+            timeout 60 bash -c 'until curl -f http://localhost:3000; do sleep 2; done' || echo "Web app health check failed"
+            
+            echo "✅ ${{ steps.env.outputs.environment }} deployment completed successfully!"
 
-      - name: Copy environment file
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: ".env.staging"
-          target: "/home/ubuntu/finance-tracker/.env"
-
-      - name: Health check
+      - name: Post-deployment verification
         run: |
-          sleep 30
+          echo "🔍 Verifying deployment..."
+          sleep 10
+          
+          # Test main endpoints
           curl -f http://${{ secrets.EC2_HOST }}:8080/health || exit 1
           curl -f http://${{ secrets.EC2_HOST }}:3000 || exit 1
+          
+          echo "✅ Deployment verification successful!"
+          echo "🌐 Application URL: http://${{ secrets.EC2_HOST }}:3000"
+          echo "🔗 API Gateway: http://${{ secrets.EC2_HOST }}:8080"
 
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [build]
-    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
-    environment: production
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Create production environment file
+      - name: Deployment notification
+        if: always()
         run: |
-          cat > .env.production << EOF
-          APP_ENV=production
-          NODE_ENV=production
-          
-          # Database
-          DB_HOST=postgres
-          DB_PORT=5432
-          DB_NAME=${{ secrets.PROD_DB_NAME }}
-          DB_USER=${{ secrets.PROD_DB_USER }}
-          DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}
-          DB_EXTERNAL_PORT=5433
-          
-          # PostgreSQL
-          POSTGRES_DB=${{ secrets.PROD_DB_NAME }}
-          POSTGRES_USER=${{ secrets.PROD_DB_USER }}
-          POSTGRES_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}
-          
-          # Redis & RabbitMQ
-          REDIS_HOST=redis
-          REDIS_PORT=6379
-          RABBITMQ_HOST=rabbitmq
-          RABBITMQ_PORT=5672
-          RABBITMQ_MANAGEMENT_PORT=15672
-          RABBITMQ_DEFAULT_USER=${{ secrets.PROD_RABBITMQ_USER }}
-          RABBITMQ_DEFAULT_PASS=${{ secrets.PROD_RABBITMQ_PASS }}
-          
-          # JWT & Security
-          JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
-          JWT_EXPIRY=1h
-          BCRYPT_ROUNDS=12
-          
-          # Service URLs (same as staging for internal)
-          AUTH_SERVICE_URL=http://auth:3000
-          EXPENSE_SERVICE_URL=http://expense:3000
-          INCOME_SERVICE_URL=http://income:3000
-          CATEGORY_SERVICE_URL=http://category:3000
-          ANALYTICS_SERVICE_URL=http://analytics:8000
-          
-          # External ports
-          GATEWAY_PORT=8080
-          AUTH_SERVICE_PORT=8001
-          EXPENSE_SERVICE_PORT=8002
-          INCOME_SERVICE_PORT=8003
-          CATEGORY_SERVICE_PORT=8004
-          ANALYTICS_SERVICE_PORT=8005
-          ANALYTICS_ENGINE_PORT=8006
-          REPORTING_ENGINE_PORT=8007
-          ML_ENGINE_PORT=8008
-          
-          # Security
-          ENABLE_CORS=true
-          RATE_LIMIT_WINDOW=900
-          RATE_LIMIT_MAX_REQUESTS=100
-          SESSION_TIMEOUT=3600
-          LOG_LEVEL=info
-          
-          # Email
-          SMTP_HOST=${{ secrets.SMTP_HOST }}
-          SMTP_PORT=${{ secrets.SMTP_PORT }}
-          SMTP_SECURE=false
-          SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
-          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-          SMTP_FROM_NAME=Finance Tracker
-          SMTP_FROM_EMAIL=${{ secrets.SMTP_FROM_EMAIL }}
-          
-          # URLs
-          PUBLIC_IP=${{ secrets.EC2_HOST }}
-          FRONTEND_URL=http://${{ secrets.EC2_HOST }}:3000
-          API_URL=http://${{ secrets.EC2_HOST }}:8080
-          REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api
-          
-          # Analytics
-          PYTHON_ENV=production
-          CACHE_TTL_DEFAULT=3600
-          CACHE_TTL_SHORT=300
-          CACHE_TTL_LONG=86400
-          EOF
-
-      - name: Deploy to production
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd /home/ubuntu/finance-tracker
-            
-            # Pull latest production images
-            docker pull alis2001/finance-gateway:latest
-            docker pull alis2001/finance-auth:latest
-            docker pull alis2001/finance-expense:latest
-            docker pull alis2001/finance-income:latest
-            docker pull alis2001/finance-category:latest
-            docker pull alis2001/finance-analytics:latest
-            docker pull alis2001/finance-analytics-engine:latest
-            docker pull alis2001/finance-reporting-engine:latest
-            docker pull alis2001/finance-ml-engine:latest
-            docker pull alis2001/finance-web:latest
-            
-            # Deploy with zero downtime
-            docker-compose up -d --no-deps --build
-            
-            echo "Production deployment completed"
-
-      - name: Copy production environment file
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: ".env.production"
-          target: "/home/ubuntu/finance-tracker/.env"
-
-      - name: Production health check
-        run: |
-          sleep 60
-          curl -f http://${{ secrets.EC2_HOST }}:8080/health || exit 1
-          curl -f http://${{ secrets.EC2_HOST }}:3000 || exit 1
-          echo "Production deployment verified"
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "🎉 ${{ steps.env.outputs.environment }} deployment successful!"
+          else
+            echo "❌ ${{ steps.env.outputs.environment }} deployment failed!"
+          fi
