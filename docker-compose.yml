@@ -376,7 +376,6 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - LOG_LEVEL=${LOG_LEVEL}
       - APP_ENV=${APP_ENV}
-      # C++ timeout configuration
       - REQUEST_TIMEOUT=60
     networks:
       - finance-network
