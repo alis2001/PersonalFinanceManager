@@ -745,7 +745,7 @@ jobs:
           target: "/home/ubuntu/finance-tracker/infrastructure/database/"
           overwrite: true
 
-      # FIXED: Comprehensive deployment with proper error handling
+      # REPLACE ONLY THE "Deploy to production" STEP with this:
       - name: Deploy to ${{ steps.env.outputs.environment }}
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -760,132 +760,135 @@ jobs:
             echo "🚀 Starting ${{ steps.env.outputs.environment }} deployment..."
             
             # Use the correct environment file
-            cp ${{ steps.env.outputs.env_file }} .env
+            cp ${{ steps.env.outputs.env_file }} .env || echo "Using existing .env"
+            
+            # Install required packages if missing
+            sudo apt-get update && sudo apt-get install -y wget curl || echo "Packages already installed"
             
             echo "Environment: ${{ steps.env.outputs.environment }}"
             echo "EC2 Host: ${{ secrets.EC2_HOST }}"
             echo "Docker Registry: ${{ env.DOCKER_REGISTRY }}"
             
-            # Determine Docker Compose command
-            if command -v docker-compose &> /dev/null; then
+            # FIXED: Detect Docker Compose command
+            if command -v docker-compose >/dev/null 2>&1; then
                 DOCKER_COMPOSE="docker-compose"
-            elif docker compose version &> /dev/null; then
+            elif docker compose version >/dev/null 2>&1; then
                 DOCKER_COMPOSE="docker compose"
             else
-                echo "❌ ERROR: Neither docker-compose nor docker compose found"
-                exit 1
-            fi
-            echo "✅ Using Docker Compose command: $DOCKER_COMPOSE"
-            
-            # Pull latest Docker images with better error handling
-            echo "📦 Pulling latest Docker images..."
-            
-            SERVICES=(
-                "gateway"
-                "auth" 
-                "expense"
-                "income"
-                "category"
-                "analytics"
-                "analytics-engine"
-                "reporting-engine"
-                "ml-engine"
-                "web"
-            )
-            
-            FAILED_PULLS=()
-            
-            for service in "${SERVICES[@]}"; do
-                echo "  Pulling ${{ env.DOCKER_REGISTRY }}/finance-${service}:latest"
-                if docker pull ${{ env.DOCKER_REGISTRY }}/finance-${service}:latest; then
-                    echo "    ✅ Successfully pulled ${service}"
-                else
-                    echo "    ❌ Failed to pull ${service}"
-                    FAILED_PULLS+=("$service")
-                fi
-            done
-            
-            # Check if any critical services failed to pull
-            if [ ${#FAILED_PULLS[@]} -gt 0 ]; then
-                echo "⚠️  The following services failed to pull:"
-                printf '    - %s\n' "${FAILED_PULLS[@]}"
-                echo "Continuing deployment with existing images..."
+                echo "❌ Docker Compose not found, installing..."
+                sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+                sudo chmod +x /usr/local/bin/docker-compose
+                DOCKER_COMPOSE="docker-compose"
             fi
             
-            # Clean up unused resources
+            echo "✅ Using Docker Compose: $DOCKER_COMPOSE"
+            
+            # Stop existing services first
+            echo "🛑 Stopping existing services..."
+            $DOCKER_COMPOSE down --remove-orphans || echo "No existing services"
+            
+            # FIXED: Pull images with fallback to existing images
+            echo "📦 Pulling Docker images..."
+            
+            # Try to pull latest images but continue even if they fail
+            docker pull postgres:15-alpine || echo "Using cached postgres"
+            docker pull redis:7-alpine || echo "Using cached redis"  
+            docker pull rabbitmq:3-management-alpine || echo "Using cached rabbitmq"
+            
+            # Try custom images but don't fail if they don't exist
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-gateway:latest || echo "Gateway image not found, will use existing or fail gracefully"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-auth:latest || echo "Auth image not found, will use existing or fail gracefully"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-expense:latest || echo "Expense image not found, will use existing or fail gracefully"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-income:latest || echo "Income image not found, will use existing or fail gracefully"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-category:latest || echo "Category image not found, will use existing or fail gracefully"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-analytics:latest || echo "Analytics image not found, will use existing or fail gracefully"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-analytics-engine:latest || echo "Analytics Engine image not found, will use existing or fail gracefully"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-reporting-engine:latest || echo "Reporting Engine image not found, will use existing or fail gracefully"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-ml-engine:latest || echo "ML Engine image not found, will use existing or fail gracefully"
+            docker pull ${{ env.DOCKER_REGISTRY }}/finance-web:latest || echo "Web image not found, will use existing or fail gracefully"
+            
             echo "🧹 Cleaning up unused resources..."
             docker system prune -f || true
             
-            # Stop existing services gracefully
-            echo "🛑 Stopping existing services..."
-            $DOCKER_COMPOSE down --remove-orphans || echo "No existing services to stop"
+            # FIXED: Start services in proper order with error handling
+            echo "🚀 Starting infrastructure services first..."
+            $DOCKER_COMPOSE up -d postgres redis rabbitmq || {
+                echo "❌ Infrastructure startup failed, checking logs..."
+                $DOCKER_COMPOSE logs postgres redis rabbitmq
+                exit 1
+            }
             
-            # Start services with proper ordering
-            echo "🚀 Starting infrastructure services..."
-            $DOCKER_COMPOSE up -d postgres redis rabbitmq
-            
-            # Wait for infrastructure to be ready
-            echo "⏳ Waiting for infrastructure services (90s)..."
-            sleep 90
-            
-            # Check infrastructure health
-            echo "🏥 Checking infrastructure health..."
-            $DOCKER_COMPOSE ps postgres redis rabbitmq
-            
-            # Start backend services
-            echo "🚀 Starting backend services..."
-            $DOCKER_COMPOSE up -d auth expense income category analytics analytics-engine reporting-engine ml-engine
-            
-            # Wait for backend services
-            echo "⏳ Waiting for backend services (60s)..."
+            echo "⏳ Waiting for infrastructure (60s)..."
             sleep 60
             
-            # Start frontend services
-            echo "🚀 Starting frontend services..."
-            $DOCKER_COMPOSE up -d gateway web
+            echo "📊 Infrastructure status:"
+            $DOCKER_COMPOSE ps postgres redis rabbitmq
             
-            # Final wait for all services
-            echo "⏳ Final wait for all services (30s)..."
-            sleep 30
+            # Test infrastructure connectivity
+            echo "🔍 Testing infrastructure..."
+            docker exec finance-postgres pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} || echo "Postgres not ready yet"
+            docker exec finance-redis redis-cli ping || echo "Redis not ready yet"
             
-            # Check service health
-            echo "🏥 Checking service health..."
+            echo "🚀 Starting application services..."
+            $DOCKER_COMPOSE up -d || {
+                echo "❌ Application startup failed, showing logs..."
+                $DOCKER_COMPOSE logs --tail=50
+                echo "❌ Container status:"
+                $DOCKER_COMPOSE ps
+                exit 1
+            }
+            
+            echo "⏳ Waiting for all services (90s)..."
+            sleep 90
+            
+            echo "📊 Final service status:"
             $DOCKER_COMPOSE ps
             
-            # Test critical endpoints with proper error handling
+            # FIXED: Test endpoints with wget instead of curl
             echo "🔍 Testing service endpoints..."
             
-            # Test Gateway (most critical)
-            echo "  Testing Gateway API..."
-            if timeout 60 bash -c 'until wget -q --spider http://localhost:8080/health; do echo "    Waiting for gateway..."; sleep 3; done'; then
+            # Test Gateway with timeout and better error handling
+            echo "  Testing Gateway API (http://localhost:8080/health)..."
+            if timeout 60 bash -c 'while ! wget -q --spider http://localhost:8080/health 2>/dev/null; do echo "    Waiting for gateway..."; sleep 5; done'; then
                 echo "    ✅ Gateway API is responding"
             else
-                echo "    ❌ Gateway API failed to start"
-                echo "    Gateway logs:"
-                $DOCKER_COMPOSE logs --tail=20 gateway
+                echo "    ❌ Gateway API failed - checking logs:"
+                $DOCKER_COMPOSE logs --tail=20 gateway || echo "Gateway container not found"
             fi
             
-            # Test Web Application
-            echo "  Testing Web Application..."
-            if timeout 60 bash -c 'until wget -q --spider http://localhost:3000; do echo "    Waiting for web app..."; sleep 3; done'; then
+            # Test Web Application  
+            echo "  Testing Web Application (http://localhost:3000)..."
+            if timeout 60 bash -c 'while ! wget -q --spider http://localhost:3000 2>/dev/null; do echo "    Waiting for web app..."; sleep 5; done'; then
                 echo "    ✅ Web Application is responding"
             else
-                echo "    ❌ Web Application failed to start"
-                echo "    Web app logs:"
-                $DOCKER_COMPOSE logs --tail=20 web
+                echo "    ❌ Web Application failed - checking logs:"
+                $DOCKER_COMPOSE logs --tail=20 web || echo "Web container not found"
             fi
             
-            # Final service status
-            echo "📊 Final service status:"
-            $DOCKER_COMPOSE ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
-            
-            # Show service URLs
             echo ""
             echo "🌐 Application URLs:"
             echo "  Frontend: http://${{ secrets.EC2_HOST }}:3000"
-            echo "  API Gateway: http://${{ secrets.EC2_HOST }}:8080"
-            echo "  API Health: http://${{ secrets.EC2_HOST }}:8080/health"
+            echo "  API Gateway: http://${{ secrets.EC2_HOST }}:8080" 
+            echo "  Health Check: http://${{ secrets.EC2_HOST }}:8080/health"
             echo ""
+            
+            echo "📊 Final container status:"
+            $DOCKER_COMPOSE ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" || $DOCKER_COMPOSE ps
+            
+            # Show any failed containers
+            FAILED_CONTAINERS=$($DOCKER_COMPOSE ps -q --filter "status=exited")
+            if [ ! -z "$FAILED_CONTAINERS" ]; then
+                echo "❌ Failed containers found:"
+                $DOCKER_COMPOSE ps --filter "status=exited"
+                echo "📋 Logs from failed containers:"
+                for container in $FAILED_CONTAINERS; do
+                    echo "--- Logs for $(docker inspect --format='{{.Name}}' $container) ---"
+                    docker logs --tail=20 $container || echo "No logs available"
+                    echo ""
+                done
+            else
+                echo "✅ All containers are running"
+            fi
             
             echo "🎉 ${{ steps.env.outputs.environment }} deployment completed!"
 
