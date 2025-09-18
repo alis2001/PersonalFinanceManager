@@ -224,14 +224,14 @@ jobs:
             # Database Configuration
             DB_HOST=postgres
             DB_PORT=5432
-            DB_NAME=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_NAME || secrets.DB_NAME }}
-            DB_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_USER || secrets.DB_USER }}
+            DB_NAME=finance_tracker
+            DB_USER=finance_user
             DB_PASSWORD=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_PASSWORD || secrets.DB_PASSWORD }}
             DB_EXTERNAL_PORT=5433
             
-            # PostgreSQL
-            POSTGRES_DB=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_NAME || secrets.DB_NAME }}
-            POSTGRES_USER=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_USER || secrets.DB_USER }}
+            # PostgreSQL - FIXED CONSISTENCY  
+            POSTGRES_DB=finance_tracker
+            POSTGRES_USER=finance_user
             POSTGRES_PASSWORD=${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_PASSWORD || secrets.DB_PASSWORD }}
             
             # Redis
@@ -383,7 +383,7 @@ jobs:
                   - "${DB_EXTERNAL_PORT}:5432"
                 volumes:
                   - postgres_data:/var/lib/postgresql/data
-                  - ./infrastructure/database/init:/docker-entrypoint-initdb.d
+                  - ./infrastructure/database/init:/docker-entrypoint-initdb.d:ro
                 networks:
                   - finance-network
                 restart: unless-stopped

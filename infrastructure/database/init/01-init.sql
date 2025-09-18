@@ -64,6 +64,18 @@ CREATE TABLE email_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- MISSING TABLE - Default categories table (CRITICAL FIX)
+CREATE TABLE default_categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    color VARCHAR(7) NOT NULL,
+    icon VARCHAR(50),
+    type category_type NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Categories table
 CREATE TABLE categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -142,6 +154,33 @@ CREATE TABLE budgets (
     UNIQUE(user_id, category_id, period, start_date)
 );
 
+-- MISSING DATA - Insert default categories (CRITICAL FIX)
+INSERT INTO default_categories (name, description, color, icon, type) VALUES
+-- Expense Categories
+('Food & Dining', 'Restaurants, groceries, food delivery', '#FF6B35', '🍽️', 'expense'),
+('Transportation', 'Gas, public transit, ride-sharing, car maintenance', '#4ECDC4', '🚗', 'expense'),
+('Shopping', 'Clothing, electronics, general shopping', '#45B7D1', '🛍️', 'expense'),
+('Entertainment', 'Movies, concerts, games, subscriptions', '#96CEB4', '🎬', 'expense'),
+('Bills & Utilities', 'Electric, water, internet, phone bills', '#FFEAA7', '📄', 'expense'),
+('Healthcare', 'Medical, dental, pharmacy, insurance', '#DDA0DD', '❤️', 'expense'),
+('Education', 'Books, courses, tuition, training', '#98D8C8', '📚', 'expense'),
+('Travel', 'Flights, hotels, vacation expenses', '#F7DC6F', '✈️', 'expense'),
+('Home & Garden', 'Rent, mortgage, home improvement, garden', '#BB8FCE', '🏠', 'expense'),
+('Personal Care', 'Haircuts, cosmetics, gym, wellness', '#85C1E9', '✨', 'expense'),
+('Gifts & Donations', 'Presents, charity, donations', '#F8C471', '🎁', 'expense'),
+('Business', 'Office supplies, business meals, tools', '#82E0AA', '💼', 'expense'),
+('Other Expenses', 'Miscellaneous and uncategorized expenses', '#D5DBDB', '📝', 'expense'),
+
+-- Income Categories
+('Salary', 'Regular employment income', '#27AE60', '💰', 'income'),
+('Freelance', 'Contract and freelance work', '#2ECC71', '💼', 'income'),
+('Business Income', 'Revenue from business activities', '#58D68D', '📈', 'income'),
+('Investment Returns', 'Dividends, capital gains, interest', '#A9DFBF', '📊', 'income'),
+('Rental Income', 'Property rental earnings', '#7DCEA0', '🏠', 'income'),
+('Side Hustle', 'Additional income sources', '#52C785', '⚡', 'income'),
+('Gifts & Bonuses', 'Monetary gifts, work bonuses, rewards', '#76D7C4', '🎁', 'income'),
+('Other Income', 'Miscellaneous income sources', '#85C1E9', '➕', 'income');
+
 -- Indexes for better performance
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_status ON users(status);
@@ -163,6 +202,8 @@ CREATE INDEX idx_email_logs_created_at ON email_logs(created_at);
 CREATE INDEX idx_categories_user_id ON categories(user_id);
 CREATE INDEX idx_categories_type ON categories(type);
 CREATE INDEX idx_categories_is_active ON categories(is_active);
+CREATE INDEX idx_default_categories_type ON default_categories(type);
+CREATE INDEX idx_default_categories_active ON default_categories(is_active);
 
 CREATE INDEX idx_expenses_user_id ON expenses(user_id);
 CREATE INDEX idx_expenses_category_id ON expenses(category_id);
@@ -184,6 +225,35 @@ CREATE INDEX idx_budgets_user_id ON budgets(user_id);
 CREATE INDEX idx_budgets_category_id ON budgets(category_id);
 CREATE INDEX idx_budgets_period ON budgets(period);
 
+-- MISSING FUNCTIONS - Fix the ambiguous column reference issue (CRITICAL FIX)
+CREATE OR REPLACE FUNCTION copy_default_categories_to_user(new_user_id UUID)
+RETURNS VOID AS $func$
+BEGIN
+    INSERT INTO categories (user_id, name, description, color, icon, type, is_default, is_active)
+    SELECT 
+        new_user_id,           -- Use parameter explicitly to avoid ambiguity
+        dc.name,
+        dc.description,
+        dc.color,
+        dc.icon,
+        dc.type,
+        TRUE,                  -- Mark as default for this user
+        dc.is_active
+    FROM default_categories dc
+    WHERE dc.is_active = TRUE
+    ON CONFLICT (user_id, name) DO NOTHING;
+END;
+$func$ LANGUAGE plpgsql;
+
+-- MISSING TRIGGER FUNCTION (CRITICAL FIX)
+CREATE OR REPLACE FUNCTION trigger_add_default_categories()
+RETURNS TRIGGER AS $trigger$
+BEGIN
+    PERFORM copy_default_categories_to_user(NEW.id);
+    RETURN NEW;
+END;
+$trigger$ LANGUAGE plpgsql;
+
 -- Triggers for updated_at columns
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -199,3 +269,9 @@ CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON categories FOR EACH
 CREATE TRIGGER update_expenses_updated_at BEFORE UPDATE ON expenses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_income_updated_at BEFORE UPDATE ON income FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_budgets_updated_at BEFORE UPDATE ON budgets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- MISSING TRIGGER - Create the trigger that was causing the error (CRITICAL FIX)
+CREATE TRIGGER after_user_insert
+    AFTER INSERT ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION trigger_add_default_categories();

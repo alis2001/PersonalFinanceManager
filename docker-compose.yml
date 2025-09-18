@@ -18,11 +18,11 @@ services:
       - "${DB_EXTERNAL_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/database/init:/docker-entrypoint-initdb.d
+      - ./infrastructure/database/init:/docker-entrypoint-initdb.d:ro
     networks:
       - finance-network
     restart: unless-stopped
-    # Optimized health check
+    # Fixed health check to match environment variables
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 15s
