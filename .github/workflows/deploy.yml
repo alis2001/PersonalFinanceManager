@@ -544,6 +544,7 @@ jobs:
                   - DB_USER=${DB_USER}
                   - DB_PASSWORD=${DB_PASSWORD}
                   - REQUEST_TIMEOUT=60000
+                  - AUTH_SERVICE_URL=http://auth:3000
                 networks:
                   - finance-network
                 restart: unless-stopped
@@ -572,6 +573,7 @@ jobs:
                   - DB_USER=${DB_USER}
                   - DB_PASSWORD=${DB_PASSWORD}
                   - REQUEST_TIMEOUT=60000
+                  - AUTH_SERVICE_URL=http://auth:3000
                 networks:
                   - finance-network
                 restart: unless-stopped
@@ -600,6 +602,7 @@ jobs:
                   - DB_USER=${DB_USER}
                   - DB_PASSWORD=${DB_PASSWORD}
                   - REQUEST_TIMEOUT=60000
+                  - AUTH_SERVICE_URL=http://auth:3000
                 networks:
                   - finance-network
                 restart: unless-stopped
