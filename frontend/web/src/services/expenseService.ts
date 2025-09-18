@@ -56,7 +56,7 @@ interface ExpenseResponse {
 }
 
 class ExpenseService {
-  private baseURL = 'http://localhost:8080';
+  private baseURL = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:8080';
   private expenseURL = `${this.baseURL}/api/expenses`;
 
   private getAuthHeaders(): Record<string, string> {

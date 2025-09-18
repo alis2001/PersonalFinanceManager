@@ -21,8 +21,9 @@ interface CategoryResponse {
 }
 
 class CategoryService {
-  private baseURL = 'http://localhost:8080';
+  private baseURL = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:8080';
   private categoryURL = `${this.baseURL}/api/categories`;
+  
 
   private getAuthHeaders(): Record<string, string> {
     const token = localStorage.getItem('accessToken');

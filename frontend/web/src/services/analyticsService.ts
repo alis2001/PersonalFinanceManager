@@ -43,7 +43,7 @@ interface AnalyticsResponse {
 }
 
 class AnalyticsService {
-  private baseURL = 'http://localhost:8080';
+  private baseURL = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:8080';
   private analyticsURL = `${this.baseURL}/api/analytics`;
 
   private getAuthHeaders(): Record<string, string> {
@@ -307,7 +307,6 @@ class AnalyticsService {
     return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
   }
 
-  // Date formatting helper
   formatDate(date: string | Date): string {
     const d = typeof date === 'string' ? new Date(date) : date;
     return d.toLocaleDateString('en-US', {
