@@ -7,19 +7,20 @@ const Welcome: React.FC = () => {
   return (
     <div style={{
       minHeight: '100vh',
+      maxHeight: '100vh',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      justifyContent: 'flex-start',
+      justifyContent: 'center',
       backgroundColor: '#1a1a1a',
       color: 'white',
       padding: '20px',
-      paddingTop: '5vh'
+      overflow: 'hidden'
     }}>
       <h1 style={{ 
-        fontSize: '8rem', 
-        marginBottom: '15vh',
-        marginTop: '12vh',
+        fontSize: 'clamp(2.5rem, 7vw, 4.5rem)', 
+        marginBottom: 'clamp(6vh, 8vh, 10vh)',
+        marginTop: '0',
         textAlign: 'center',
         textShadow: '0 0 15px #ffffff, 0 0 30px #ffffff, 0 0 45px #ffffff',
         animation: 'relaxedWave 6s ease-in-out infinite',
