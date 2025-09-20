@@ -85,7 +85,7 @@ services:
       timeout: 30s
       retries: 3
 
-  # API Gateway - FIXED WITH TIMEOUT CONFIGURATION
+  # API Gateway - BUILD FROM LOCAL CODE
   gateway:
     build:
       context: ./services/gateway
@@ -145,9 +145,11 @@ services:
         reservations:
           memory: 256M
 
-  # Node.js Microservices with Timeout Configuration
+  # Node.js Microservices - BUILD FROM LOCAL CODE
   auth:
-    image: alis2001/finance-auth:v3
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
     container_name: finance-auth
     env_file:
       - .env
@@ -202,7 +204,9 @@ services:
           memory: 256M
 
   expense:
-    image: alis2001/finance-expense:v3
+    build:
+      context: ./services/expense
+      dockerfile: Dockerfile
     container_name: finance-expense
     env_file:
       - .env
@@ -242,7 +246,9 @@ services:
           memory: 512M
 
   income:
-    image: alis2001/finance-income:v3
+    build:
+      context: ./services/income
+      dockerfile: Dockerfile
     container_name: finance-income
     env_file:
       - .env
@@ -282,7 +288,9 @@ services:
           memory: 512M
 
   category:
-    image: alis2001/finance-category:v3
+    build:
+      context: ./services/category
+      dockerfile: Dockerfile
     container_name: finance-category
     env_file:
       - .env
@@ -315,9 +323,11 @@ services:
         limits:
           memory: 512M
 
-  # Analytics Service
+  # Analytics Service - BUILD FROM LOCAL CODE
   analytics:
-    image: alis2001/finance-analytics:v3
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile
     container_name: finance-analytics-api
     env_file:
       - .env
@@ -357,9 +367,11 @@ services:
         reservations:
           memory: 512M
 
-  # C++ Engines with Timeout Configuration
+  # C++ Engines - BUILD FROM LOCAL CODE
   analytics-engine:
-    image: alis2001/finance-analytics-engine:v3
+    build:
+      context: ./services/analytics-engine
+      dockerfile: Dockerfile
     container_name: finance-analytics
     env_file:
       - .env
@@ -391,7 +403,9 @@ services:
           memory: 512M
 
   reporting-engine:
-    image: alis2001/finance-reporting-engine:v3
+    build:
+      context: ./services/reporting-engine
+      dockerfile: Dockerfile
     container_name: finance-reporting
     env_file:
       - .env
@@ -423,7 +437,9 @@ services:
           memory: 512M
 
   ml-engine:
-    image: alis2001/finance-ml-engine:v3
+    build:
+      context: ./services/ml-engine
+      dockerfile: Dockerfile
     container_name: finance-ml
     env_file:
       - .env
@@ -456,15 +472,20 @@ services:
         reservations:
           memory: 512M
 
+  # Frontend Web Application - BUILD FROM LOCAL CODE
   web:
-    image: alis2001/finance-web:v4
+    build:
+      context: ./frontend/web
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: http://localhost:8080/api
     container_name: finance-web
     env_file:
       - .env
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=${APP_ENV}
+      - NODE_ENV=development
     networks:
       - finance-network
     restart: unless-stopped
