@@ -15,6 +15,11 @@ on:
         options:
         - staging
         - production
+      rotate_secrets:
+        description: 'Update secrets safely (no data loss)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   DOCKER_REGISTRY: alis2001
@@ -764,6 +769,65 @@ jobs:
           target: "/home/ubuntu/finance-tracker/"
           overwrite: true
 
+      # NEW: Smart Secret Management - No Data Loss
+      - name: Handle Secret Rotation Safely
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/finance-tracker
+            
+            echo "🔐 Starting safe secret management..."
+            
+            # Get new passwords from deployment
+            NEW_DB_PASSWORD="${{ steps.env.outputs.environment == 'production' && secrets.PROD_DB_PASSWORD || secrets.DB_PASSWORD }}"
+            NEW_JWT_SECRET="${{ steps.env.outputs.environment == 'production' && secrets.PROD_JWT_SECRET || secrets.JWT_SECRET }}"
+            
+            # Check if PostgreSQL container exists and is running
+            if docker ps --format "{{.Names}}" | grep -q "finance-postgres"; then
+              echo "📊 Existing database detected - checking for password changes..."
+              
+              # Get current password from environment file
+              if [ -f .env ]; then
+                CURRENT_DB_PASSWORD=$(grep "^DB_PASSWORD=" .env 2>/dev/null | cut -d= -f2 || echo "")
+                
+                if [ "$CURRENT_DB_PASSWORD" != "$NEW_DB_PASSWORD" ] || [ "${{ github.event.inputs.rotate_secrets }}" = "true" ]; then
+                  echo "🔄 Password rotation needed - updating safely..."
+                  echo "Password rotation needed" > /tmp/deployment.log
+                  
+                  # Update password in running PostgreSQL database
+                  echo "  Updating database user password..."
+                  if docker exec finance-postgres psql -U postgres -d postgres -c "ALTER USER finance_user PASSWORD '$NEW_DB_PASSWORD';" 2>/dev/null; then
+                    echo "  ✅ Database password updated successfully"
+                    
+                    # Update environment file with new password
+                    sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=$NEW_DB_PASSWORD/" .env
+                    sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$NEW_DB_PASSWORD/" .env
+                    
+                    echo "  ✅ Environment files updated"
+                    echo "  🔄 Will restart services after deployment"
+                  else
+                    echo "  ⚠️ Could not update database password - will handle during deployment"
+                  fi
+                else
+                  echo "  ✅ Database password unchanged"
+                fi
+              else
+                echo "  🆕 Fresh deployment detected"
+              fi
+            else
+              echo "🆕 No existing database - fresh deployment"
+            fi
+            
+            echo "✅ Secret management completed safely"
+            
+            # Create status file for deployment step
+            if [ ! -f /tmp/deployment.log ]; then
+              echo "Normal deployment" > /tmp/deployment.log
+            fi
+
       - name: Deploy to ${{ steps.env.outputs.environment }}
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -912,28 +976,51 @@ jobs:
             fi
             
             echo "🚀 Starting application services..."
-            if ! $DOCKER_COMPOSE up -d; then
-                echo "❌ Application startup failed, showing diagnostic info..."
+            echo "🚀 Starting application services..."
+            # Smart service startup - handle password rotation
+            if grep -q "Password rotation needed" /tmp/deployment.log 2>/dev/null || [ "${{ github.event.inputs.rotate_secrets }}" = "true" ]; then
+                echo "🔄 Handling secret rotation - smart restart..."
                 
-                # Show logs for failed services
-                echo "=== Container Status ==="
-                $DOCKER_COMPOSE ps
+                # Start/restart services that need new passwords
+                echo "  Starting database-dependent services with new secrets..."
+                $DOCKER_COMPOSE up -d auth expense income category analytics
                 
-                echo "=== Recent Logs ==="
-                $DOCKER_COMPOSE logs --tail=30
+                # Wait for auth service to be healthy
+                echo "  Waiting for auth service to stabilize..."
+                sleep 30
                 
-                echo "=== Failed Container Details ==="
-                FAILED_CONTAINERS=$($DOCKER_COMPOSE ps -q --filter "status=exited" 2>/dev/null || echo "")
-                if [ ! -z "$FAILED_CONTAINERS" ]; then
-                    for container in $FAILED_CONTAINERS; do
-                        container_name=$(docker inspect --format='{{.Name}}' $container 2>/dev/null || echo $container)
-                        echo "--- Logs for $container_name ---"
-                        docker logs --tail=20 $container 2>/dev/null || echo "No logs available"
-                        echo ""
-                    done
+                # Then start gateway (depends on auth)
+                $DOCKER_COMPOSE up -d gateway
+                
+                # Finally start web
+                $DOCKER_COMPOSE up -d web
+                
+                echo "  ✅ Secret rotation deployment completed"
+            else
+                echo "🚀 Starting application services (normal deployment)..."
+                if ! $DOCKER_COMPOSE up -d; then
+                    echo "❌ Application startup failed, showing diagnostic info..."
+                    
+                    # Show logs for failed services
+                    echo "=== Container Status ==="
+                    $DOCKER_COMPOSE ps
+                    
+                    echo "=== Recent Logs ==="
+                    $DOCKER_COMPOSE logs --tail=30
+                    
+                    echo "=== Failed Container Details ==="
+                    FAILED_CONTAINERS=$($DOCKER_COMPOSE ps -q --filter "status=exited" 2>/dev/null || echo "")
+                    if [ ! -z "$FAILED_CONTAINERS" ]; then
+                        for container in $FAILED_CONTAINERS; do
+                            container_name=$(docker inspect --format='{{.Name}}' $container 2>/dev/null || echo $container)
+                            echo "--- Logs for $container_name ---"
+                            docker logs --tail=20 $container 2>/dev/null || echo "No logs available"
+                            echo ""
+                        done
+                    fi
+                    
+                    exit 1
                 fi
-                
-                exit 1
             fi
             
             echo "⏳ Waiting for all services (90s)..."
@@ -1053,7 +1140,36 @@ jobs:
                 echo "    ❌ Database is unhealthy"
                 HEALTH_STATUS="UNHEALTHY"
             fi
-            
+            # NEW: Verify Secret Rotation Success
+            if grep -q "Password rotation needed" /tmp/deployment.log 2>/dev/null; then
+                echo "  🔐 Verifying secret rotation..."
+                
+                # Test auth service database connection
+                if $DOCKER_COMPOSE exec -T auth node -e "
+                  const { Pool } = require('pg');
+                  const db = new Pool({
+                    host: 'postgres',
+                    port: 5432,
+                    database: '${POSTGRES_DB}',
+                    user: '${POSTGRES_USER}',
+                    password: '${POSTGRES_PASSWORD}'
+                  });
+                  db.query('SELECT 1').then(() => {
+                    console.log('AUTH_DB_SUCCESS');
+                    process.exit(0);
+                  }).catch(() => process.exit(1));
+                " 2>/dev/null | grep -q "AUTH_DB_SUCCESS"; then
+                    echo "    ✅ Auth service connects with new password"
+                else
+                    echo "    ⚠️ Auth service password verification failed"
+                    HEALTH_STATUS="UNHEALTHY"
+                fi
+                
+                # Clean up deployment log
+                rm -f /tmp/deployment.log
+                echo "    ✅ Secret rotation verification completed"
+            fi
+
             echo ""
             echo "🌐 Application URLs:"
             echo "  Frontend: http://${{ secrets.EC2_HOST }}:3000"
