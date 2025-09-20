@@ -1,16 +1,16 @@
 """
-Receipt Processing Service Configuration - Matching Existing Architecture
+Enhanced Receipt Processing Service Configuration
 Location: services/receipt-processor/src/config/settings.py
 """
 
 import os
-from typing import List
+from typing import List, Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, validator
 
 
 class Settings(BaseSettings):
-    """Receipt processing service settings - matches existing service patterns"""
+    """Enhanced receipt processing service settings with OCR and AI capabilities"""
     
     # Application Info
     VERSION: str = "1.0.0"
@@ -43,68 +43,111 @@ class Settings(BaseSettings):
     EXPENSE_SERVICE_URL: str = Field(default="http://expense:3000", env="EXPENSE_SERVICE_URL")
     CATEGORY_SERVICE_URL: str = Field(default="http://category:3000", env="CATEGORY_SERVICE_URL")
     
+    # =====================================================
+    # RECEIPT PROCESSING SPECIFIC CONFIGURATIONS
+    # =====================================================
+    
+    # Claude AI Configuration
+    ANTHROPIC_API_KEY: str = Field(default="", env="ANTHROPIC_API_KEY")
+    CLAUDE_MODEL: str = Field(default="claude-3-5-sonnet-20241022")
+    CLAUDE_MAX_TOKENS: int = Field(default=4000)
+    CLAUDE_TEMPERATURE: float = Field(default=0.1)
+    
+    # Backup AI Configuration (Groq/OpenAI)
+    OPENAI_API_KEY: str = Field(default="", env="OPENAI_API_KEY")
+    GROQ_API_KEY: str = Field(default="", env="GROQ_API_KEY")
+    BACKUP_MODEL: str = Field(default="gpt-4o-mini")
+    
     # File Upload Configuration
-    MAX_FILE_SIZE: int = Field(default=10 * 1024 * 1024)  # 10MB
-    ALLOWED_EXTENSIONS: List[str] = Field(default=[
-        ".jpg", ".jpeg", ".png",  # Images
-        ".pdf",                   # PDF documents
-        ".txt",                   # Text files
-        ".xlsx", ".xls",          # Excel files
-        ".csv"                    # CSV files
+    MAX_FILE_SIZE_MB: int = Field(default=10)  # 10MB max per file
+    MAX_FILE_SIZE_BYTES: int = Field(default=10 * 1024 * 1024)
+    ALLOWED_IMAGE_EXTENSIONS: List[str] = Field(default=[
+        ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif"
     ])
+    ALLOWED_DOCUMENT_EXTENSIONS: List[str] = Field(default=[
+        ".pdf", ".xlsx", ".xls", ".csv"
+    ])
+    
+    # File Storage Configuration
     UPLOAD_DIR: str = Field(default="uploads")
-    
-    # Transaction Processing Configuration
-    MAX_TRANSACTIONS_PER_FILE: int = Field(default=5)
-    MIN_TRANSACTION_AMOUNT: float = Field(default=0.01)  # Minimum amount to consider
-    
-    # File Type Processing Limits
-    MAX_PDF_PAGES: int = Field(default=10)  # Maximum PDF pages to process
-    MAX_EXCEL_ROWS: int = Field(default=1000)  # Maximum Excel rows to scan
-    MAX_TEXT_LENGTH: int = Field(default=50000)  # Maximum text file length
+    PROCESSED_DIR: str = Field(default="processed")
+    FAILED_DIR: str = Field(default="failed")
+    TEMP_DIR: str = Field(default="temp")
     
     # OCR Configuration
-    OCR_LANGUAGES: List[str] = Field(default=["en", "fa", "ar"])  # English, Persian, Arabic
-    OCR_GPU: bool = Field(default=False)
-    
-    # AI Processing Configuration
-    ANTHROPIC_API_KEY: str = Field(default="", env="ANTHROPIC_API_KEY")
-    GROQ_API_KEY: str = Field(default="", env="GROQ_API_KEY")
-    AI_TIMEOUT: int = Field(default=30)
+    OCR_LANGUAGES: List[str] = Field(default=["en", "ar", "fa"])  # English, Arabic, Persian
+    OCR_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
+    IMAGE_PREPROCESSING: bool = Field(default=True)
+    OCR_BATCH_SIZE: int = Field(default=1)
     
     # Processing Configuration
-    PROCESSING_TIMEOUT: int = Field(default=120)  # 2 minutes
-    RETRY_ATTEMPTS: int = Field(default=3)
-    REQUEST_TIMEOUT: int = Field(default=60)
+    MAX_TRANSACTIONS_PER_FILE: int = Field(default=5)
+    PROCESSING_TIMEOUT_SECONDS: int = Field(default=120)  # 2 minutes
+    AI_PROCESSING_TIMEOUT: int = Field(default=60)  # 1 minute for AI processing
+    OCR_PROCESSING_TIMEOUT: int = Field(default=30)  # 30 seconds for OCR
     
-    # Cache Configuration - MATCHING ANALYTICS SERVICE
-    CACHE_TTL_DEFAULT: int = Field(default=3600)  # 1 hour
-    CACHE_TTL_SHORT: int = Field(default=300)     # 5 minutes
-    CACHE_TTL_LONG: int = Field(default=86400)    # 24 hours
+    # Rate Limiting
+    UPLOADS_PER_MINUTE: int = Field(default=10)
+    UPLOADS_PER_HOUR: int = Field(default=100)
+    PROCESSING_QUEUE_SIZE: int = Field(default=50)
+    
+    # Retry Configuration
+    MAX_RETRY_ATTEMPTS: int = Field(default=3)
+    RETRY_DELAY_SECONDS: int = Field(default=5)
+    AI_FALLBACK_ENABLED: bool = Field(default=True)
+    
+    # Cache Configuration
+    CACHE_TTL_RESULTS: int = Field(default=3600)  # 1 hour
+    CACHE_TTL_FILES: int = Field(default=86400)   # 24 hours
     CACHE_PREFIX: str = Field(default="receipt")
     
-    # CORS Configuration - MATCHING EXISTING PATTERN
-    ALLOWED_ORIGINS: List[str] = Field(default=[
-        "http://localhost:3000",  # React frontend
-        "http://localhost:8080",  # Gateway
-        "*"  # Allow all for development
-    ])
-    
-    # Rate Limiting - MATCHING EXISTING PATTERN
-    RATE_LIMIT_REQUESTS: int = Field(default=100)
-    RATE_LIMIT_WINDOW: int = Field(default=900)  # 15 minutes
-    
-    # Logging Configuration - EXACT SAME AS OTHER SERVICES
+    # Monitoring & Logging
     LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")
+    ENABLE_FILE_LOGGING: bool = Field(default=True)
+    LOG_RETENTION_DAYS: int = Field(default=30)
+    
+    # Performance Configuration
+    CONCURRENT_PROCESSING_LIMIT: int = Field(default=5)
+    MEMORY_LIMIT_MB: int = Field(default=512)
+    
+    # Validation Configuration
+    REQUIRE_USER_APPROVAL: bool = Field(default=True)
+    AUTO_APPROVE_HIGH_CONFIDENCE: bool = Field(default=False)
+    HIGH_CONFIDENCE_THRESHOLD: float = Field(default=0.9)
+    
+    # Integration Configuration
+    CREATE_EXPENSES_AUTOMATICALLY: bool = Field(default=False)
+    SUGGEST_CATEGORIES: bool = Field(default=True)
+    VALIDATE_AMOUNTS: bool = Field(default=True)
+    
+    # Development Configuration
+    SAVE_DEBUG_IMAGES: bool = Field(default=False)
+    SAVE_OCR_OUTPUT: bool = Field(default=False)
+    ENABLE_TEST_MODE: bool = Field(default=False)
+    
+    @validator('MAX_FILE_SIZE_BYTES', always=True)
+    def set_file_size_bytes(cls, v, values):
+        if 'MAX_FILE_SIZE_MB' in values:
+            return values['MAX_FILE_SIZE_MB'] * 1024 * 1024
+        return v
+    
+    @validator('ALLOWED_IMAGE_EXTENSIONS', 'ALLOWED_DOCUMENT_EXTENSIONS')
+    def lowercase_extensions(cls, v):
+        return [ext.lower() for ext in v]
+    
+    @property
+    def all_allowed_extensions(self) -> List[str]:
+        """Get all allowed file extensions"""
+        return self.ALLOWED_IMAGE_EXTENSIONS + self.ALLOWED_DOCUMENT_EXTENSIONS
     
     @property
     def database_url(self) -> str:
-        """Construct database URL - same pattern as analytics service"""
+        """Construct database URL from components"""
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
     
     @property
     def redis_url(self) -> str:
-        """Construct Redis URL - same pattern as analytics service"""
+        """Construct Redis URL from components"""
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
     
     @property
@@ -117,11 +160,38 @@ class Settings(BaseSettings):
         """Check if running in production mode"""
         return self.ENVIRONMENT.lower() == "production"
     
+    @property
+    def has_ai_config(self) -> bool:
+        """Check if AI configuration is available"""
+        return bool(self.ANTHROPIC_API_KEY or self.OPENAI_API_KEY or self.GROQ_API_KEY)
+    
+    # Directory creation helpers
+    def ensure_directories(self):
+        """Ensure all required directories exist"""
+        import os
+        directories = [
+            self.UPLOAD_DIR,
+            self.PROCESSED_DIR,
+            self.FAILED_DIR,
+            self.TEMP_DIR,
+            f"{self.UPLOAD_DIR}/images",
+            f"{self.UPLOAD_DIR}/documents",
+            f"{self.PROCESSED_DIR}/success",
+            f"{self.PROCESSED_DIR}/pending"
+        ]
+        
+        for directory in directories:
+            os.makedirs(directory, exist_ok=True)
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
 
 
-# Create settings instance
+# Create global settings instance
 settings = Settings()
+
+# Ensure directories exist on startup
+if not settings.ENABLE_TEST_MODE:
+    settings.ensure_directories()
