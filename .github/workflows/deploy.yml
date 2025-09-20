@@ -342,8 +342,8 @@ jobs:
             REACT_APP_API_URL=http://${{ secrets.EC2_HOST }}:8080/api
             REACT_APP_ANALYTICS_API_URL=http://${{ secrets.EC2_HOST }}:8080/api/analytics
             
-            # CORS Configuration
-            ALLOWED_ORIGINS=http://${{ secrets.EC2_HOST }}:3000,http://localhost:3000
+            # CORS Configuration - Fixed for Python analytics service
+            ALLOWED_ORIGINS=["http://${{ secrets.EC2_HOST }}:3000","http://localhost:3000","http://${{ secrets.EC2_HOST }}:8080","http://localhost:8080"]
             CORS_ORIGIN=http://${{ secrets.EC2_HOST }}:3000
             CORS_ORIGINS=http://${{ secrets.EC2_HOST }}:3000,http://localhost:3000
             ORIGIN=http://${{ secrets.EC2_HOST }}:3000
