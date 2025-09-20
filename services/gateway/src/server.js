@@ -15,7 +15,8 @@ const serviceUrls = {
   category: process.env.CATEGORY_SERVICE_URL || 'http://category:3000',
   expense: process.env.EXPENSE_SERVICE_URL || 'http://expense:3000',
   income: process.env.INCOME_SERVICE_URL || 'http://income:3000',
-  analytics: process.env.ANALYTICS_SERVICE_URL || 'http://analytics:8000'
+  analytics: process.env.ANALYTICS_SERVICE_URL || 'http://analytics:8000',
+  receipt: process.env.RECEIPT_SERVICE_URL || 'http://receipt-processor:8008'
 };
 
 // CORS configuration
@@ -116,7 +117,7 @@ app.use('/api/categories', createEnhancedProxy('Categories', serviceUrls.categor
 app.use('/api/expenses', createEnhancedProxy('Expenses', serviceUrls.expense, { '^/api/expenses': '' }));
 app.use('/api/income', createEnhancedProxy('Income', serviceUrls.income, { '^/api/income': '' }));
 app.use('/api/analytics', createEnhancedProxy('Analytics', serviceUrls.analytics, { '^/api/analytics': '' }));
-
+app.use('/api/receipt', createEnhancedProxy('Receipt', serviceUrls.receipt, { '^/api/receipt': '' }));
 // Body parsing AFTER proxy routes (for gateway-specific routes only)
 app.use(express.json({ 
   limit: '50mb',

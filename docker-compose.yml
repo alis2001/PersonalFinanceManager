@@ -117,6 +117,7 @@ services:
       - ANALYTICS_SERVICE_URL=http://analytics:8000
       - ANALYTICS_ENGINE_URL=http://analytics-engine:8080
       - REPORTING_ENGINE_URL=http://reporting-engine:8080
+      - RECEIPT_SERVICE_URL=http://receipt-processor:8008
       - ML_ENGINE_URL=http://ml-engine:8080
       # CORS & Security
       - ENABLE_CORS=${ENABLE_CORS}
@@ -462,6 +463,53 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
+
+  receipt-processor:
+    build:
+      context: ./services/receipt-processor
+      dockerfile: Dockerfile
+    container_name: finance-receipt-processor
+    env_file:
+      - .env
+    ports:
+      - "${RECEIPT_PROCESSOR_PORT}:8008"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - APP_ENV=${APP_ENV}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - AUTH_SERVICE_URL=http://auth:3000
+      - EXPENSE_SERVICE_URL=http://expense:3000
+      - CATEGORY_SERVICE_URL=http://category:3000
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Timeout configuration
+      - REQUEST_TIMEOUT=60000
+      - PROCESSING_TIMEOUT=120
+    networks:
+      - finance-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8008/health')"]
       interval: 30s
       timeout: 10s
       retries: 3

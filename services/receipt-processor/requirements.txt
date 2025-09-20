@@ -1,0 +1,47 @@
+# Receipt Processing Service Dependencies
+
+# FastAPI and ASGI Server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# File Processing
+python-multipart==0.0.6
+Pillow==10.1.0
+PyPDF2==3.0.1
+
+# Excel File Support
+openpyxl==3.1.2
+xlsread==1.0.6
+pandas==2.1.4
+
+# OCR Processing
+easyocr==1.7.0
+opencv-python-headless==4.8.1.78
+
+# AI Processing
+anthropic==0.7.8
+
+# Database & Caching
+asyncpg==0.29.0
+redis==5.0.1
+
+# Authentication & Security
+PyJWT==2.8.0
+python-jose[cryptography]==3.3.0
+
+# Environment & Configuration
+python-dotenv==1.0.0
+pydantic==2.5.1
+pydantic-settings==2.1.0
+
+# Monitoring & Logging
+structlog==23.2.0
+
+# HTTP Client
+httpx==0.25.2
+
+# JSON Performance
+orjson==3.9.10
+
+# File Storage
+boto3==1.34.0
