@@ -1,4 +1,4 @@
-/* Clean Professional Welcome Page - Permanent Popup */
+/* Clean Professional Welcome Page - Simplified Design */
 .welcome {
   min-height: 100vh;
   display: flex;
@@ -29,8 +29,8 @@
 .popup-content {
   text-align: center;
   color: #ffffff;
-  max-width: 900px;
-  padding: 80px;
+  max-width: 600px;
+  padding: 60px;
   position: relative;
   opacity: 1;
   transform: scale(1);
@@ -38,232 +38,129 @@
 
 /* Popup Header */
 .popup-header {
-  margin-bottom: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 80px;
 }
 
+/* Rainbow Curved Title */
 .logo-popup {
-  margin-bottom: 60px;
+  margin-bottom: 0;
   opacity: 0;
   animation: elementFadeIn 1s ease-out 0.5s forwards;
 }
 
-.popup-title {
-  font-size: 4rem;
-  font-weight: 200;
-  margin: 0 0 20px 0;
-  background: linear-gradient(45deg, #ffffff, #f0f0f0, #ffffff);
-  background-size: 200% 200%;
+.rainbow-title {
+  font-size: 5rem;
+  font-weight: 300;
+  margin: 0;
+  background: linear-gradient(
+    45deg,
+    #ff0000 0%,
+    #ff8000 14%,
+    #ffff00 28%,
+    #80ff00 42%,
+    #00ff00 56%,
+    #00ff80 70%,
+    #00ffff 84%,
+    #8000ff 100%
+  );
+  background-size: 300% 300%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: gradientShift 4s ease-in-out infinite;
+  animation: rainbowShift 3s ease-in-out infinite;
   letter-spacing: -0.02em;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  
+  /* Curved text effect */
+  transform: perspective(500px) rotateX(15deg);
+  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.1));
 }
 
-.title-underline {
-  width: 100px;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, #ffffff, transparent);
-  margin: 0 auto;
-  opacity: 0;
-  animation: underlineGrow 1s ease-out 1s forwards;
-}
-
-/* Slogans */
-.slogan-container {
-  margin: 70px 0;
-}
-
-.main-slogan {
-  font-size: 2.2rem;
-  font-weight: 300;
-  color: #ffffff;
-  margin-bottom: 50px;
-  opacity: 0;
-  animation: elementFadeIn 1s ease-out 1.5s forwards;
-  text-shadow: 0 2px 20px rgba(255, 255, 255, 0.1);
-  letter-spacing: 0.02em;
-}
-
-.sub-slogans {
+/* Welcome Buttons Container */
+.welcome-buttons {
   display: flex;
-  flex-direction: column;
-  gap: 25px;
-  margin: 40px 0;
-}
-
-.sub-slogan {
-  font-size: 1.2rem;
-  color: #cccccc;
-  font-weight: 300;
-  opacity: 0;
-  transform: translateY(30px);
-  margin: 0;
-  font-style: normal;
-  letter-spacing: 0.01em;
-}
-
-.sub-slogan.delay-1 {
-  animation: slideUpFadeIn 0.8s ease-out 2.2s forwards;
-}
-
-.sub-slogan.delay-2 {
-  animation: slideUpFadeIn 0.8s ease-out 2.7s forwards;
-}
-
-.sub-slogan.delay-3 {
-  animation: slideUpFadeIn 0.8s ease-out 3.2s forwards;
-}
-
-/* Popup Features */
-.popup-features {
-  display: flex;
+  gap: 30px;
   justify-content: center;
-  gap: 80px;
-  margin: 60px 0;
-  flex-wrap: wrap;
-}
-
-.popup-feature {
+  align-items: center;
   opacity: 0;
-  transform: translateY(20px);
+  animation: elementFadeIn 1s ease-out 1s forwards;
+}
+
+/* Black Button */
+.btn-black {
+  background: #000000;
   color: #ffffff;
-}
-
-.popup-feature.delay-4 {
-  animation: slideUpFadeIn 0.6s ease-out 3.7s forwards;
-}
-
-.popup-feature.delay-5 {
-  animation: slideUpFadeIn 0.6s ease-out 4s forwards;
-}
-
-.popup-feature.delay-6 {
-  animation: slideUpFadeIn 0.6s ease-out 4.3s forwards;
-}
-
-.feature-box {
-  padding: 20px 30px;
-  border: 1px solid #444444;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
+  border: 2px solid #000000;
+  padding: 18px 40px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
   transition: all 0.3s ease;
-}
-
-.feature-box:hover {
-  border-color: #666666;
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-2px);
-}
-
-.feature-box h4 {
-  margin: 0;
-  font-weight: 400;
-  font-size: 1rem;
+  min-width: 150px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #ffffff;
-}
-
-/* Loading Indicator */
-.loading-indicator {
-  margin: 60px 0 40px 0;
-  opacity: 0;
-}
-
-.loading-indicator.delay-7 {
-  animation: elementFadeIn 0.8s ease-out 4.8s forwards;
-}
-
-.loading-text {
-  font-size: 1rem;
-  color: #aaaaaa;
-  margin-bottom: 20px;
-  font-weight: 300;
-  letter-spacing: 0.02em;
-}
-
-.progress-bar {
-  width: 300px;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.1);
-  margin: 0 auto;
-  border-radius: 1px;
+  position: relative;
   overflow: hidden;
 }
 
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #ffffff, #f0f0f0);
-  width: 0;
-  border-radius: 1px;
-  animation: progressFill 1.5s ease-out 5s forwards;
+.btn-black:hover {
+  background: #333333;
+  border-color: #333333;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
 }
 
-/* Beautiful Action Buttons in Popup - Delicate Design */
-.popup-action-buttons {
-  display: flex;
-  gap: 40px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 50px;
-  opacity: 0;
+.btn-black:active {
+  transform: translateY(0);
 }
 
-.popup-action-buttons.delay-8 {
-  animation: slideUpFadeIn 0.8s ease-out 6.5s forwards;
-}
-
-.btn-primary, .btn-secondary {
-  padding: 25px 35px;
-  font-size: 1rem;
-  font-weight: 400;
-  border-radius: 8px;
+/* White Button */
+.btn-white {
+  background: #ffffff;
+  color: #000000;
+  border: 2px solid #ffffff;
+  padding: 18px 40px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
+  min-width: 150px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  text-transform: uppercase;
   letter-spacing: 0.5px;
-  min-width: 160px;
-  font-family: inherit;
   position: relative;
-  color: #ffffff;
-  border: 1px solid #444444;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
+  overflow: hidden;
 }
 
-.btn-primary:hover {
-  border-color: #666666;
-  background: rgba(255, 255, 255, 0.08);
+.btn-white:hover {
+  background: #f0f0f0;
+  border-color: #f0f0f0;
   transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 255, 255, 0.4);
 }
 
-.btn-secondary {
-  color: #ffffff;
-  border: 1px solid #444444;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-}
-
-.btn-secondary:hover {
-  border-color: #666666;
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-2px);
+.btn-white:active {
+  transform: translateY(0);
 }
 
 /* Animations */
-@keyframes elementFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
+@keyframes rainbowShift {
+  0%, 100% {
+    background-position: 0% 50%;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  50% {
+    background-position: 100% 50%;
   }
 }
 
-@keyframes slideUpFadeIn {
+@keyframes elementFadeIn {
   from {
     opacity: 0;
     transform: translateY(30px);
@@ -274,113 +171,42 @@
   }
 }
 
-@keyframes underlineGrow {
-  from {
-    opacity: 0;
-    width: 0;
-  }
-  to {
-    opacity: 1;
-    width: 100px;
-  }
-}
-
-@keyframes progressFill {
-  from {
-    width: 0;
-  }
-  to {
-    width: 100%;
-  }
-}
-
-@keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-/* Mobile Responsive */
+/* Mobile Responsiveness */
 @media (max-width: 768px) {
   .popup-content {
-    padding: 50px 30px;
+    padding: 40px 20px;
+    max-width: 90%;
   }
   
-  .popup-title {
-    font-size: 2.8rem;
+  .rainbow-title {
+    font-size: 3.5rem;
+    transform: perspective(300px) rotateX(10deg);
   }
   
-  .main-slogan {
-    font-size: 1.8rem;
-  }
-  
-  .sub-slogan {
-    font-size: 1rem;
-  }
-  
-  .popup-features {
-    gap: 40px;
+  .welcome-buttons {
     flex-direction: column;
-    align-items: center;
-  }
-  
-  .feature-box {
-    padding: 15px 25px;
-  }
-  
-  .progress-bar {
-    width: 250px;
-  }
-  
-  .popup-action-buttons {
-    flex-direction: column;
-    align-items: center;
     gap: 20px;
+    width: 100%;
   }
   
-  .btn-primary, .btn-secondary {
-    width: 250px;
+  .btn-black,
+  .btn-white {
+    width: 100%;
+    max-width: 250px;
+    min-width: unset;
+  }
+  
+  .popup-header {
+    gap: 60px;
   }
 }
 
 @media (max-width: 480px) {
-  .popup-title {
-    font-size: 2.2rem;
-  }
-  
-  .main-slogan {
-    font-size: 1.5rem;
-  }
-  
-  .sub-slogan {
-    font-size: 0.95rem;
-  }
-  
-  .popup-features {
-    gap: 30px;
-  }
-  
-  .progress-bar {
-    width: 200px;
+  .rainbow-title {
+    font-size: 2.8rem;
   }
   
   .popup-content {
-    padding: 40px 25px;
-  }
-  
-  .popup-action-buttons {
-    gap: 20px;
-  }
-  
-  .btn-primary, .btn-secondary {
-    width: 130px;
-    padding: 16px 25px;
-    font-size: 0.9rem;
+    padding: 30px 15px;
   }
 }
