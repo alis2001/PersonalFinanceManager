@@ -177,7 +177,7 @@ const Dashboard: React.FC = () => {
       <header className="dashboard-header">
         <div className="header-content">
           <div className="logo">
-            <h1>FinanceTracker</h1>
+            <h1>Rapilot</h1>
           </div>
           <div className="user-menu">
             <span className="welcome">Welcome, {user?.firstName}!</span>
