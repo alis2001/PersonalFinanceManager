@@ -117,7 +117,7 @@ app.use('/api/categories', createEnhancedProxy('Categories', serviceUrls.categor
 app.use('/api/expenses', createEnhancedProxy('Expenses', serviceUrls.expense, { '^/api/expenses': '' }));
 app.use('/api/income', createEnhancedProxy('Income', serviceUrls.income, { '^/api/income': '' }));
 app.use('/api/analytics', createEnhancedProxy('Analytics', serviceUrls.analytics, { '^/api/analytics': '' }));
-app.use('/api/receipt', createEnhancedProxy('Receipt', serviceUrls.receipt, { '^/api/receipt': '' }));
+app.use('/api/receipt', createEnhancedProxy('Receipt', serviceUrls.receipt, {}));
 // Body parsing AFTER proxy routes (for gateway-specific routes only)
 app.use(express.json({ 
   limit: '50mb',

@@ -7,7 +7,7 @@ import asyncio
 import time
 from typing import List, Dict, Any, Optional, Union
 from contextlib import asynccontextmanager
-
+import json
 import asyncpg
 import structlog
 from decimal import Decimal
@@ -309,36 +309,46 @@ async def create_receipt_transactions(job_id: str, user_id: str,
     
     transaction_ids = []
     
-    async with get_db_transaction() as conn:
-        for index, transaction_data in enumerate(transactions_data, 1):
-            query = """
-                INSERT INTO receipt_transactions (
-                    job_id, user_id, transaction_index, extracted_data, 
-                    ai_confidence, raw_text_snippet, status
-                ) VALUES ($1, $2, $3, $4, $5, $6, 'pending')
-                RETURNING id
-            """
-            
-            result = await conn.fetchrow(
-                query, job_id, user_id, index, 
-                transaction_data.get('extracted_data'),
-                transaction_data.get('confidence'),
-                transaction_data.get('raw_text_snippet')
-            )
-            
-            if result:
-                transaction_id = str(result['id'])
-                transaction_ids.append(transaction_id)
-                
-                # Log transaction creation
-                await log_processing_step(
-                    job_id, 'transaction_extraction', 'completed',
-                    f'Transaction {index} extracted',
-                    transaction_id=transaction_id
-                )
+    try:
+        logger.info(f"DEBUG: Starting transaction creation for job {job_id}")
         
-        # Update job transaction counts
-        await conn.execute('SELECT update_job_transaction_counts($1)', job_id)
+        async with get_db_transaction() as conn:
+            for index, transaction_data in enumerate(transactions_data, 1):
+                query = """
+                    INSERT INTO receipt_transactions (
+                        job_id, user_id, transaction_index, extracted_data, 
+                        ai_confidence, raw_text_snippet, status
+                    ) VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+                    RETURNING id
+                """
+                
+                result = await conn.fetchrow(
+                    query, job_id, user_id, index, 
+                    json.dumps(transaction_data.get('extracted_data')),
+                    transaction_data.get('confidence'),
+                    transaction_data.get('raw_text_snippet')
+                )
+                
+                if result:
+                    transaction_id = str(result['id'])
+                    transaction_ids.append(transaction_id)
+                    logger.info(f"DEBUG: Created transaction {transaction_id}")
+            
+            # Update job transaction counts
+            await conn.execute('SELECT update_job_transaction_counts($1)', job_id)
+            logger.info(f"DEBUG: Successfully created {len(transaction_ids)} transactions")
+        
+        # Log AFTER transaction is committed
+        for i, transaction_id in enumerate(transaction_ids, 1):
+            await log_processing_step(
+                job_id, 'transaction_extraction', 'completed',
+                f'Transaction {i} extracted',
+                transaction_id=transaction_id
+            )
+    
+    except Exception as e:
+        logger.error(f"DEBUG: Transaction creation failed: {str(e)}")
+        raise
     
     return transaction_ids
 

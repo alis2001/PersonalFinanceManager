@@ -150,23 +150,30 @@ class ReceiptService {
 
   async uploadReceipt(file: File): Promise<UploadResponse> {
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+        const formData = new FormData();
+        formData.append('file', file);
 
-      const response = await fetch(`${this.receiptURL}/upload`, {
+        const response = await fetch(`${this.receiptURL}/upload`, {
         method: 'POST',
         headers: this.getAuthHeadersWithoutContentType(),
         body: formData
-      });
+        });
 
-      const data = await this.handleResponse(response);
-      return { success: true, ...data };
+        const data = await this.handleResponse(response);
+        
+        // Map backend snake_case to frontend camelCase
+        return { 
+        success: true, 
+        jobId: data.job_id,  // Map job_id to jobId
+        job: data.job,
+        message: data.message 
+        };
     } catch (error: any) {
-      console.error('Upload receipt error:', error);
-      if (error.message === 'Token refreshed, retry request') {
+        console.error('Upload receipt error:', error);
+        if (error.message === 'Token refreshed, retry request') {
         return this.uploadReceipt(file);
-      }
-      return { success: false, error: error.message };
+        }
+        return { success: false, error: error.message };
     }
   }
 

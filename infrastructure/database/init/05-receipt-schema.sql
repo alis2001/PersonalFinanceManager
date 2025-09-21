@@ -1,5 +1,6 @@
 -- Enhanced Receipt Processing Schema for Multi-Transaction Support
 -- Location: infrastructure/database/init/05-receipt-schema.sql
+-- This file consolidates all receipt processing functionality
 
 -- Create receipt processing status enum
 CREATE TYPE receipt_status AS ENUM ('uploaded', 'processing', 'ocr_completed', 'ai_processing', 'completed', 'failed', 'approved', 'rejected');
@@ -43,6 +44,11 @@ CREATE TABLE receipt_jobs (
     transactions_processed INTEGER DEFAULT 0,
     transactions_approved INTEGER DEFAULT 0,
     
+    -- Additional columns for multi-transaction support
+    transactions_found INTEGER DEFAULT 0,
+    validation_passed BOOLEAN DEFAULT NULL,
+    validation_message TEXT,
+    
     -- File organization metadata
     upload_date DATE DEFAULT CURRENT_DATE,
     file_category VARCHAR(50) DEFAULT 'receipt', -- receipt, invoice, statement
@@ -82,8 +88,9 @@ CREATE TABLE receipt_transactions (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     
-    -- Ensure unique transaction index per job
-    UNIQUE(job_id, transaction_index)
+    -- Constraints
+    UNIQUE(job_id, transaction_index),
+    CONSTRAINT max_transactions_per_job CHECK (transaction_index BETWEEN 1 AND 5)
 );
 
 -- Receipt processing logs for detailed tracking
@@ -113,11 +120,83 @@ CREATE INDEX idx_receipt_transactions_user_status ON receipt_transactions(user_i
 CREATE INDEX idx_receipt_transactions_status ON receipt_transactions(status);
 CREATE INDEX idx_receipt_transactions_pending ON receipt_transactions(user_id, status, created_at DESC) WHERE status = 'pending';
 CREATE INDEX idx_receipt_transactions_expense ON receipt_transactions(expense_id) WHERE expense_id IS NOT NULL;
+CREATE INDEX idx_receipt_transactions_job_index ON receipt_transactions(job_id, transaction_index);
 
 -- Indexes for processing logs
 CREATE INDEX idx_receipt_logs_job_step ON receipt_processing_logs(job_id, step);
 CREATE INDEX idx_receipt_logs_transaction ON receipt_processing_logs(transaction_id) WHERE transaction_id IS NOT NULL;
 CREATE INDEX idx_receipt_logs_created ON receipt_processing_logs(created_at DESC);
+
+-- Trigger for updated_at column
+CREATE TRIGGER update_receipt_jobs_updated_at 
+    BEFORE UPDATE ON receipt_jobs 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_receipt_transactions_updated_at 
+    BEFORE UPDATE ON receipt_transactions 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to validate transaction count
+CREATE OR REPLACE FUNCTION validate_receipt_transaction_count()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Check if this would exceed 5 transactions for this job
+    IF (SELECT COUNT(*) FROM receipt_transactions WHERE job_id = NEW.job_id) >= 5 THEN
+        RAISE EXCEPTION 'Maximum 5 transactions allowed per receipt file';
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to enforce transaction limit
+CREATE TRIGGER enforce_transaction_limit
+    BEFORE INSERT ON receipt_transactions
+    FOR EACH ROW
+    EXECUTE FUNCTION validate_receipt_transaction_count();
+
+-- Function to update job transaction counts
+CREATE OR REPLACE FUNCTION update_job_transaction_counts()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Update the job's transaction counts
+    UPDATE receipt_jobs 
+    SET 
+        transactions_found = (
+            SELECT COUNT(*) 
+            FROM receipt_transactions 
+            WHERE job_id = COALESCE(NEW.job_id, OLD.job_id)
+        ),
+        transactions_processed = (
+            SELECT COUNT(*) 
+            FROM receipt_transactions 
+            WHERE job_id = COALESCE(NEW.job_id, OLD.job_id) 
+            AND status IN ('validated', 'approved', 'expense_created')
+        ),
+        updated_at = NOW()
+    WHERE id = COALESCE(NEW.job_id, OLD.job_id);
+    
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Triggers to maintain transaction counts
+CREATE TRIGGER update_job_counts_on_insert
+    AFTER INSERT ON receipt_transactions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_job_transaction_counts();
+
+CREATE TRIGGER update_job_counts_on_update
+    AFTER UPDATE ON receipt_transactions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_job_transaction_counts();
+
+CREATE TRIGGER update_job_counts_on_delete
+    AFTER DELETE ON receipt_transactions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_job_transaction_counts();
 
 -- Helper functions for transaction management
 CREATE OR REPLACE FUNCTION update_job_transaction_counts(p_job_id UUID)

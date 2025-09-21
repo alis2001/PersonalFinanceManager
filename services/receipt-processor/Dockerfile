@@ -31,8 +31,15 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY src/ ./src/
 
-# Set ownership
-RUN chown -R python:python /app
+# Create directories for EasyOCR models and temp files
+RUN mkdir -p /app/models /app/temp && \
+    chown -R python:python /app
+
+# Set HOME directory for python user - FIXES EasyOCR issue
+ENV HOME=/app
+
+RUN python -c "import easyocr; easyocr.Reader(['en'], model_storage_directory='/app/models', download_enabled=True)" && \
+    chown -R python:python /app/models
 
 # Switch to non-root user
 USER python

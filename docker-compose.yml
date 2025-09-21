@@ -478,6 +478,8 @@ services:
       context: ./services/receipt-processor
       dockerfile: Dockerfile
     container_name: finance-receipt-processor
+    volumes:
+      - ./services/receipt-processor/src:/app/src:rw 
     env_file:
       - .env
     ports:
@@ -516,9 +518,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1024M
+          memory: 4096M
         reservations:
-          memory: 512M
+          memory: 2048M
 
   # Frontend Web Application - BUILD FROM LOCAL CODE
   web:

@@ -13,7 +13,7 @@ VALUES (
     TRUE
 ) ON CONFLICT (email) DO NOTHING;
 
--- Default expense categories (FIXED UUID)
+-- Default expense categories (FIXED UUID) - Fixed conflict handling
 INSERT INTO categories (user_id, name, description, color, icon, type, is_default) VALUES
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Food & Dining', 'Restaurants, groceries, food delivery', '#FF6B35', '🍽️', 'expense', TRUE),
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Transportation', 'Gas, public transit, ride-sharing, car maintenance', '#4ECDC4', '🚗', 'expense', TRUE),
@@ -27,9 +27,10 @@ INSERT INTO categories (user_id, name, description, color, icon, type, is_defaul
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Personal Care', 'Haircuts, cosmetics, gym, wellness', '#85C1E9', '✨', 'expense', TRUE),
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Gifts & Donations', 'Presents, charity, donations', '#F8C471', '🎁', 'expense', TRUE),
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Business', 'Office supplies, business meals, tools', '#82E0AA', '💼', 'expense', TRUE),
-('00000000-0000-0000-0000-000000000001'::uuid, 'Other Expenses', 'Miscellaneous and uncategorized expenses', '#D5DBDB', '📝', 'expense', TRUE);
+('00000000-0000-0000-0000-000000000001'::uuid, 'Other Expenses', 'Miscellaneous and uncategorized expenses', '#D5DBDB', '📝', 'expense', TRUE)
+ON CONFLICT (user_id, name) DO NOTHING;
 
--- Default income categories (FIXED UUID)
+-- Default income categories (FIXED UUID) - Fixed conflict handling
 INSERT INTO categories (user_id, name, description, color, icon, type, is_default) VALUES
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Salary', 'Regular employment income', '#27AE60', '💰', 'income', TRUE),
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Freelance', 'Contract and freelance work', '#2ECC71', '💼', 'income', TRUE),
@@ -38,7 +39,8 @@ INSERT INTO categories (user_id, name, description, color, icon, type, is_defaul
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Rental Income', 'Property rental earnings', '#7DCEA0', '🏠', 'income', TRUE),
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Side Hustle', 'Additional income sources', '#52C785', '⚡', 'income', TRUE),
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Gifts & Bonuses', 'Monetary gifts, work bonuses, rewards', '#76D7C4', '🎁', 'income', TRUE),
-('00000000-0000-0000-0000-000000000001'::uuid, 'Other Income', 'Miscellaneous income sources', '#85C1E9', '➕', 'income', TRUE);
+('00000000-0000-0000-0000-000000000001'::uuid, 'Other Income', 'Miscellaneous income sources', '#85C1E9', '➕', 'income', TRUE)
+ON CONFLICT (user_id, name) DO NOTHING;
 
 -- Sample expenses for demo user (last 30 days) - FIXED UUID
 INSERT INTO expenses (user_id, category_id, amount, description, transaction_date, location) VALUES

@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     
     # Claude AI Configuration
     ANTHROPIC_API_KEY: str = Field(default="", env="ANTHROPIC_API_KEY")
-    CLAUDE_MODEL: str = Field(default="claude-3-5-sonnet-20241022")
+    CLAUDE_MODEL: str = Field(default="claude-3-haiku-20240307")
     CLAUDE_MAX_TOKENS: int = Field(default=4000)
     CLAUDE_TEMPERATURE: float = Field(default=0.1)
     

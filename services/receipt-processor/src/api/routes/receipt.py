@@ -356,7 +356,7 @@ async def get_processing_status(
             )
         
         # Verify user owns this job
-        if job_data["user_id"] != user_id:
+        if str(job_data["user_id"]) != user_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied"
@@ -639,7 +639,7 @@ async def process_receipt(
                 detail="Job not found"
             )
         
-        if job_data["user_id"] != user_id:
+        if str(job_data["user_id"]) != user_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied"
