@@ -1,3 +1,4 @@
+// frontend/web/src/components/AddExpense.tsx
 import React, { useState, useEffect } from 'react';
 import expenseService from '../services/expenseService';
 import categoryService from '../services/categoryService';
@@ -8,9 +9,27 @@ interface AddExpenseProps {
   isOpen: boolean;
   onClose: () => void;
   onExpenseAdded: () => void;
+  // NEW: Optional props for receipt integration
+  prefilledData?: {
+    amount?: number;
+    description?: string;
+    categoryId?: string;
+    transactionDate?: string;
+    location?: string;
+    notes?: string;
+  };
+  title?: string;
+  fromReceipt?: boolean;
 }
 
-const AddExpense: React.FC<AddExpenseProps> = ({ isOpen, onClose, onExpenseAdded }) => {
+const AddExpense: React.FC<AddExpenseProps> = ({ 
+  isOpen, 
+  onClose, 
+  onExpenseAdded, 
+  prefilledData, 
+  title = "Add New Expense", 
+  fromReceipt = false 
+}) => {
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
@@ -32,6 +51,30 @@ const AddExpense: React.FC<AddExpenseProps> = ({ isOpen, onClose, onExpenseAdded
       loadCategories();
     }
   }, [isOpen]);
+
+  // NEW: Initialize form with prefilled data from receipt
+  useEffect(() => {
+    if (isOpen && prefilledData) {
+      setFormData({
+        categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
+        amount: prefilledData.amount ? prefilledData.amount.toString() : '',
+        description: prefilledData.description || '',
+        transactionDate: prefilledData.transactionDate || expenseService.formatDateTimeForInput(new Date()),
+        location: prefilledData.location || '',
+        notes: prefilledData.notes || ''
+      });
+    } else if (isOpen && !prefilledData) {
+      // Reset to defaults for manual entry
+      setFormData({
+        categoryId: categories.length > 0 ? categories[0].id : '',
+        amount: '',
+        description: '',
+        transactionDate: expenseService.formatDateTimeForInput(new Date()),
+        location: '',
+        notes: ''
+      });
+    }
+  }, [isOpen, prefilledData, categories]);
 
   const loadCategories = async () => {
     setCategoriesLoading(true);
@@ -64,7 +107,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({ isOpen, onClose, onExpenseAdded
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     // Allow only numbers and decimal point
-    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+    if (value === '' || /^\d*\.\d*$/.test(value)) {
       setFormData(prev => ({ ...prev, amount: value }));
       if (error) setError('');
     }
@@ -115,15 +158,28 @@ const AddExpense: React.FC<AddExpenseProps> = ({ isOpen, onClose, onExpenseAdded
       const result = await expenseService.createExpense(expenseData);
 
       if (result.success) {
-        // Reset form
-        setFormData({
-          categoryId: categories.length > 0 ? categories[0].id : '',
-          amount: '',
-          description: '',
-          transactionDate: expenseService.formatDateTimeForInput(new Date()),
-          location: '',
-          notes: ''
-        });
+        // Reset form based on mode
+        if (prefilledData) {
+          // If from receipt, restore prefilled data for next transaction
+          setFormData({
+            categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
+            amount: prefilledData.amount ? prefilledData.amount.toString() : '',
+            description: prefilledData.description || '',
+            transactionDate: prefilledData.transactionDate || expenseService.formatDateTimeForInput(new Date()),
+            location: prefilledData.location || '',
+            notes: prefilledData.notes || ''
+          });
+        } else {
+          // Manual entry - clear all fields
+          setFormData({
+            categoryId: categories.length > 0 ? categories[0].id : '',
+            amount: '',
+            description: '',
+            transactionDate: expenseService.formatDateTimeForInput(new Date()),
+            location: '',
+            notes: ''
+          });
+        }
         
         onExpenseAdded();
         onClose();
@@ -138,14 +194,28 @@ const AddExpense: React.FC<AddExpenseProps> = ({ isOpen, onClose, onExpenseAdded
   };
 
   const handleCancel = () => {
-    setFormData({
-      categoryId: categories.length > 0 ? categories[0].id : '',
-      amount: '',
-      description: '',
-      transactionDate: expenseService.formatDateTimeForInput(new Date()),
-      location: '',
-      notes: ''
-    });
+    // Reset form based on mode
+    if (prefilledData) {
+      // If from receipt, restore prefilled data
+      setFormData({
+        categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
+        amount: prefilledData.amount ? prefilledData.amount.toString() : '',
+        description: prefilledData.description || '',
+        transactionDate: prefilledData.transactionDate || expenseService.formatDateTimeForInput(new Date()),
+        location: prefilledData.location || '',
+        notes: prefilledData.notes || ''
+      });
+    } else {
+      // Manual entry - clear all fields
+      setFormData({
+        categoryId: categories.length > 0 ? categories[0].id : '',
+        amount: '',
+        description: '',
+        transactionDate: expenseService.formatDateTimeForInput(new Date()),
+        location: '',
+        notes: ''
+      });
+    }
     setError('');
     onClose();
   };
@@ -164,7 +234,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({ isOpen, onClose, onExpenseAdded
     <div className="add-expense-overlay" onClick={handleCancel}>
       <div className="add-expense-modal" onClick={(e) => e.stopPropagation()}>
         <div className="add-expense-header">
-          <h2>Add New Expense</h2>
+          <h2>{title}{fromReceipt && <span className="receipt-badge"> 📄 From Receipt</span>}</h2>
           <button className="close-button" onClick={handleCancel}>
             ×
           </button>
@@ -206,7 +276,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({ isOpen, onClose, onExpenseAdded
               Category <span className="required">*</span>
             </label>
             {categoriesLoading ? (
-              <div className="loading-select">Loading categories...</div>
+              <div className="loading-categories">Loading categories...</div>
             ) : (
               <select
                 id="categoryId"
@@ -218,7 +288,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({ isOpen, onClose, onExpenseAdded
                 className="category-select"
               >
                 <option value="">Select a category</option>
-                {categories.map((category) => (
+                {categories.map(category => (
                   <option key={category.id} value={category.id}>
                     {category.icon} {category.name}
                   </option>
@@ -244,11 +314,12 @@ const AddExpense: React.FC<AddExpenseProps> = ({ isOpen, onClose, onExpenseAdded
                 required
                 disabled={loading}
                 className="amount-input"
+                maxLength={10}
               />
             </div>
           </div>
 
-          {/* Description Input (Optional) */}
+          {/* Description Input */}
           <div className="form-group">
             <label htmlFor="description">Description</label>
             <input

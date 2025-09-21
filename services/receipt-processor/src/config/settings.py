@@ -4,7 +4,7 @@ Location: services/receipt-processor/src/config/settings.py
 """
 
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic_settings import BaseSettings
 from pydantic import Field, validator
 

@@ -1,4 +1,4 @@
-# Receipt Processing Service - Enhanced Dependencies
+# Receipt Processing Service - Compatible Dependencies
 # Core FastAPI Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
@@ -22,6 +22,7 @@ numpy==1.24.3
 # PDF Processing
 PyPDF2==3.0.1
 pdfplumber==0.10.0
+PyMuPDF==1.23.14
 
 # Excel/Document Processing
 openpyxl==3.1.2
@@ -47,7 +48,6 @@ structlog==23.2.0
 
 # File Handling & Storage
 aiofiles==23.2.0
-magic==0.4.27
 python-magic==0.4.27
 
 # Performance & Utilities
@@ -69,10 +69,9 @@ python-dateutil==2.8.2
 # File Type Detection
 filetype==1.2.0
 
-# Async Support
-anyio==4.1.0
+# Async Support - FIXED: Compatible with FastAPI 0.104.1
+anyio>=3.7.1,<4.0.0
 
 # Development & Testing (Optional)
 pytest==7.4.3
 pytest-asyncio==0.21.1
-httpx==0.25.2
