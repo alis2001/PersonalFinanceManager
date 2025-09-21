@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';  // ← MAKE SURE THIS IS HERE
+import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import expenseService from '../services/expenseService';
 import type { Expense } from '../services/expenseService';
@@ -7,6 +7,7 @@ import AddExpense from './AddExpense';
 import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
 import ManageCategories from './ManageCategories';
+import ReceiptUpload from './ReceiptUpload'; // NEW IMPORT
 import '../styles/Dashboard.css';
 
 interface User {
@@ -41,6 +42,7 @@ const Dashboard: React.FC = () => {
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showEditExpense, setShowEditExpense] = useState(false);
   const [showManageCategories, setShowManageCategories] = useState(false);
+  const [showReceiptUpload, setShowReceiptUpload] = useState(false); // NEW STATE
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
   useEffect(() => {
@@ -132,6 +134,17 @@ const Dashboard: React.FC = () => {
     loadRecentExpenses();
   };
 
+  // NEW HANDLER FOR RECEIPT UPLOAD
+  const handleReceiptUpload = () => {
+    setShowReceiptUpload(true);
+  };
+
+  // NEW HANDLER FOR RECEIPT SUCCESS
+  const handleReceiptUploadSuccess = () => {
+    loadExpenseStats();
+    loadRecentExpenses();
+  };
+
   const handleEditExpense = (expense: Expense) => {
     setSelectedExpense(expense);
     setShowEditExpense(true);
@@ -143,9 +156,9 @@ const Dashboard: React.FC = () => {
   };
 
   const handleViewAnalytics = () => {
-  console.log('Navigating to analytics dashboard...');
-  navigate('/analytics');
-};
+    console.log('Navigating to analytics dashboard...');
+    navigate('/analytics');
+  };
 
   const handleViewAllTransactions = () => {
     navigate('/transactions');
@@ -198,9 +211,7 @@ const Dashboard: React.FC = () => {
                 <p className="stat-value">
                   {statsLoading ? '...' : formatCurrency(weeklyStats?.total || 0)}
                 </p>
-                <p className="stat-detail">
-                  {weeklyStats?.transactionCount || 0} transactions
-                </p>
+                <span className="stat-label">{weeklyStats?.transactionCount || 0} transactions</span>
               </div>
             </div>
 
@@ -211,9 +222,7 @@ const Dashboard: React.FC = () => {
                 <p className="stat-value">
                   {statsLoading ? '...' : formatCurrency(monthlyStats?.total || 0)}
                 </p>
-                <p className="stat-detail">
-                  {monthlyStats?.transactionCount || 0} transactions
-                </p>
+                <span className="stat-label">{monthlyStats?.transactionCount || 0} transactions</span>
               </div>
             </div>
 
@@ -224,28 +233,24 @@ const Dashboard: React.FC = () => {
                 <p className="stat-value">
                   {statsLoading ? '...' : formatCurrency(yearlyStats?.total || 0)}
                 </p>
-                <p className="stat-detail">
-                  {yearlyStats?.transactionCount || 0} transactions
-                </p>
+                <span className="stat-label">{yearlyStats?.transactionCount || 0} transactions</span>
               </div>
             </div>
           </div>
 
-          {monthlyStats && monthlyStats.topCategories.length > 0 && (
+          {/* Top Categories Section */}
+          {monthlyStats?.topCategories && monthlyStats.topCategories.length > 0 && (
             <div className="top-categories-section">
-              <h2>Top Spending Categories This Month</h2>
+              <h2>Top Categories This Month</h2>
               <div className="category-grid">
                 {monthlyStats.topCategories.map((category, index) => (
                   <div key={index} className="category-item">
-                    <div 
-                      className="category-icon"
-                      style={{ backgroundColor: category.color + '20', color: category.color }}
-                    >
-                      {category.icon}
-                    </div>
                     <div className="category-info">
-                      <h4>{category.name}</h4>
-                      <p className="category-amount">{formatCurrency(category.amount)}</p>
+                      <span className="category-icon">{category.icon}</span>
+                      <div>
+                        <h4>{category.name}</h4>
+                        <p className="category-amount">{formatCurrency(category.amount)}</p>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -253,12 +258,16 @@ const Dashboard: React.FC = () => {
             </div>
           )}
 
-          {/* UPDATED: Only 3 buttons, removed Add Income and + symbol */}
+          {/* UPDATED: Added Receipt Upload Button */}
           <div className="quick-actions">
             <h2>Quick Actions</h2>
             <div className="action-buttons">
                 <button className="btn-action primary" onClick={handleAddExpense}>
                 Add Expense
+                </button>
+                <button className="btn-action purple" onClick={handleReceiptUpload}>
+                <span>📸</span>
+                Upload Receipt
                 </button>
                 <button className="btn-action" onClick={handleViewAnalytics}>
                 <span>📊</span>
@@ -291,6 +300,13 @@ const Dashboard: React.FC = () => {
         isOpen={showAddExpense}
         onClose={() => setShowAddExpense(false)}
         onExpenseAdded={handleAddExpenseSuccess}
+      />
+
+      {/* NEW RECEIPT UPLOAD MODAL */}
+      <ReceiptUpload 
+        isOpen={showReceiptUpload}
+        onClose={() => setShowReceiptUpload(false)}
+        onReceiptProcessed={handleReceiptUploadSuccess}
       />
 
       {selectedExpense && (
