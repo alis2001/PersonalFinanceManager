@@ -1,5 +1,5 @@
 """
-Enhanced Receipt Processing Service Configuration
+Enhanced Receipt Processing Service Configuration - Multi-Transaction Support
 Location: services/receipt-processor/src/config/settings.py
 """
 
@@ -10,7 +10,7 @@ from pydantic import Field, validator
 
 
 class Settings(BaseSettings):
-    """Enhanced receipt processing service settings with OCR and AI capabilities"""
+    """Enhanced receipt processing service settings with multi-transaction support"""
     
     # Application Info
     VERSION: str = "1.0.0"
@@ -58,21 +58,31 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = Field(default="", env="GROQ_API_KEY")
     BACKUP_MODEL: str = Field(default="gpt-4o-mini")
     
-    # File Upload Configuration
+    # File Upload Configuration - Enhanced with specific limits per type
     MAX_FILE_SIZE_MB: int = Field(default=10)  # 10MB max per file
     MAX_FILE_SIZE_BYTES: int = Field(default=10 * 1024 * 1024)
+    
+    # Specific file type limits for database storage
+    MAX_IMAGE_SIZE_MB: int = Field(default=8)    # Images: 8MB
+    MAX_PDF_SIZE_MB: int = Field(default=12)     # PDFs: 12MB  
+    MAX_EXCEL_SIZE_MB: int = Field(default=5)    # Excel: 5MB
+    MAX_CSV_SIZE_MB: int = Field(default=3)      # CSV: 3MB
+    
     ALLOWED_IMAGE_EXTENSIONS: List[str] = Field(default=[
         ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif"
     ])
     ALLOWED_DOCUMENT_EXTENSIONS: List[str] = Field(default=[
-        ".pdf", ".xlsx", ".xls", ".csv"
+        ".pdf", ".xlsx", ".xls", ".csv", ".txt"
     ])
     
-    # File Storage Configuration
-    UPLOAD_DIR: str = Field(default="uploads")
-    PROCESSED_DIR: str = Field(default="processed")
-    FAILED_DIR: str = Field(default="failed")
-    TEMP_DIR: str = Field(default="temp")
+    # Database Storage Configuration - Enhanced for organized storage
+    ENABLE_FILE_ORGANIZATION: bool = Field(default=True)  # Organize by user/date metadata
+    STORAGE_RETENTION_DAYS: int = Field(default=90)      # Keep files for 90 days
+    COMPRESS_STORED_FILES: bool = Field(default=False)   # Enable compression for large files
+    
+    # File content validation
+    VALIDATE_FILE_INTEGRITY: bool = Field(default=True)  # Verify checksums
+    STORE_FILE_METADATA: bool = Field(default=True)      # Store additional metadata
     
     # OCR Configuration
     OCR_LANGUAGES: List[str] = Field(default=["en", "ar", "fa"])  # English, Arabic, Persian
@@ -80,11 +90,17 @@ class Settings(BaseSettings):
     IMAGE_PREPROCESSING: bool = Field(default=True)
     OCR_BATCH_SIZE: int = Field(default=1)
     
-    # Processing Configuration
+    # Multi-Transaction Processing Configuration - ENHANCED
     MAX_TRANSACTIONS_PER_FILE: int = Field(default=5)
-    PROCESSING_TIMEOUT_SECONDS: int = Field(default=120)  # 2 minutes
-    AI_PROCESSING_TIMEOUT: int = Field(default=60)  # 1 minute for AI processing
-    OCR_PROCESSING_TIMEOUT: int = Field(default=30)  # 30 seconds for OCR
+    PROCESSING_TIMEOUT_SECONDS: int = Field(default=120)  # 2 minutes total
+    AI_PROCESSING_TIMEOUT: int = Field(default=60)       # 1 minute for AI processing
+    OCR_PROCESSING_TIMEOUT: int = Field(default=30)      # 30 seconds for OCR
+    
+    # File type specific limits for content
+    MAX_PDF_PAGES: int = Field(default=10)               # Max 10 pages per PDF
+    MAX_EXCEL_ROWS: int = Field(default=500)             # Max 500 rows per Excel
+    MAX_CSV_ROWS: int = Field(default=1000)              # Max 1000 rows per CSV
+    MAX_TEXT_LENGTH: int = Field(default=50000)          # Max 50k characters for text files
     
     # Rate Limiting
     UPLOADS_PER_MINUTE: int = Field(default=10)
@@ -110,10 +126,11 @@ class Settings(BaseSettings):
     CONCURRENT_PROCESSING_LIMIT: int = Field(default=5)
     MEMORY_LIMIT_MB: int = Field(default=512)
     
-    # Validation Configuration
+    # Multi-Transaction Workflow Configuration
     REQUIRE_USER_APPROVAL: bool = Field(default=True)
     AUTO_APPROVE_HIGH_CONFIDENCE: bool = Field(default=False)
     HIGH_CONFIDENCE_THRESHOLD: float = Field(default=0.9)
+    ENABLE_SEQUENTIAL_APPROVAL: bool = Field(default=True)  # Show transactions one by one
     
     # Integration Configuration
     CREATE_EXPENSES_AUTOMATICALLY: bool = Field(default=False)
@@ -140,6 +157,17 @@ class Settings(BaseSettings):
         """Get all allowed file extensions"""
         return self.ALLOWED_IMAGE_EXTENSIONS + self.ALLOWED_DOCUMENT_EXTENSIONS
     
+    # Enhanced properties for better code compatibility
+    @property
+    def ALLOWED_EXTENSIONS(self) -> List[str]:
+        """Backward compatibility property"""
+        return self.all_allowed_extensions
+    
+    @property
+    def MAX_FILE_SIZE(self) -> int:
+        """Backward compatibility property"""
+        return self.MAX_FILE_SIZE_BYTES
+    
     @property
     def database_url(self) -> str:
         """Construct database URL from components"""
@@ -165,23 +193,51 @@ class Settings(BaseSettings):
         """Check if AI configuration is available"""
         return bool(self.ANTHROPIC_API_KEY or self.OPENAI_API_KEY or self.GROQ_API_KEY)
     
-    # Directory creation helpers
-    def ensure_directories(self):
-        """Ensure all required directories exist"""
-        import os
-        directories = [
-            self.UPLOAD_DIR,
-            self.PROCESSED_DIR,
-            self.FAILED_DIR,
-            self.TEMP_DIR,
-            f"{self.UPLOAD_DIR}/images",
-            f"{self.UPLOAD_DIR}/documents",
-            f"{self.PROCESSED_DIR}/success",
-            f"{self.PROCESSED_DIR}/pending"
-        ]
+    def get_file_size_limit(self, file_extension: str) -> int:
+        """Get file size limit in bytes for specific file type"""
+        file_ext = file_extension.lower()
         
-        for directory in directories:
-            os.makedirs(directory, exist_ok=True)
+        if file_ext in self.ALLOWED_IMAGE_EXTENSIONS:
+            return self.MAX_IMAGE_SIZE_MB * 1024 * 1024
+        elif file_ext == '.pdf':
+            return self.MAX_PDF_SIZE_MB * 1024 * 1024
+        elif file_ext in ['.xlsx', '.xls']:
+            return self.MAX_EXCEL_SIZE_MB * 1024 * 1024
+        elif file_ext in ['.csv', '.txt']:
+            return self.MAX_CSV_SIZE_MB * 1024 * 1024
+        else:
+            return self.MAX_FILE_SIZE_BYTES
+    
+    def get_storage_metadata(self, user_id: str, file_type: str, filename: str) -> Dict[str, str]:
+        """Generate metadata for database storage organization"""
+        from datetime import datetime
+        now = datetime.now()
+        
+        return {
+            "user_id": user_id,
+            "upload_date": now.strftime("%Y-%m-%d"),
+            "upload_month": now.strftime("%Y-%m"),
+            "file_category": self._categorize_file_type(file_type),
+            "original_filename": filename,
+            "storage_method": "database_bytea"
+        }
+    
+    def _categorize_file_type(self, file_extension: str) -> str:
+        """Categorize file type for organization"""
+        file_ext = file_extension.lower()
+        
+        if file_ext in self.ALLOWED_IMAGE_EXTENSIONS:
+            return "image"
+        elif file_ext == '.pdf':
+            return "pdf"
+        elif file_ext in ['.xlsx', '.xls']:
+            return "spreadsheet"
+        elif file_ext == '.csv':
+            return "data"
+        elif file_ext == '.txt':
+            return "text"
+        else:
+            return "document"
     
     class Config:
         env_file = ".env"
@@ -191,7 +247,3 @@ class Settings(BaseSettings):
 
 # Create global settings instance
 settings = Settings()
-
-# Ensure directories exist on startup
-if not settings.ENABLE_TEST_MODE:
-    settings.ensure_directories()

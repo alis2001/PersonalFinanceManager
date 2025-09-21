@@ -1,32 +1,5 @@
-"""
-AI Processing Module - Claude 3.5 Text Understanding & Structuring
-Location: services/receipt-processor/src/services/ai_processor.py
-
-FOCUSED RESPONSIBILITY: Text understanding and transaction extraction
-- Claude 3.5 Sonnet integration for text interpretation
-- Multi-language support for any extracted text
-- Transaction data structuring and validation
-- Confidence scoring and fallback handling
-- NO text extraction - only text understanding
-"""
-
-import asyncio
-import time
-import json
-import re
-from typing import Dict, List, Optional, Any, Union
-from decimal import Decimal, InvalidOperation
-from datetime import datetime, date
-import anthropic
-import structlog
-
-from ..config.settings import settings
-from ..database.connection import log_processing_step
-
-logger = structlog.get_logger(__name__)
-
 class AIProcessor:
-    """AI-powered text understanding and transaction extraction"""
+    """AI-powered text understanding and multi-transaction extraction"""
     
     def __init__(self):
         self.anthropic_client = None
@@ -45,226 +18,142 @@ class AIProcessor:
             else:
                 logger.warning("⚠️ No Anthropic API key provided")
             
-            # TODO: Add fallback clients (OpenAI, Groq, etc.) if configured
-            if settings.OPENAI_API_KEY or settings.GROQ_API_KEY:
-                self.fallback_available = True
-                logger.info("✅ Fallback AI clients available")
+            # TODO: Add fallback clients (OpenAI, Groq, etc.)
             
         except Exception as e:
-            logger.error("❌ Failed to initialize AI clients", error=str(e))
-            raise
-
-    async def process_extracted_text(self, job_id: str, extracted_text: str, 
-                                   extraction_confidence: float = 0.0,
-                                   extraction_method: str = "unknown") -> Dict[str, Any]:
+            logger.error("Failed to initialize AI clients", error=str(e))
+    
+    async def extract_transactions_from_text(self, job_id: str, text: str, filename: str) -> Dict[str, Any]:
         """
-        Process extracted text to understand and structure transaction data
+        Extract multiple transactions from text using Claude 3.5
         
-        Args:
-            job_id: Processing job ID
-            extracted_text: Clean text from extraction modules
-            extraction_confidence: Confidence from text extraction
-            extraction_method: Method used for text extraction
-            
-        Returns:
-            Dict with structured transaction data
+        Returns: {
+            "success": bool,
+            "transactions": [{"amount": float, "description": str, "date": str, ...}],
+            "confidence": float,
+            "provider": str,
+            "error": str
+        }
         """
         start_time = time.time()
         
         try:
-            logger.info("🤖 Starting AI text processing", 
-                       job_id=job_id,
-                       text_length=len(extracted_text),
-                       extraction_method=extraction_method)
+            logger.info("🤖 Starting AI transaction extraction", 
+                       job_id=job_id, text_length=len(text))
             
-            await log_processing_step(job_id, 'ai_processing', 'started', 
-                                    'Starting AI text interpretation')
+            if not self.anthropic_client:
+                return {"success": False, "error": "Claude AI client not available"}
             
-            # Pre-validate text
-            if not self._is_text_processable(extracted_text):
-                return {
-                    "success": False,
-                    "error": "Extracted text is too short or contains no meaningful content",
-                    "processing_time_ms": int((time.time() - start_time) * 1000)
-                }
+            if not text or len(text.strip()) < 10:
+                return {"success": False, "error": "Insufficient text for processing"}
             
-            # Process with Claude 3.5 (primary method)
-            if self.anthropic_client:
-                result = await self._process_with_claude(job_id, extracted_text)
-            else:
-                return {
-                    "success": False,
-                    "error": "No AI processing client available",
-                    "processing_time_ms": int((time.time() - start_time) * 1000)
-                }
+            # Create Claude prompt for multi-transaction extraction
+            prompt = self._create_transaction_extraction_prompt(text, filename)
+            
+            # Call Claude API
+            response = await self._call_claude_api(prompt)
+            
+            if not response["success"]:
+                return response
+            
+            # Parse Claude response into structured transactions
+            parsed_result = self._parse_claude_response(response["content"])
             
             processing_time_ms = int((time.time() - start_time) * 1000)
             
-            if result["success"]:
-                # Validate and structure the extracted transactions
-                validation_result = await self._validate_and_structure_transactions(
-                    job_id, result["transactions"], extraction_confidence
-                )
-                
-                result.update(validation_result)
-                
-                await log_processing_step(
-                    job_id, 'ai_processing', 'completed',
-                    f'Successfully processed {len(result["transactions"])} transactions',
-                    processing_time_ms=processing_time_ms
-                )
-                
-                logger.info("✅ AI text processing completed", 
+            if parsed_result["success"]:
+                logger.info("✅ AI transaction extraction completed", 
                            job_id=job_id,
-                           transactions_found=len(result["transactions"]),
-                           overall_confidence=result.get("overall_confidence", 0.0),
+                           transactions_found=len(parsed_result["transactions"]),
                            processing_time_ms=processing_time_ms)
-            else:
+                
                 await log_processing_step(
-                    job_id, 'ai_processing', 'failed',
-                    result.get("error", "AI processing failed"),
-                    processing_time_ms=processing_time_ms
+                    job_id, 'ai_extraction', 'completed',
+                    f'AI extracted {len(parsed_result["transactions"])} transactions',
+                    metadata={
+                        "transactions_count": len(parsed_result["transactions"]),
+                        "processing_time_ms": processing_time_ms,
+                        "confidence": parsed_result.get("confidence"),
+                        "provider": "claude-3.5-sonnet"
+                    }
                 )
-            
-            result["processing_time_ms"] = processing_time_ms
-            result["extraction_method"] = extraction_method
-            return result
+                
+                return {
+                    "success": True,
+                    "transactions": parsed_result["transactions"],
+                    "confidence": parsed_result.get("confidence", 0.8),
+                    "provider": "claude-3.5-sonnet",
+                    "processing_time_ms": processing_time_ms
+                }
+            else:
+                return parsed_result
             
         except Exception as e:
             processing_time_ms = int((time.time() - start_time) * 1000)
             error_msg = f"AI processing failed: {str(e)}"
             
+            logger.error("❌ AI transaction extraction failed", 
+                        job_id=job_id, error=str(e), processing_time_ms=processing_time_ms)
+            
             await log_processing_step(
-                job_id, 'ai_processing', 'failed',
-                error_msg,
-                processing_time_ms=processing_time_ms,
-                error_details={"error": str(e), "error_type": type(e).__name__}
+                job_id, 'ai_extraction', 'failed', error_msg,
+                error_details={"exception": str(e), "processing_time_ms": processing_time_ms}
             )
             
-            logger.error("❌ AI text processing failed", 
-                        job_id=job_id,
-                        error=str(e),
-                        processing_time_ms=processing_time_ms)
-            
-            return {
-                "success": False,
-                "error": error_msg,
-                "processing_time_ms": processing_time_ms
-            }
-
-    def _is_text_processable(self, text: str) -> bool:
-        """Check if text contains enough content to process"""
-        if not text or len(text.strip()) < 10:
-            return False
+            return {"success": False, "error": error_msg}
+    
+    def _create_transaction_extraction_prompt(self, text: str, filename: str) -> str:
+        """Create optimized prompt for Claude to extract multiple transactions"""
         
-        # Check for reasonable word count
-        words = text.split()
-        if len(words) < 3:
-            return False
-        
-        return True
+        return f"""You are an expert at extracting financial transaction data from receipt and document text. 
 
-    async def _process_with_claude(self, job_id: str, text: str) -> Dict[str, Any]:
-        """Process text with Claude 3.5 Sonnet"""
-        try:
-            # Create the prompt for transaction extraction
-            prompt = self._create_extraction_prompt(text)
-            
-            # Call Claude API
-            response = await asyncio.get_event_loop().run_in_executor(
-                None,
-                self._call_claude_api,
-                prompt
-            )
-            
-            # Parse Claude's response
-            parsed_result = self._parse_claude_response(response)
-            
-            return parsed_result
-            
-        except Exception as e:
-            logger.error("Claude processing failed", job_id=job_id, error=str(e))
-            
-            # Try fallback if available
-            if self.fallback_available:
-                logger.info("Attempting fallback AI processing", job_id=job_id)
-                return await self._process_with_fallback(job_id, text)
-            
-            return {
-                "success": False,
-                "error": f"Claude processing failed: {str(e)}"
-            }
+TASK: Extract ALL individual transactions from the following text, which may contain multiple purchases, expenses, or financial transactions.
 
-    def _create_extraction_prompt(self, text: str) -> str:
-        """Create optimized prompt for Claude 3.5 transaction extraction"""
-        
-        prompt = f"""
-You are an expert at extracting financial transaction data from various types of documents. 
-
-TASK: Analyze the following text and extract up to 5 individual transactions. The text might be from:
-- Receipts (shopping, restaurant, service)
-- Bank statements or transaction lists
-- Invoices or bills
-- Expense reports
-- Any financial document in any language
-
-TEXT TO ANALYZE:
+DOCUMENT TEXT:
 {text}
 
-INSTRUCTIONS:
-1. Extract each separate transaction/purchase/expense you can identify
-2. For each transaction, determine:
-   - Merchant/vendor name
-   - Transaction amount (convert to USD if needed)
-   - Date (estimate if not clear)
-   - Description/what was purchased
-   - Category suggestion (food, transport, shopping, etc.)
+REQUIREMENTS:
+1. Extract EACH INDIVIDUAL TRANSACTION (up to {settings.MAX_TRANSACTIONS_PER_FILE} transactions)
+2. For each transaction, extract these fields:
+   - amount: The monetary value (as positive number, no currency symbols)
+   - description: Brief description of the item/service (max 100 characters)
+   - date: Transaction date in YYYY-MM-DD format (estimate if needed)
+   - merchant: Business/vendor name (if identifiable)
+   - category: Expense category (food, transport, shopping, etc.)
+   - currency: Currency code (USD, EUR, etc. - estimate if not specified)
 
-3. IMPORTANT RULES:
-   - Maximum 5 transactions per document
-   - If amounts are unclear, make reasonable estimates
-   - If dates are unclear, use today's date: {datetime.now().strftime('%Y-%m-%d')}
-   - If merchant unclear, use "Unknown Merchant"
-   - Handle any language or currency format
-   - Be conservative but helpful
-
-4. RESPONSE FORMAT (JSON only):
+OUTPUT FORMAT: Return ONLY valid JSON in this exact structure:
 {{
-    "success": true,
-    "transactions": [
-        {{
-            "merchant_name": "Store Name",
-            "amount": 25.99,
-            "currency": "USD",
-            "transaction_date": "2024-12-20",
-            "description": "Coffee and pastry",
-            "category_suggestion": "Food & Dining",
-            "confidence": 0.85,
-            "raw_text_snippet": "relevant text from document"
-        }}
-    ],
-    "document_language": "English",
-    "document_type": "receipt",
-    "total_amount": 25.99,
-    "processing_notes": "Clear receipt with itemized purchases"
+  "transactions": [
+    {{
+      "amount": 25.99,
+      "description": "Coffee and pastry",
+      "date": "2024-01-15",
+      "merchant": "Starbucks",
+      "category": "food",
+      "currency": "USD",
+      "raw_text_snippet": "relevant portion of original text"
+    }}
+  ],
+  "confidence": 0.9,
+  "total_transactions": 1
 }}
 
-If no valid transactions found:
-{{
-    "success": false,
-    "error": "No financial transactions found in the text",
-    "document_language": "detected language",
-    "processing_notes": "explanation of what was found instead"
-}}
+IMPORTANT RULES:
+- Only extract REAL transactions with amounts
+- If amount is unclear, skip that transaction
+- Use today's date if no date is found: {datetime.now().strftime('%Y-%m-%d')}
+- Keep descriptions concise and clear
+- Confidence should be 0.1-1.0 based on text clarity
+- Maximum {settings.MAX_TRANSACTIONS_PER_FILE} transactions
+- Return empty transactions array if no valid transactions found
 
-Extract transactions now:
-"""
-        return prompt
+Extract the transactions now:"""
 
-    def _call_claude_api(self, prompt: str) -> str:
-        """Call Claude API synchronously (runs in executor)"""
+    async def _call_claude_api(self, prompt: str) -> Dict[str, Any]:
+        """Call Claude 3.5 API with error handling and retries"""
         try:
-            message = self.anthropic_client.messages.create(
+            message = await self.anthropic_client.messages.create(
                 model=settings.CLAUDE_MODEL,
                 max_tokens=settings.CLAUDE_MAX_TOKENS,
                 temperature=settings.CLAUDE_TEMPERATURE,
@@ -273,327 +162,135 @@ Extract transactions now:
                 ]
             )
             
-            return message.content[0].text
+            content = message.content[0].text if message.content else ""
+            
+            return {
+                "success": True,
+                "content": content,
+                "usage": {
+                    "input_tokens": message.usage.input_tokens if hasattr(message, 'usage') else 0,
+                    "output_tokens": message.usage.output_tokens if hasattr(message, 'usage') else 0
+                }
+            }
             
         except Exception as e:
             logger.error("Claude API call failed", error=str(e))
-            raise
-
-    def _parse_claude_response(self, response: str) -> Dict[str, Any]:
-        """Parse Claude's JSON response"""
+            return {"success": False, "error": f"Claude API error: {str(e)}"}
+    
+    def _parse_claude_response(self, content: str) -> Dict[str, Any]:
+        """Parse Claude's JSON response into structured data"""
         try:
-            # Extract JSON from response (handle markdown code blocks)
-            json_text = self._extract_json_from_response(response)
+            # Clean the response (remove any markdown or extra text)
+            content = content.strip()
             
-            # Parse JSON
-            data = json.loads(json_text)
+            # Find JSON content
+            start_idx = content.find('{')
+            end_idx = content.rfind('}') + 1
             
-            # Validate response structure
-            if not isinstance(data, dict):
-                raise ValueError("Response is not a valid JSON object")
+            if start_idx == -1 or end_idx == 0:
+                return {"success": False, "error": "No JSON found in AI response"}
             
-            # Check for success/failure
-            if not data.get("success", False):
-                return {
-                    "success": False,
-                    "error": data.get("error", "Claude found no transactions"),
-                    "processing_notes": data.get("processing_notes", "")
-                }
+            json_content = content[start_idx:end_idx]
+            data = json.loads(json_content)
             
-            # Validate transactions
-            transactions = data.get("transactions", [])
-            if not transactions:
-                return {
-                    "success": False,
-                    "error": "No transactions extracted by Claude"
-                }
+            # Validate structure
+            if "transactions" not in data:
+                return {"success": False, "error": "Invalid response structure: missing transactions"}
             
-            # Clean and validate each transaction
+            transactions = data["transactions"]
+            if not isinstance(transactions, list):
+                return {"success": False, "error": "Transactions must be a list"}
+            
+            # Validate and clean each transaction
             cleaned_transactions = []
-            for transaction in transactions:
-                cleaned_transaction = self._clean_transaction_data(transaction)
-                if cleaned_transaction:
-                    cleaned_transactions.append(cleaned_transaction)
+            for i, transaction in enumerate(transactions):
+                cleaned = self._validate_transaction(transaction, i)
+                if cleaned:
+                    cleaned_transactions.append(cleaned)
             
             if not cleaned_transactions:
-                return {
-                    "success": False,
-                    "error": "No valid transactions after cleaning"
-                }
+                return {"success": False, "error": "No valid transactions found in AI response"}
             
             return {
                 "success": True,
                 "transactions": cleaned_transactions,
-                "document_language": data.get("document_language", "Unknown"),
-                "document_type": data.get("document_type", "Unknown"),
-                "processing_notes": data.get("processing_notes", ""),
-                "claude_confidence": self._calculate_claude_confidence(data, cleaned_transactions)
+                "confidence": self._validate_confidence(data.get("confidence", 0.7)),
+                "ai_metadata": {
+                    "total_found": len(cleaned_transactions),
+                    "raw_response_length": len(content)
+                }
             }
             
         except json.JSONDecodeError as e:
             logger.error("Failed to parse Claude JSON response", error=str(e))
-            return {
-                "success": False,
-                "error": f"Invalid JSON response from Claude: {str(e)}"
-            }
+            return {"success": False, "error": f"Invalid JSON from AI: {str(e)}"}
         except Exception as e:
             logger.error("Failed to process Claude response", error=str(e))
-            return {
-                "success": False,
-                "error": f"Error processing Claude response: {str(e)}"
-            }
-
-    def _extract_json_from_response(self, response: str) -> str:
-        """Extract JSON from Claude's response (handle markdown formatting)"""
-        # Remove markdown code blocks if present
-        response = response.strip()
-        
-        # Look for JSON content between ```json and ``` or just ```
-        json_pattern = r'```(?:json)?\s*(\{.*?\})\s*```'
-        match = re.search(json_pattern, response, re.DOTALL | re.IGNORECASE)
-        
-        if match:
-            return match.group(1)
-        
-        # Look for JSON object directly
-        json_pattern = r'\{.*\}'
-        match = re.search(json_pattern, response, re.DOTALL)
-        
-        if match:
-            return match.group(0)
-        
-        # Return as-is if no patterns found
-        return response
-
-    def _clean_transaction_data(self, transaction: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Clean and validate individual transaction data"""
+            return {"success": False, "error": f"Response processing failed: {str(e)}"}
+    
+    def _validate_transaction(self, transaction: Dict[str, Any], index: int) -> Optional[Dict[str, Any]]:
+        """Validate and clean a single transaction"""
         try:
-            # Required fields
-            merchant_name = str(transaction.get("merchant_name", "Unknown Merchant")).strip()
-            if not merchant_name:
-                merchant_name = "Unknown Merchant"
-            
-            # Amount validation and conversion
-            amount = self._clean_amount(transaction.get("amount"))
-            if amount is None or amount <= 0:
-                logger.warning("Invalid or missing amount in transaction", transaction=transaction)
+            # Required: amount
+            amount = transaction.get("amount")
+            if not amount:
+                logger.warning(f"Transaction {index}: missing amount")
                 return None
             
-            # Date validation and conversion
-            transaction_date = self._clean_date(transaction.get("transaction_date"))
+            # Convert amount to float
+            try:
+                amount_float = float(amount)
+                if amount_float <= 0:
+                    logger.warning(f"Transaction {index}: invalid amount {amount}")
+                    return None
+            except (ValueError, TypeError):
+                logger.warning(f"Transaction {index}: cannot convert amount to float: {amount}")
+                return None
             
-            # Description
-            description = str(transaction.get("description", "")).strip()
-            if not description:
-                description = f"Purchase from {merchant_name}"
-            
-            # Category suggestion
-            category_suggestion = str(transaction.get("category_suggestion", "Other")).strip()
-            if not category_suggestion:
-                category_suggestion = "Other"
-            
-            # Confidence score
-            confidence = float(transaction.get("confidence", 0.5))
-            confidence = max(0.0, min(1.0, confidence))  # Clamp between 0 and 1
-            
-            return {
-                "merchant_name": merchant_name,
-                "amount": float(amount),
-                "currency": str(transaction.get("currency", "USD")),
-                "transaction_date": transaction_date,
-                "description": description,
-                "category_suggestion": category_suggestion,
-                "confidence": confidence,
-                "raw_text_snippet": str(transaction.get("raw_text_snippet", ""))[:500]  # Limit length
+            # Clean and validate other fields
+            cleaned = {
+                "amount": round(amount_float, 2),
+                "description": str(transaction.get("description", "")).strip()[:100] or "Unspecified transaction",
+                "date": self._validate_date(transaction.get("date")),
+                "merchant": str(transaction.get("merchant", "")).strip()[:100] or "Unknown merchant",
+                "category": str(transaction.get("category", "")).strip().lower() or "other",
+                "currency": str(transaction.get("currency", "USD")).upper()[:3],
+                "raw_text_snippet": str(transaction.get("raw_text_snippet", "")).strip()[:500]
             }
+            
+            return cleaned
             
         except Exception as e:
-            logger.warning("Failed to clean transaction data", error=str(e), transaction=transaction)
+            logger.warning(f"Transaction {index} validation failed", error=str(e))
             return None
-
-    def _clean_amount(self, amount_value: Any) -> Optional[Decimal]:
-        """Clean and validate amount value"""
+    
+    def _validate_date(self, date_str: Any) -> str:
+        """Validate and normalize date string"""
+        if not date_str:
+            return datetime.now().strftime('%Y-%m-%d')
+        
         try:
-            if amount_value is None:
-                return None
+            date_str = str(date_str).strip()
             
-            # Convert to string first
-            amount_str = str(amount_value).strip()
-            
-            # Remove currency symbols and common formatting
-            amount_str = re.sub(r'[^\d.,\-]', '', amount_str)
-            
-            # Handle common decimal formats
-            if ',' in amount_str and '.' in amount_str:
-                # Determine which is decimal separator (last one usually)
-                if amount_str.rfind('.') > amount_str.rfind(','):
-                    # Period is decimal separator, comma is thousands
-                    amount_str = amount_str.replace(',', '')
-                else:
-                    # Comma is decimal separator, period is thousands
-                    amount_str = amount_str.replace('.', '').replace(',', '.')
-            elif ',' in amount_str:
-                # Could be thousands separator or decimal
-                parts = amount_str.split(',')
-                if len(parts[-1]) == 2:  # Likely decimal (e.g., "1,234,56")
-                    amount_str = amount_str.replace(',', '.')
-                else:  # Likely thousands separator
-                    amount_str = amount_str.replace(',', '')
-            
-            # Convert to Decimal
-            amount = Decimal(amount_str)
-            
-            # Reasonable bounds check
-            if amount < 0:
-                amount = abs(amount)  # Make positive
-            
-            if amount > 100000:  # $100k seems reasonable max for receipts
-                logger.warning("Amount seems very large", amount=amount)
-            
-            return amount
-            
-        except (ValueError, InvalidOperation, TypeError):
-            logger.warning("Could not parse amount", amount_value=amount_value)
-            return None
-
-    def _clean_date(self, date_value: Any) -> str:
-        """Clean and validate date value"""
-        try:
-            if not date_value:
-                return datetime.now().strftime('%Y-%m-%d')
-            
-            date_str = str(date_value).strip()
-            
-            # Try to parse various date formats
-            date_formats = [
-                '%Y-%m-%d',
-                '%m/%d/%Y',
-                '%d/%m/%Y',
-                '%m-%d-%Y',
-                '%d-%m-%Y',
-                '%Y/%m/%d',
-                '%B %d, %Y',
-                '%b %d, %Y',
-                '%d %B %Y',
-                '%d %b %Y'
-            ]
-            
-            for fmt in date_formats:
+            # Try parsing various date formats
+            for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%Y-%m-%d %H:%M:%S']:
                 try:
                     parsed_date = datetime.strptime(date_str, fmt)
                     return parsed_date.strftime('%Y-%m-%d')
                 except ValueError:
                     continue
             
-            # If all parsing fails, use today's date
-            logger.warning("Could not parse date, using today", date_value=date_value)
+            # If parsing fails, use today's date
+            logger.warning(f"Could not parse date: {date_str}, using today")
             return datetime.now().strftime('%Y-%m-%d')
             
         except Exception:
             return datetime.now().strftime('%Y-%m-%d')
-
-    def _calculate_claude_confidence(self, data: Dict[str, Any], transactions: List[Dict[str, Any]]) -> float:
-        """Calculate overall confidence in Claude's response"""
+    
+    def _validate_confidence(self, confidence: Any) -> float:
+        """Validate confidence score"""
         try:
-            # Base confidence from individual transactions
-            individual_confidences = [t.get("confidence", 0.5) for t in transactions]
-            avg_confidence = sum(individual_confidences) / len(individual_confidences) if individual_confidences else 0.5
-            
-            # Boost confidence based on response quality indicators
-            confidence_boost = 0.0
-            
-            # Has processing notes (indicates thoughtful analysis)
-            if data.get("processing_notes"):
-                confidence_boost += 0.05
-            
-            # Detected document language
-            if data.get("document_language") and data.get("document_language") != "Unknown":
-                confidence_boost += 0.05
-            
-            # Detected document type
-            if data.get("document_type") and data.get("document_type") != "Unknown":
-                confidence_boost += 0.05
-            
-            # Number of transactions found (sweet spot is 1-3)
-            num_transactions = len(transactions)
-            if 1 <= num_transactions <= 3:
-                confidence_boost += 0.05
-            elif num_transactions == 4:
-                confidence_boost += 0.03
-            # No boost for 5 transactions (might be forcing it)
-            
-            final_confidence = min(avg_confidence + confidence_boost, 1.0)
-            return max(final_confidence, 0.0)
-            
-        except Exception as e:
-            logger.warning("Confidence calculation failed", error=str(e))
-            return 0.5
-
-    async def _validate_and_structure_transactions(self, job_id: str, transactions: List[Dict[str, Any]], 
-                                                 extraction_confidence: float) -> Dict[str, Any]:
-        """Validate and structure the final transaction data"""
-        try:
-            # Limit to maximum allowed transactions
-            max_transactions = settings.MAX_TRANSACTIONS_PER_FILE
-            if len(transactions) > max_transactions:
-                logger.info("Truncating transactions to maximum allowed", 
-                           found=len(transactions), 
-                           max_allowed=max_transactions)
-                transactions = transactions[:max_transactions]
-            
-            # Calculate overall confidence
-            transaction_confidences = [t.get("confidence", 0.5) for t in transactions]
-            avg_transaction_confidence = sum(transaction_confidences) / len(transaction_confidences)
-            
-            # Combine extraction and AI confidence
-            overall_confidence = (extraction_confidence * 0.3) + (avg_transaction_confidence * 0.7)
-            
-            # Create structured data for database storage
-            structured_data = {
-                "transactions": transactions,
-                "metadata": {
-                    "total_transactions": len(transactions),
-                    "extraction_confidence": extraction_confidence,
-                    "ai_confidence": avg_transaction_confidence,
-                    "overall_confidence": overall_confidence,
-                    "processing_timestamp": datetime.now().isoformat(),
-                    "ai_provider": "claude-3.5-sonnet"
-                }
-            }
-            
-            return {
-                "success": True,
-                "transactions": transactions,
-                "structured_data": structured_data,
-                "overall_confidence": overall_confidence,
-                "total_transactions": len(transactions)
-            }
-            
-        except Exception as e:
-            logger.error("Transaction validation failed", job_id=job_id, error=str(e))
-            return {
-                "success": False,
-                "error": f"Transaction validation failed: {str(e)}"
-            }
-
-    async def _process_with_fallback(self, job_id: str, text: str) -> Dict[str, Any]:
-        """Fallback AI processing (OpenAI, Groq, etc.)"""
-        # TODO: Implement fallback AI processing
-        logger.warning("Fallback AI processing not yet implemented", job_id=job_id)
-        return {
-            "success": False,
-            "error": "Primary AI processing failed and fallback not available"
-        }
-
-    def is_ai_available(self) -> bool:
-        """Check if AI processing is available"""
-        return self.anthropic_client is not None or self.fallback_available
-
-    def get_ai_status(self) -> Dict[str, Any]:
-        """Get AI service status"""
-        return {
-            "claude_available": self.anthropic_client is not None,
-            "fallback_available": self.fallback_available,
-            "model": settings.CLAUDE_MODEL if self.anthropic_client else None,
-            "max_transactions": settings.MAX_TRANSACTIONS_PER_FILE
-        }
+            conf_float = float(confidence)
+            return max(0.1, min(1.0, conf_float))  # Clamp between 0.1 and 1.0
+        except (ValueError, TypeError):
+            return 0.7  # Default confidence
