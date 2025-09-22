@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, status, Depends, UploadFile, File
 from fastapi.responses import JSONResponse
 import structlog
-
+import json
 from ...middleware.auth import get_user_id, get_current_user
 from ...config.settings import settings
 from ...database.connection import (
@@ -23,6 +23,55 @@ from ...database.connection import (
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
+
+def transform_transaction_for_frontend(db_transaction: dict) -> dict:
+    """Transform raw database transaction data to frontend expected format"""
+    try:
+        # Parse the JSONB extracted_data
+        extracted_data = db_transaction.get("extracted_data", {})
+        if isinstance(extracted_data, str):
+            extracted_data = json.loads(extracted_data)
+        
+        # Map to frontend format
+        return {
+            "id": str(db_transaction["id"]),
+            "jobId": str(db_transaction["job_id"]),
+            "transactionIndex": db_transaction["transaction_index"],
+            
+            # Extract from JSONB extracted_data
+            "merchantName": extracted_data.get("merchant_name", "Unknown"),
+            "amount": float(extracted_data.get("amount", 0)),
+            "currency": extracted_data.get("currency", "USD"),
+            "transactionDate": extracted_data.get("transaction_date", ""),
+            "description": extracted_data.get("description", ""),
+            "categorySuggestion": extracted_data.get("category_suggestion", "Other"),
+            
+            # Direct mapping from database fields
+            "confidence": float(db_transaction.get("ai_confidence", 0)),
+            "rawTextSnippet": db_transaction.get("raw_text_snippet", ""),
+            "status": db_transaction["status"],
+            
+            # Optional fields
+            "suggestedCategoryId": str(db_transaction["suggested_category_id"]) if db_transaction.get("suggested_category_id") else None,
+            "expenseId": str(db_transaction["expense_id"]) if db_transaction.get("expense_id") else None
+        }
+    except Exception as e:
+        logger.error(f"Transaction transformation failed: {str(e)}", transaction_id=db_transaction.get("id"))
+        # Return safe fallback
+        return {
+            "id": str(db_transaction.get("id", "")),
+            "jobId": str(db_transaction.get("job_id", "")),
+            "transactionIndex": db_transaction.get("transaction_index", 1),
+            "merchantName": "Error parsing transaction",
+            "amount": 0,
+            "currency": "USD",
+            "transactionDate": "",
+            "description": "Transaction data parsing failed",
+            "categorySuggestion": "Other",
+            "confidence": 0,
+            "rawTextSnippet": "",
+            "status": db_transaction.get("status", "pending")
+        }
 
 @router.post("/upload", tags=["Receipt Processing"])
 async def upload_receipt(
@@ -338,6 +387,7 @@ async def get_processing_status(
     job_id: str,
     user_id: str = Depends(get_user_id)
 ):
+    print(f"🔥 SIMPLE DEBUG TEST - Job ID: {job_id}")
     """
     Get processing status for a receipt job - Database storage with complete referencing
     
@@ -363,8 +413,15 @@ async def get_processing_status(
             )
         
         # Get transactions for this job
-        transactions = await get_job_transactions(job_id, user_id)
-        
+        raw_transactions = await get_job_transactions(job_id, user_id)
+        transactions = [transform_transaction_for_frontend(t) for t in raw_transactions]
+        # DEBUG: Log what we're returning
+        logger.info(f"DEBUG Status Check - Job: {job_id}, Status: {job_data['status']}")
+        logger.info(f"DEBUG Raw transactions count: {len(raw_transactions)}")
+        logger.info(f"DEBUG Transformed transactions count: {len(transactions)}")
+        if transactions:
+            logger.info(f"DEBUG First transaction: {transactions[0]}")
+
         response_data = {
             "success": True,
             "job_id": job_id,
