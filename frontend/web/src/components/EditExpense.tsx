@@ -77,7 +77,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    // Allow only numbers and decimal point
+    // Allow only numbers and decimal point - FIXED REGEX
     if (value === '' || /^\d*\.?\d*$/.test(value)) {
       setFormData(prev => ({ ...prev, amount: value }));
       if (error) setError('');

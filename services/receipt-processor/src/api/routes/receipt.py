@@ -387,7 +387,6 @@ async def get_processing_status(
     job_id: str,
     user_id: str = Depends(get_user_id)
 ):
-    print(f"🔥 SIMPLE DEBUG TEST - Job ID: {job_id}")
     """
     Get processing status for a receipt job - Database storage with complete referencing
     
@@ -396,6 +395,8 @@ async def get_processing_status(
     start_time = time.time()
     
     try:
+        logger.info("Getting processing status", job_id=job_id, user_id=user_id)
+        
         # Get job from database with enhanced details
         job_data = await get_receipt_job(job_id)
         
@@ -412,70 +413,101 @@ async def get_processing_status(
                 detail="Access denied"
             )
         
-        # Get transactions for this job
+        # Get raw transactions from database
         raw_transactions = await get_job_transactions(job_id, user_id)
-        transactions = [transform_transaction_for_frontend(t) for t in raw_transactions]
+        
+        # Transform transactions to match frontend expectations - CRITICAL FIX
+        transaction_details = []
+        for trans in raw_transactions:
+            # Parse extracted_data JSON
+            extracted = trans.get("extracted_data", {})
+            if isinstance(extracted, str):
+                import json
+                try:
+                    extracted = json.loads(extracted)
+                except:
+                    extracted = {}
+            
+            transaction_details.append({
+                "id": str(trans["id"]),
+                "jobId": job_id,
+                "transactionIndex": trans["transaction_index"],
+                "merchantName": extracted.get("merchant_name", "Unknown"),
+                "amount": float(extracted.get("amount", 0)),
+                "currency": extracted.get("currency", "USD"),
+                "transactionDate": extracted.get("transaction_date", ""),
+                "description": extracted.get("description", ""),
+                "categorySuggestion": extracted.get("category_suggestion", "Other"),
+                "confidence": float(extracted.get("confidence", 0)),
+                "rawTextSnippet": extracted.get("raw_text_snippet", ""),
+                "status": trans["status"],
+                "suggestedCategoryId": str(trans["suggested_category_id"]) if trans.get("suggested_category_id") else None,
+                "expenseId": str(trans["expense_id"]) if trans.get("expense_id") else None,
+                "userApprovedAt": trans.get("user_approved_at"),
+                "userRejectedAt": trans.get("user_rejected_at"),
+                "rejectionReason": trans.get("rejection_reason")
+            })
+        
         # DEBUG: Log what we're returning
-        logger.info(f"DEBUG Status Check - Job: {job_id}, Status: {job_data['status']}")
-        logger.info(f"DEBUG Raw transactions count: {len(raw_transactions)}")
-        logger.info(f"DEBUG Transformed transactions count: {len(transactions)}")
-        if transactions:
-            logger.info(f"DEBUG First transaction: {transactions[0]}")
-
+        logger.info("DEBUG Status Check", 
+                   job_id=job_id, 
+                   status=job_data["status"],
+                   raw_transactions_count=len(raw_transactions),
+                   transformed_transactions_count=len(transaction_details))
+        
+        if transaction_details:
+            logger.info("DEBUG First transaction", transaction=transaction_details[0])
+        
         response_data = {
             "success": True,
-            "job_id": job_id,
-            "status": job_data["status"],
             
-            # Complete file reference from database
-            "file_details": {
-                "original_filename": job_data["original_filename"],
-                "stored_filename": job_data["filename"],
-                "file_size": job_data["file_size"],
-                "stored_file_size": job_data.get("stored_file_size", job_data["file_size"]),
-                "file_type": job_data["file_type"],
-                "mime_type": job_data["mime_type"],
-                "checksum": job_data["checksum"],
-                "has_file_content": job_data.get("has_file_content", False),
-                "storage_method": "database",
-                "upload_date": job_data.get("upload_date"),
-                "file_category": job_data.get("file_category", "receipt")
+            # FIXED: Frontend expects "job" object, not "job_id"
+            "job": {
+                "id": job_id,
+                "filename": job_data["filename"],
+                "originalFilename": job_data["original_filename"],
+                "fileSize": job_data["file_size"],
+                "fileType": job_data["file_type"],
+                "status": job_data["status"],
+                "totalTransactions": job_data.get("total_transactions_detected", 0),
+                "processedTransactions": job_data.get("transactions_processed", 0),
+                "approvedTransactions": job_data.get("transactions_approved", 0),
+                "ocrText": job_data.get("ocr_text"),
+                "ocrConfidence": float(job_data.get("ocr_confidence", 0)) if job_data.get("ocr_confidence") else None,
+                "errorMessage": job_data.get("error_message"),
+                "createdAt": job_data["created_at"].isoformat() if job_data.get("created_at") else None,
+                "updatedAt": job_data["updated_at"].isoformat() if job_data.get("updated_at") else None,
+                "processingTimeMs": job_data.get("ai_processing_time_ms")
             },
             
-            # Processing information
-            "processing": {
-                "created_at": job_data["created_at"].timestamp() if job_data["created_at"] else None,
-                "updated_at": job_data["updated_at"].timestamp() if job_data["updated_at"] else None,
-                "processing_started_at": job_data["processing_started_at"].timestamp() if job_data.get("processing_started_at") else None,
-                "processing_completed_at": job_data["processing_completed_at"].timestamp() if job_data.get("processing_completed_at") else None,
-                "ai_provider": job_data.get("ai_provider"),
-                "ai_processing_time_ms": job_data.get("ai_processing_time_ms"),
-                "retry_count": job_data.get("retry_count", 0)
-            },
-            
-            # Transaction summary
+            # FIXED: Frontend expects "detected", not "total_detected"
             "transactions": {
-                "total_detected": job_data.get("total_transactions", 0),
-                "processed": job_data.get("processed_transactions", 0),
-                "approved": job_data.get("approved_transactions", 0),
-                "pending": job_data.get("total_transactions", 0) - job_data.get("processed_transactions", 0),
-                "details": transactions
+                "detected": len(transaction_details),
+                "processed": job_data.get("transactions_processed", 0),
+                "approved": job_data.get("transactions_approved", 0),
+                "pending": len([t for t in transaction_details if t["status"] == "pending"]),
+                "details": transaction_details  # ← NOW PROPERLY FORMATTED!
             },
             
-            "processing_time_ms": (time.time() - start_time) * 1000
+            "processingTimeMs": (time.time() - start_time) * 1000
         }
         
         # Add OCR results if available
         if job_data.get("ocr_text"):
             response_data["ocr"] = {
-                "text_length": len(job_data["ocr_text"]),
-                "confidence": job_data.get("ocr_confidence"),
+                "textLength": len(job_data["ocr_text"]),
+                "confidence": float(job_data.get("ocr_confidence", 0)) if job_data.get("ocr_confidence") else 0,
                 "provider": job_data.get("ocr_provider", "easyocr")
             }
         
         # Add error details if failed
         if job_data.get("error_message"):
             response_data["error"] = job_data["error_message"]
+        
+        logger.info("Status response created", 
+                   job_id=job_id, 
+                   status=job_data["status"],
+                   transactions_count=len(transaction_details))
         
         return response_data
         

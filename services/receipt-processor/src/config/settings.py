@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     STORE_FILE_METADATA: bool = Field(default=True)      # Store additional metadata
     
     # OCR Configuration
-    OCR_LANGUAGES: List[str] = Field(default=["en", "ar", "fa"])  # English, Arabic, Persian
+    OCR_LANGUAGES: List[str] = Field(default=["it"])
     OCR_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
     IMAGE_PREPROCESSING: bool = Field(default=True)
     OCR_BATCH_SIZE: int = Field(default=1)

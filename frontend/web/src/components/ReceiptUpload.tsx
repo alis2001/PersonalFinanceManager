@@ -148,21 +148,51 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
       clearInterval(pollIntervalRef.current);
     }
 
+    console.log('🔄 Starting status polling for job:', jobId);
+
     pollIntervalRef.current = setInterval(async () => {
       try {
+        console.log('📡 Polling status for job:', jobId);
         const result = await receiptService.getProcessingStatus(jobId);
+        
+        console.log('📊 Status result:', {
+          success: result.success,
+          status: result.job?.status,
+          transactionsCount: result.transactions?.details?.length || 0,
+          hasTransactions: !!result.transactions?.details,
+          categoriesLoaded: categories.length
+        });
+        
         if (result.success && result.job) {
           setProcessingStatus(result);
           
+          console.log('🎯 Processing status:', result.job.status);
+          
           if (result.job.status === 'completed') {
+            console.log('✅ Job completed! Processing transactions...');
             setProcessing(false);
             
+            // CRITICAL FIX: Better handling of completed status
+            const transactionDetails = result.transactions?.details;
+            
+            console.log('🔍 Transaction details:', {
+              hasDetails: !!transactionDetails,
+              detailsLength: transactionDetails?.length || 0,
+              categoriesLength: categories.length,
+              firstTransaction: transactionDetails?.[0]
+            });
+            
             // Check if we have transactions and categories loaded
-            if (result.transactions?.details && categories.length > 0) {
-              const extractedTransactions = result.transactions.details;
+            if (transactionDetails && transactionDetails.length > 0 && categories.length > 0) {
+              console.log('🎉 Found transactions and categories, validating...');
               
               // Validate categories before proceeding
-              const validationErrors = receiptService.getCategoryValidationErrors(extractedTransactions, categories);
+              const validationErrors = receiptService.getCategoryValidationErrors(transactionDetails, categories);
+              
+              console.log('🔎 Category validation:', {
+                errorsCount: validationErrors.length,
+                errors: validationErrors
+              });
               
               if (validationErrors.length > 0) {
                 // Show category validation errors
@@ -174,33 +204,57 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
                 }
               } else {
                 // All categories valid - proceed to transaction forms
-                setTransactions(extractedTransactions);
+                console.log('🚀 Categories valid, proceeding to transaction approval');
+                setTransactions(transactionDetails);
                 setCurrentTransactionIndex(0);
                 setShowAddExpense(true);
-                setSuccess(`Processing completed! Found ${extractedTransactions.length} transactions. Review each transaction below.`);
+                setSuccess(`Processing completed! Found ${transactionDetails.length} transactions. Review each transaction below.`);
                 if (pollIntervalRef.current) {
                   clearInterval(pollIntervalRef.current);
                   pollIntervalRef.current = null;
                 }
               }
-            } else {
-              setError('No transactions found or categories not loaded');
+            } else if (!transactionDetails || transactionDetails.length === 0) {
+              console.log('❌ No transactions found');
+              setError('No transactions found in the processed receipt.');
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+              }
+            } else if (categories.length === 0) {
+              console.log('❌ No categories loaded');
+              setError('Categories not loaded. Please manage your categories first.');
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current);
                 pollIntervalRef.current = null;
               }
             }
           } else if (result.job.status === 'failed') {
+            console.log('❌ Job failed:', result.job.errorMessage);
             setProcessing(false);
             setError(result.job.errorMessage || 'Processing failed');
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
               pollIntervalRef.current = null;
             }
+          } else {
+            console.log('⏳ Job still processing, status:', result.job.status);
+          }
+        } else {
+          console.error('❌ Status polling failed:', result.error);
+          setError(result.error || 'Failed to get status');
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
           }
         }
       } catch (error) {
-        console.error('Status polling error:', error);
+        console.error('❌ Status polling error:', error);
+        setError('Network error while checking status');
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
       }
     }, 2000); // Poll every 2 seconds
   };
@@ -307,14 +361,45 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
     const transaction = getCurrentTransaction();
     if (!transaction) return {};
 
-    // Find matching category from user's categories
+    // Helper function to format date for datetime-local input
+    const formatDateTimeForInput = (dateString: string): string => {
+      if (!dateString) return '';
+      
+      try {
+        // Handle various date formats and convert to YYYY-MM-DDTHH:MM
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return '';
+        
+        // For datetime-local input, we need YYYY-MM-DDTHH:MM format
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        
+        // Set default time to 12:00 (noon) if no time is provided
+        const hours = String(date.getHours() || 12).padStart(2, '0');
+        const minutes = String(date.getMinutes() || 0).padStart(2, '0');
+        
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+      } catch {
+        return '';
+      }
+    };
+
+    // Find matching category from user's categories  
     const categoryMatch = receiptService.findCategoryMatch(transaction.categorySuggestion, categories);
+    
+    // DEBUG: Check date format
+    console.log('🗓️ Date debug:', {
+      originalDate: transaction.transactionDate,
+      formattedDateTime: formatDateTimeForInput(transaction.transactionDate),
+      dateType: typeof transaction.transactionDate
+    });
     
     return {
       amount: transaction.amount,
       description: transaction.description,
-      categoryId: categoryMatch.category?.id || '',
-      transactionDate: transaction.transactionDate,
+      categoryId: categoryMatch.found ? categoryMatch.category?.id || '' : '',
+      transactionDate: formatDateTimeForInput(transaction.transactionDate),
       location: transaction.merchantName,
       notes: `Imported from receipt processing (Confidence: ${Math.round(transaction.confidence * 100)}%)`
     };
