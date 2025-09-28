@@ -33,6 +33,8 @@ class AuthService {
 
   // User registration with email verification
   async createUser(userData) {
+    console.log('AuthService.createUser - Received userData:', JSON.stringify(userData, null, 2));
+    
     const {
       email,
       password,
@@ -44,6 +46,8 @@ class AuthService {
       acceptTerms,
       marketingConsent = false
     } = userData;
+    
+    console.log('AuthService.createUser - Extracted defaultCurrency:', defaultCurrency);
 
     const normalizedEmail = normalizeEmail(email);
     const client = await db.connect();

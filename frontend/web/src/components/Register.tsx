@@ -83,7 +83,7 @@ const Register: React.FC = () => {
 
     setLoading(true);
 
-    const result = await authService.register({
+    const registrationData = {
       firstName: formData.firstName,
       lastName: formData.lastName,
       email: formData.email,
@@ -94,7 +94,11 @@ const Register: React.FC = () => {
       defaultCurrency: formData.defaultCurrency,
       acceptTerms: formData.acceptTerms,
       marketingConsent: false
-    });
+    };
+    
+    console.log('Register - Sending registration data:', registrationData);
+    
+    const result = await authService.register(registrationData);
     
     if (result.success) {
       if (result.requiresVerification) {

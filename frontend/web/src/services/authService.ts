@@ -71,6 +71,7 @@ class AuthService {
           confirmPassword: userData.confirmPassword,
           accountType: userData.accountType,
           companyName: userData.companyName || undefined,
+          defaultCurrency: userData.defaultCurrency,
           acceptTerms: userData.acceptTerms,
           marketingConsent: userData.marketingConsent || false
         }),

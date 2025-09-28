@@ -22,6 +22,7 @@ class AuthController {
         lastName, 
         accountType,
         companyName,
+        defaultCurrency,
         acceptTerms,
         marketingConsent 
       } = req.validatedData;
@@ -34,6 +35,7 @@ class AuthController {
         lastName,
         accountType,
         companyName,
+        defaultCurrency,
         acceptTerms,
         marketingConsent,
         ipAddress: req.ip
