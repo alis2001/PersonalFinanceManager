@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import expenseService from '../services/expenseService';
 import categoryService from '../services/categoryService';
+import currencyService from '../services/currencyService';
 import type { Category } from '../services/categoryService';
 import '../styles/AddExpense.css';
 
@@ -20,6 +21,7 @@ interface AddExpenseProps {
   };
   title?: string;
   fromReceipt?: boolean;
+  userCurrency?: string;
 }
 
 const AddExpense: React.FC<AddExpenseProps> = ({ 
@@ -28,7 +30,8 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   onExpenseAdded, 
   prefilledData, 
   title = "Add New Expense", 
-  fromReceipt = false 
+  fromReceipt = false,
+  userCurrency = 'USD'
 }) => {
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -305,7 +308,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
               Amount <span className="required">*</span>
             </label>
             <div className="amount-input-container">
-              <span className="currency-symbol">$</span>
+              <span className="currency-symbol">{currencyService.getCurrencyByCode(userCurrency)?.symbol || '$'}</span>
               <input
                 type="text"
                 id="amount"

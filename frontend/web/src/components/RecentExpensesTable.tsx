@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Expense } from '../services/expenseService';
 import expenseService from '../services/expenseService';
+import currencyService from '../services/currencyService';
 import '../styles/RecentExpensesTable.css';
 
 interface RecentExpensesTableProps {
@@ -8,13 +9,15 @@ interface RecentExpensesTableProps {
   loading: boolean;
   onExpenseClick: (expense: Expense) => void;
   onRetry?: () => void;
+  userCurrency?: string;
 }
 
 const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
   expenses,
   loading,
   onExpenseClick,
-  onRetry
+  onRetry,
+  userCurrency = 'USD'
 }) => {
 
   const formatDate = (dateString: string): string => {
@@ -36,7 +39,7 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
   };
 
   const formatCurrency = (amount: number): string => {
-    return expenseService.formatCurrency(amount);
+    return currencyService.formatCurrency(amount, userCurrency);
   };
 
   const truncateText = (text: string | undefined, maxLength: number): string => {

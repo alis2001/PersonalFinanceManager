@@ -77,6 +77,15 @@ const registerSchema = Joi.object({
       'any.required': 'Company name is required for business accounts'
     }),
   
+  defaultCurrency: Joi.string()
+    .length(3)
+    .pattern(new RegExp('^[A-Z]{3}$'))
+    .default('USD')
+    .messages({
+      'string.length': 'Currency code must be exactly 3 characters',
+      'string.pattern.base': 'Currency code must be 3 uppercase letters (e.g., USD, EUR)'
+    }),
+  
   acceptTerms: Joi.boolean()
     .valid(true)
     .required()

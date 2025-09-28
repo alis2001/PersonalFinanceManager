@@ -6,6 +6,7 @@ interface RegisterData {
   confirmPassword: string;
   accountType: 'personal' | 'business';
   companyName?: string;
+  defaultCurrency: string;
   acceptTerms: boolean;
   marketingConsent?: boolean;
 }

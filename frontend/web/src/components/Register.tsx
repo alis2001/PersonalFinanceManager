@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
+import currencyService from '../services/currencyService';
 import '../styles/Register.css';
 
 interface RegisterFormData {
@@ -11,6 +12,7 @@ interface RegisterFormData {
   confirmPassword: string;
   accountType: 'personal' | 'business';
   companyName: string;
+  defaultCurrency: string;
   acceptTerms: boolean;
 }
 
@@ -24,10 +26,16 @@ const Register: React.FC = () => {
     confirmPassword: '',
     accountType: 'personal',
     companyName: '',
+    defaultCurrency: currencyService.getSuggestedCurrency(),
     acceptTerms: false
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [popularCurrencies] = useState(currencyService.getPopularCurrencies());
+  
+  // Debug: Log the currencies to console
+  console.log('Popular currencies:', popularCurrencies);
+  console.log('Default currency:', formData.defaultCurrency);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -83,6 +91,7 @@ const Register: React.FC = () => {
       confirmPassword: formData.confirmPassword,
       accountType: formData.accountType,
       companyName: formData.accountType === 'business' ? formData.companyName : undefined,
+      defaultCurrency: formData.defaultCurrency,
       acceptTerms: formData.acceptTerms,
       marketingConsent: false
     });
@@ -146,6 +155,28 @@ const Register: React.FC = () => {
               />
             </div>
           )}
+
+          {/* Currency Selection */}
+          <div className="form-group">
+            <label htmlFor="defaultCurrency">Currency</label>
+            <select
+              id="defaultCurrency"
+              name="defaultCurrency"
+              value={formData.defaultCurrency}
+              onChange={handleChange}
+              required
+              disabled={loading}
+            >
+              {popularCurrencies.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.symbol} {currency.name} ({currency.code})
+                </option>
+              ))}
+            </select>
+            <small className="form-help">
+              All your transactions will be recorded in this currency
+            </small>
+          </div>
           
           <div className="form-row">
             <div className="form-group">

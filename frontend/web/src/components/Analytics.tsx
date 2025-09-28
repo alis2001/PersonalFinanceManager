@@ -15,6 +15,8 @@ import {
 } from 'chart.js';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import analyticsService from '../services/analyticsService';
+import authService from '../services/authService';
+import currencyService from '../services/currencyService';
 import '../styles/Analytics.css';
 
 // Register Chart.js components
@@ -68,8 +70,17 @@ interface SpendingTrends {
   }>;
 }
 
+interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  defaultCurrency: string;
+}
+
 const Analytics: React.FC = () => {
   const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [trends, setTrends] = useState<SpendingTrends | null>(null);
@@ -77,8 +88,28 @@ const Analytics: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadAnalyticsData();
-  }, [selectedPeriod]);
+    loadUserProfile();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      loadAnalyticsData();
+    }
+  }, [selectedPeriod, user]);
+
+  const loadUserProfile = async () => {
+    if (!authService.isAuthenticated()) {
+      navigate('/login');
+      return;
+    }
+
+    const profile = await authService.getProfile();
+    if (profile) {
+      setUser(profile);
+    } else {
+      navigate('/login');
+    }
+  };
 
   const loadAnalyticsData = async () => {
     setLoading(true);
@@ -116,10 +147,8 @@ const Analytics: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+    const currency = user?.defaultCurrency || 'USD';
+    return currencyService.formatCurrency(amount, currency);
   };
 
   const formatPercentage = (value: number) => {
@@ -134,27 +163,62 @@ const Analytics: React.FC = () => {
     }
   };
 
+  // Modern color palette
+  const modernColors = [
+    '#1a1a1a', '#666666', '#999999', '#e0e0e0', '#f0f0f0',
+    '#2d3748', '#4a5568', '#718096', '#a0aec0', '#cbd5e0'
+  ];
+
+  const createGradient = (ctx: any, color: string) => {
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, color);
+    gradient.addColorStop(1, color + '20');
+    return gradient;
+  };
+
   // Chart rendering functions
   const renderChart = (chart: any) => {
     const commonOptions = {
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: 2000,
+        easing: 'easeInOutQuart' as const,
+      },
       plugins: {
         legend: {
           position: 'bottom' as const,
           labels: {
             usePointStyle: true,
+            pointStyle: 'circle',
+            padding: 20,
             font: {
-              size: 12
-            }
+              size: 13,
+              family: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+              weight: 'normal' as const
+            },
+            color: '#666666',
+            boxWidth: 12,
+            boxHeight: 12
           }
         },
         tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          borderColor: '#3182ce',
+          backgroundColor: 'rgba(26, 26, 26, 0.95)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          borderColor: '#e0e0e0',
           borderWidth: 1,
+          borderRadius: 12,
+          padding: 16,
+          titleFont: {
+            size: 14,
+            weight: 'bold' as const,
+            family: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif'
+          },
+          bodyFont: {
+            size: 13,
+            family: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif'
+          },
           callbacks: {
             label: (context: any) => {
               if (chart.chart_type === 'doughnut') {
@@ -176,8 +240,11 @@ const Analytics: React.FC = () => {
               data: chart.data.map((item: any) => item.value),
               backgroundColor: chart.data.map((item: any) => item.color || '#64748b'),
               borderColor: '#ffffff',
-              borderWidth: 2,
-              hoverBorderWidth: 3
+              borderWidth: 3,
+              hoverBorderWidth: 4,
+              hoverOffset: 8,
+              borderRadius: 8,
+              spacing: 2
             }]
           };
           
@@ -187,12 +254,18 @@ const Analytics: React.FC = () => {
                 data={chartData} 
                 options={{
                   ...commonOptions,
-                  cutout: '60%',
+                  cutout: '65%',
                   plugins: {
                     ...commonOptions.plugins,
                     legend: {
                       ...commonOptions.plugins.legend,
-                      position: 'right' as const
+                      position: 'right' as const,
+                      labels: {
+                        ...commonOptions.plugins.legend.labels,
+                        padding: 15,
+                        usePointStyle: true,
+                        pointStyle: 'rectRounded'
+                      }
                     }
                   }
                 }} 
@@ -204,20 +277,56 @@ const Analytics: React.FC = () => {
 
       case 'bar':
         if (chart.data && chart.data.labels && chart.data.labels.length > 0) {
+          const modernBarData = {
+            ...chart.data,
+            datasets: chart.data.datasets.map((dataset: any, index: number) => ({
+              ...dataset,
+              backgroundColor: dataset.backgroundColor || modernColors[index % modernColors.length],
+              borderColor: dataset.borderColor || dataset.backgroundColor || modernColors[index % modernColors.length],
+              borderWidth: 0,
+              borderRadius: 8,
+              borderSkipped: false,
+              barThickness: 40,
+              maxBarThickness: 50
+            }))
+          };
+
           const options = {
             ...commonOptions,
             scales: {
               y: {
                 beginAtZero: true,
                 ticks: {
-                  callback: (value: any) => formatCurrency(value)
+                  callback: (value: any) => formatCurrency(value),
+                  font: {
+                    size: 12,
+                    family: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif'
+                  },
+                  color: '#666666',
+                  padding: 10
                 },
                 grid: {
-                  color: 'rgba(0, 0, 0, 0.1)'
+                  color: 'rgba(0, 0, 0, 0.05)',
+                  drawBorder: false,
+                  lineWidth: 1
+                },
+                border: {
+                  display: false
                 }
               },
               x: {
+                ticks: {
+                  font: {
+                    size: 12,
+                    family: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif'
+                  },
+                  color: '#666666',
+                  padding: 10
+                },
                 grid: {
+                  display: false
+                },
+                border: {
                   display: false
                 }
               }
@@ -226,7 +335,7 @@ const Analytics: React.FC = () => {
 
           return (
             <div className="chart-wrapper">
-              <Bar data={chart.data} options={options} />
+              <Bar data={modernBarData} options={options} />
             </div>
           );
         }
@@ -235,38 +344,90 @@ const Analytics: React.FC = () => {
       case 'line':
       case 'area':
         if (chart.data && chart.data.labels && chart.data.labels.length > 0) {
+          const modernLineData = {
+            ...chart.data,
+            datasets: chart.data.datasets.map((dataset: any, index: number) => {
+              const originalColor = dataset.borderColor || dataset.backgroundColor || modernColors[index % modernColors.length];
+              return {
+                ...dataset,
+                borderColor: originalColor,
+                backgroundColor: chart.chart_type === 'area' 
+                  ? originalColor + '20'
+                  : 'transparent',
+                borderWidth: 3,
+                pointBackgroundColor: originalColor,
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 2,
+                pointRadius: 5,
+                pointHoverRadius: 8,
+                pointHoverBackgroundColor: originalColor,
+                pointHoverBorderColor: '#ffffff',
+                pointHoverBorderWidth: 3,
+                fill: chart.chart_type === 'area'
+              };
+            })
+          };
+
           const options = {
             ...commonOptions,
             scales: {
               y: {
                 beginAtZero: true,
                 ticks: {
-                  callback: (value: any) => formatCurrency(value)
+                  callback: (value: any) => formatCurrency(value),
+                  font: {
+                    size: 12,
+                    family: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif'
+                  },
+                  color: '#666666',
+                  padding: 10
                 },
                 grid: {
-                  color: 'rgba(0, 0, 0, 0.1)'
+                  color: 'rgba(0, 0, 0, 0.05)',
+                  drawBorder: false,
+                  lineWidth: 1
+                },
+                border: {
+                  display: false
                 }
               },
               x: {
+                ticks: {
+                  font: {
+                    size: 12,
+                    family: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif'
+                  },
+                  color: '#666666',
+                  padding: 10
+                },
                 grid: {
+                  display: false
+                },
+                border: {
                   display: false
                 }
               }
             },
             elements: {
               line: {
-                tension: 0.4
+                tension: 0.4,
+                capBezierPoints: false
               },
               point: {
-                radius: 4,
-                hoverRadius: 6
+                radius: 5,
+                hoverRadius: 8,
+                hitRadius: 10
               }
+            },
+            interaction: {
+              intersect: false,
+              mode: 'index' as const
             }
           };
 
           return (
             <div className="chart-wrapper">
-              <Line data={chart.data} options={options} />
+              <Line data={modernLineData} options={options} />
             </div>
           );
         }
@@ -276,7 +437,7 @@ const Analytics: React.FC = () => {
     // Fallback for charts with no data
     return (
       <div className="chart-no-data">
-        <div className="no-data-icon">📊</div>
+        <div className="no-data-icon">—</div>
         <p>No data available for this period</p>
         <small>Try selecting a different time period</small>
       </div>
@@ -311,7 +472,7 @@ const Analytics: React.FC = () => {
   return (
     <div className="analytics-container">
       <header className="analytics-header">
-        <h1>📊 Financial Analytics</h1>
+        <h1>Financial Analytics</h1>
         <div className="analytics-controls">
           <select 
             value={selectedPeriod} 
@@ -358,7 +519,7 @@ const Analytics: React.FC = () => {
           {/* Professional Charts Section */}
           {overview.charts && overview.charts.length > 0 && (
             <div className="charts-section">
-              <h2>📈 Financial Analysis Charts</h2>
+              <h2>Financial Analysis Charts</h2>
               <div className="charts-grid">
                 {overview.charts.map((chart, index) => (
                   <div key={index} className="chart-container">
@@ -373,12 +534,12 @@ const Analytics: React.FC = () => {
           {/* Trends Section */}
           {trends && (
             <div className="trends-section">
-              <h2>📊 Spending Trends</h2>
+              <h2>Spending Trends</h2>
               <div className="trend-summary">
                 <div className="trend-indicator">
                   <span className={`trend-direction ${trends.trend_direction}`}>
-                    {trends.trend_direction === 'increasing' ? '📈' : 
-                     trends.trend_direction === 'decreasing' ? '📉' : '➡️'}
+                    {trends.trend_direction === 'increasing' ? '↗' : 
+                     trends.trend_direction === 'decreasing' ? '↘' : '→'}
                   </span>
                   <div className="trend-info">
                     <h3>Trend: {trends.trend_direction}</h3>
@@ -392,12 +553,12 @@ const Analytics: React.FC = () => {
 
           {/* Top Categories */}
           <div className="categories-section">
-            <h2>🏆 Top Spending Categories</h2>
+            <h2>Top Spending Categories</h2>
             <div className="categories-list">
               {overview.top_expense_categories.map((category, index) => (
                 <div key={index} className="category-item">
                   <div className="category-info">
-                    <span className="category-icon">{category.category_icon || '💰'}</span>
+                    <span className="category-icon">{category.category_icon || '•'}</span>
                     <div className="category-details">
                       <h4>{category.category_name}</h4>
                       <p>{formatCurrency(category.total_amount)} ({category.percentage_of_total.toFixed(1)}%)</p>
@@ -408,7 +569,7 @@ const Analytics: React.FC = () => {
                       className="category-progress" 
                       style={{ 
                         width: `${category.percentage_of_total}%`,
-                        backgroundColor: category.category_color || '#64748b'
+                        backgroundColor: category.category_color || '#1a1a1a'
                       }}
                     ></div>
                   </div>
@@ -419,14 +580,11 @@ const Analytics: React.FC = () => {
 
           {/* Insights */}
           <div className="insights-section">
-            <h2>💡 Financial Insights</h2>
+            <h2>Financial Insights</h2>
             <div className="insights-list">
               {overview.insights.map((insight, index) => (
                 <div key={index} className="insight-item">
-                  <div 
-                    className="insight-indicator"
-                    style={{ backgroundColor: getSeverityColor(insight.severity) }}
-                  ></div>
+                  <div className="insight-indicator"></div>
                   <div className="insight-content">
                     <h4>{insight.title}</h4>
                     <p>{insight.description}</p>

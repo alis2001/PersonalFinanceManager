@@ -170,3 +170,11 @@
     margin-bottom: 24px;
   }
 }
+
+.form-help {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: #666666;
+  font-weight: 400;
+}

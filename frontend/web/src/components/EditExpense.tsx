@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import expenseService from '../services/expenseService';
 import categoryService from '../services/categoryService';
+import currencyService from '../services/currencyService';
 import type { Category } from '../services/categoryService';
 import type { Expense } from '../services/expenseService';
 import '../styles/EditExpense.css';
@@ -10,9 +11,10 @@ interface EditExpenseProps {
   expense: Expense;
   onClose: () => void;
   onExpenseUpdated: () => void;
+  userCurrency?: string;
 }
 
-const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onExpenseUpdated }) => {
+const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onExpenseUpdated, userCurrency = 'USD' }) => {
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
@@ -357,7 +359,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
                 <div className="expense-preview">
                   <div className="expense-preview-item">
                     <span className="expense-preview-label">Amount:</span>
-                    <span className="expense-preview-value">{expenseService.formatCurrency(expense.amount)}</span>
+                    <span className="expense-preview-value">{currencyService.formatCurrency(expense.amount, userCurrency)}</span>
                   </div>
                   <div className="expense-preview-item">
                     <span className="expense-preview-label">Category:</span>

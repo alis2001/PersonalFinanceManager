@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import expenseService from '../services/expenseService';
+import currencyService from '../services/currencyService';
 import type { Expense } from '../services/expenseService';
 import AddExpense from './AddExpense';
 import RecentExpensesTable from './RecentExpensesTable';
@@ -15,6 +16,7 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
+  defaultCurrency: string;
 }
 
 interface ExpenseStats {
@@ -174,7 +176,8 @@ const Dashboard: React.FC = () => {
   };
 
   const formatCurrency = (amount: number): string => {
-    return expenseService.formatCurrency(amount);
+    const currency = user?.defaultCurrency || 'USD';
+    return currencyService.formatCurrency(amount, currency);
   };
 
   const getStatCardClass = (isLoading: boolean) => {
@@ -291,6 +294,7 @@ const Dashboard: React.FC = () => {
               loading={recentExpensesLoading}
               onExpenseClick={handleEditExpense}
               onRetry={loadRecentExpenses}
+              userCurrency={user?.defaultCurrency}
             />
           </div>
         </div>
@@ -300,6 +304,7 @@ const Dashboard: React.FC = () => {
         isOpen={showAddExpense}
         onClose={() => setShowAddExpense(false)}
         onExpenseAdded={handleAddExpenseSuccess}
+        userCurrency={user?.defaultCurrency}
       />
 
       {/* NEW RECEIPT UPLOAD MODAL */}
@@ -318,6 +323,7 @@ const Dashboard: React.FC = () => {
             setSelectedExpense(null);
           }}
           onExpenseUpdated={handleEditExpenseSuccess}
+          userCurrency={user?.defaultCurrency}
         />
       )}
 

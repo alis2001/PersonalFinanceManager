@@ -47,7 +47,8 @@ const formatUserResponse = (user) => {
     status: user.status,
     createdAt: user.created_at,
     lastLogin: user.last_login,
-    emailVerified: user.email_verified
+    emailVerified: user.email_verified,
+    defaultCurrency: user.default_currency
   };
 };
 

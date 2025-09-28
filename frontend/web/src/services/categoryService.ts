@@ -252,10 +252,10 @@ class CategoryService {
   }
 
   // Utility method for formatting currency in components
-  formatCurrency(amount: number): string {
+  formatCurrency(amount: number, currency: string = 'USD'): string {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(amount);

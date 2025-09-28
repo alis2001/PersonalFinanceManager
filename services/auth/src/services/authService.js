@@ -40,6 +40,7 @@ class AuthService {
       lastName,
       accountType = ACCOUNT_TYPES.PERSONAL,
       companyName,
+      defaultCurrency = 'USD',
       acceptTerms,
       marketingConsent = false
     } = userData;
@@ -68,12 +69,12 @@ class AuthService {
       const userResult = await client.query(
         `INSERT INTO users (
           email, password_hash, first_name, last_name, account_type, company_name,
-          status, email_verification_token, email_verification_expires
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
-        RETURNING id, email, first_name, last_name, account_type, company_name, status, created_at`,
+          default_currency, currency_locale, status, email_verification_token, email_verification_expires
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+        RETURNING id, email, first_name, last_name, account_type, company_name, default_currency, status, created_at`,
         [
           normalizedEmail, passwordHash, firstName, lastName, accountType, 
-          companyName || null, USER_STATUSES.PENDING_VERIFICATION,
+          companyName || null, defaultCurrency, 'en-US', USER_STATUSES.PENDING_VERIFICATION,
           emailVerificationToken, emailVerificationExpires
         ]
       );

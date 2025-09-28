@@ -22,6 +22,8 @@ CREATE TABLE users (
     last_name VARCHAR(100) NOT NULL,
     account_type account_type DEFAULT 'personal',
     company_name VARCHAR(255),
+    default_currency VARCHAR(3) DEFAULT 'USD',
+    currency_locale VARCHAR(10) DEFAULT 'en-US',
     status user_status DEFAULT 'pending_verification',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
