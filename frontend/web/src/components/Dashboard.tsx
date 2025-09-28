@@ -9,6 +9,8 @@ import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
 import ManageCategories from './ManageCategories';
 import ReceiptUpload from './ReceiptUpload'; // NEW IMPORT
+import LanguageSwitcher from './LanguageSwitcher';
+import { useTranslation } from '../hooks/useTranslation';
 import '../styles/Dashboard.css';
 
 interface User {
@@ -33,6 +35,37 @@ interface ExpenseStats {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  // Function to translate category names
+  const getTranslatedCategoryName = (categoryName: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilities'),
+      'Food & Dining': t('categories.foodDining'),
+      'Transportation': t('categories.transportation'),
+      'Shopping': t('categories.shopping'),
+      'Entertainment': t('categories.entertainment'),
+      'Healthcare': t('categories.healthcare'),
+      'Education': t('categories.education'),
+      'Travel': t('categories.travel'),
+      'Groceries': t('categories.groceries'),
+      'Gas': t('categories.gas'),
+      'Insurance': t('categories.insurance'),
+      'Other': t('categories.other'),
+      'Business': t('categories.business'),
+      'Business Income': t('categories.businessIncome'),
+      'Freelance': t('categories.freelance'),
+      'Gifts & Bonuses': t('categories.giftsBonuses'),
+      'Gifts & Donations': t('categories.giftsDonations'),
+      'Home & Garden': t('categories.homeGarden'),
+      'Investment Returns': t('categories.investmentReturns'),
+      'Other Expenses': t('categories.otherExpenses'),
+      'Other Income': t('categories.otherIncome'),
+      'Personal Care': t('categories.personalCare'),
+      'Rental Income': t('categories.rentalIncome'),
+    };
+    return categoryMap[categoryName] || categoryName;
+  };
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -195,12 +228,13 @@ const Dashboard: React.FC = () => {
           <div className="logo">
             <h1>Rapilot</h1>
           </div>
-          <div className="user-menu">
-            <span className="welcome">Welcome, {user?.firstName}!</span>
-            <button className="btn-logout" onClick={handleLogout}>
-              Logout
-            </button>
-          </div>
+                  <div className="user-menu">
+                    <LanguageSwitcher compact={true} />
+                    <span className="welcome">{t('dashboard.welcome', { name: user?.firstName || '' })}</span>
+                    <button className="btn-logout" onClick={handleLogout}>
+                      {t('common.logout')}
+                    </button>
+                  </div>
         </div>
       </header>
 
@@ -210,33 +244,33 @@ const Dashboard: React.FC = () => {
             <div className={getStatCardClass(statsLoading)}>
               <div className="stat-icon">📅</div>
               <div className="stat-info">
-                <h3>Weekly Expenses</h3>
+                <h3>{t('dashboard.weeklyExpenses')}</h3>
                 <p className="stat-value">
                   {statsLoading ? '...' : formatCurrency(weeklyStats?.total || 0)}
                 </p>
-                <span className="stat-label">{weeklyStats?.transactionCount || 0} transactions</span>
+                <span className="stat-label">{weeklyStats?.transactionCount || 0} {t('dashboard.transactions')}</span>
               </div>
             </div>
 
             <div className={getStatCardClass(statsLoading)}>
               <div className="stat-icon">📊</div>
               <div className="stat-info">
-                <h3>Monthly Expenses</h3>
+                <h3>{t('dashboard.monthlyExpenses')}</h3>
                 <p className="stat-value">
                   {statsLoading ? '...' : formatCurrency(monthlyStats?.total || 0)}
                 </p>
-                <span className="stat-label">{monthlyStats?.transactionCount || 0} transactions</span>
+                <span className="stat-label">{monthlyStats?.transactionCount || 0} {t('dashboard.transactions')}</span>
               </div>
             </div>
 
             <div className={getStatCardClass(statsLoading)}>
               <div className="stat-icon">📈</div>
               <div className="stat-info">
-                <h3>Yearly Expenses</h3>
+                <h3>{t('dashboard.yearlyExpenses')}</h3>
                 <p className="stat-value">
                   {statsLoading ? '...' : formatCurrency(yearlyStats?.total || 0)}
                 </p>
-                <span className="stat-label">{yearlyStats?.transactionCount || 0} transactions</span>
+                <span className="stat-label">{yearlyStats?.transactionCount || 0} {t('dashboard.transactions')}</span>
               </div>
             </div>
           </div>
@@ -244,14 +278,14 @@ const Dashboard: React.FC = () => {
           {/* Top Categories Section */}
           {monthlyStats?.topCategories && monthlyStats.topCategories.length > 0 && (
             <div className="top-categories-section">
-              <h2>Top Categories This Month</h2>
+              <h2>{t('dashboard.topCategoriesThisMonth')}</h2>
               <div className="category-grid">
                 {monthlyStats.topCategories.map((category, index) => (
                   <div key={index} className="category-item">
                     <div className="category-info">
                       <span className="category-icon">{category.icon}</span>
                       <div>
-                        <h4>{category.name}</h4>
+                        <h4>{getTranslatedCategoryName(category.name)}</h4>
                         <p className="category-amount">{formatCurrency(category.amount)}</p>
                       </div>
                     </div>
@@ -263,32 +297,32 @@ const Dashboard: React.FC = () => {
 
           {/* UPDATED: Added Receipt Upload Button */}
           <div className="quick-actions">
-            <h2>Quick Actions</h2>
+            <h2>{t('dashboard.quickActions')}</h2>
             <div className="action-buttons">
                 <button className="btn-action primary" onClick={handleAddExpense}>
-                Add Expense
+                {t('dashboard.addExpense')}
                 </button>
                 <button className="btn-action purple" onClick={handleReceiptUpload}>
                 <span>📸</span>
-                Upload Receipt
+                {t('dashboard.uploadReceipt')}
                 </button>
                 <button className="btn-action" onClick={handleViewAnalytics}>
                 <span>📊</span>
-                View Analytics
+                {t('dashboard.viewAnalytics')}
                 </button>
                 <button className="btn-action" onClick={handleManageCategories}>
                 <span>🏷️</span>
-                Manage Categories
+                {t('dashboard.manageCategories')}
                 </button>
                 <button className="btn-action" onClick={handleViewAllTransactions}>
                 <span>📋</span>
-                View All Transactions
+                {t('dashboard.viewAllTransactions')}
                 </button>
             </div>
           </div>
 
           <div className="recent-activity">
-            <h2>Recent Expenses</h2>
+            <h2>{t('dashboard.recentExpenses')}</h2>
             <RecentExpensesTable
               expenses={recentExpenses}
               loading={recentExpensesLoading}

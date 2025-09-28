@@ -4,6 +4,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import receiptService from '../services/receiptService';
 import categoryService from '../services/categoryService';
+import dateConversionService from '../services/dateConversionService';
+import { useTranslation } from '../hooks/useTranslation';
 import type { UploadResponse, ProcessingStatusResponse, ReceiptTransaction } from '../services/receiptService';
 import type { Category } from '../services/categoryService';
 import AddExpense from './AddExpense';
@@ -16,6 +18,7 @@ interface ReceiptUploadProps {
 }
 
 const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceiptProcessed }) => {
+  const { t, currentLanguage } = useTranslation();
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -366,7 +369,14 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
       if (!dateString) return '';
       
       try {
-        // Handle various date formats and convert to YYYY-MM-DDTHH:MM
+        // Use the date conversion service to ensure consistent formatting
+        // The service handles both Persian and Gregorian dates properly
+        const result = dateConversionService.persianToGregorian(dateString, true);
+        if (result.isValid) {
+          return result.gregorianDate;
+        }
+        
+        // Fallback to direct conversion if the service fails
         const date = new Date(dateString);
         if (isNaN(date.getTime())) return '';
         
@@ -411,7 +421,7 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
     <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-content receipt-upload-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Upload Receipt</h2>
+          <h2>{t('receipt.uploadReceipt')}</h2>
           <button className="close-button" onClick={handleClose}>×</button>
         </div>
 
@@ -427,11 +437,11 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
             >
               <div className="drop-zone-content">
                 <div className="upload-icon">📎</div>
-                <h3>Drop your receipt here</h3>
-                <p>or click to browse files</p>
+                <h3>{t('receipt.dropReceiptHere')}</h3>
+                <p>{t('receipt.orClickToBrowse')}</p>
                 <div className="supported-formats">
-                  <span>Supported: Images, PDF, Excel, CSV</span>
-                  <span>Max size: 10MB</span>
+                  <span>{t('receipt.supportedFormats')}</span>
+                  <span>{t('receipt.maxSize')}</span>
                 </div>
               </div>
               <input
@@ -458,13 +468,13 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
                   className="btn-secondary" 
                   onClick={() => setSelectedFile(null)}
                 >
-                  Remove
+                  {t('receipt.remove')}
                 </button>
                 <button 
                   className="btn-primary" 
                   onClick={handleUpload}
                 >
-                  Upload & Process
+                  {t('receipt.uploadAndProcess')}
                 </button>
               </div>
             </div>
@@ -473,7 +483,7 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
           {uploading && (
             <div className="upload-progress">
               <div className="progress-info">
-                <h3>Uploading...</h3>
+                <h3>{t('receipt.uploading')}</h3>
                 <span>{uploadProgress}%</span>
               </div>
               <div className="progress-bar">
@@ -494,12 +504,12 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
               <h3>{getStatusMessage()}</h3>
               {processingStatus?.job && (
                 <div className="status-details">
-                  <p>Status: {processingStatus.job.status}</p>
+                  <p>{t('receipt.status')}: {processingStatus.job.status}</p>
                   {processingStatus.transactions && (
-                    <p>Transactions detected: {processingStatus.transactions.detected}</p>
+                    <p>{t('receipt.transactionsDetected')}: {processingStatus.transactions.detected}</p>
                   )}
                   {processingStatus.processingTimeMs && (
-                    <p>Processing time: {Math.round(processingStatus.processingTimeMs)}ms</p>
+                    <p>{t('receipt.processingTime')}: {Math.round(processingStatus.processingTimeMs)}ms</p>
                   )}
                 </div>
               )}
@@ -512,14 +522,14 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
               {error}
               {categoryValidationErrors.length > 0 && (
                 <div className="category-errors">
-                  <h4>Category Issues Found:</h4>
+                  <h4>{t('receipt.categoryIssuesFound')}</h4>
                   <ul>
                     {categoryValidationErrors.map((error, index) => (
                       <li key={index}>{error}</li>
                     ))}
                   </ul>
                   <p className="error-guidance">
-                    <strong>Please:</strong> Go to "Manage Categories" → Add the missing categories → Return and re-upload your receipt.
+                    <strong>{t('receipt.please')}:</strong> {t('receipt.categoryGuidance')}
                   </p>
                 </div>
               )}
@@ -537,21 +547,21 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
         <div className="modal-footer">
           {!processing && !showAddExpense && (
             <button className="btn-secondary" onClick={handleClose}>
-              {success ? 'Close' : 'Cancel'}
+              {success ? t('common.close') : t('common.cancel')}
             </button>
           )}
           
           {showAddExpense && (
             <div className="transaction-navigation">
               <span className="transaction-counter">
-                Transaction {currentTransactionIndex + 1} of {transactions.length}
+                {t('receipt.transactionCounter', { current: currentTransactionIndex + 1, total: transactions.length })}
               </span>
               <div className="nav-buttons">
                 <button className="btn-secondary" onClick={handleSkipTransaction}>
-                  Skip This Transaction
+                  {t('receipt.skipTransaction')}
                 </button>
                 <button className="btn-secondary" onClick={handleClose}>
-                  Cancel All
+                  {t('receipt.cancelAll')}
                 </button>
               </div>
             </div>
@@ -566,7 +576,7 @@ const ReceiptUpload: React.FC<ReceiptUploadProps> = ({ isOpen, onClose, onReceip
           onClose={() => setShowAddExpense(false)}
           onExpenseAdded={handleAddExpenseSuccess}
           prefilledData={getPrefilledExpenseData()}
-          title={`Add Expense - Transaction ${currentTransactionIndex + 1} of ${transactions.length}`}
+          title={t('receipt.addExpenseTransaction', { current: currentTransactionIndex + 1, total: transactions.length })}
           fromReceipt={true}
         />
       )}

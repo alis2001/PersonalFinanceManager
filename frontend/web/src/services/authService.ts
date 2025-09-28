@@ -367,6 +367,28 @@ class AuthService {
       return false;
     }
   }
+
+  async updateLanguage(preferredLanguage: string): Promise<boolean> {
+    try {
+      const response = await this.makeRequest('/update-language', {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ preferredLanguage }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Language update error:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

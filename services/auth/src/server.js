@@ -171,9 +171,9 @@ app.use(express.urlencoded({
 // Apply body parser error handler immediately after body parsing
 app.use(bodyParserErrorHandler());
 
-// General rate limiting (after body parsing)
-const { generalLimiter } = require('./middleware/auth');
-app.use(generalLimiter);
+// Rate limiting (after body parsing) - using internal service limiter for all routes
+const { internalServiceLimiter } = require('./middleware/auth');
+app.use(internalServiceLimiter);
 
 // Request logging
 app.use(requestLogger);

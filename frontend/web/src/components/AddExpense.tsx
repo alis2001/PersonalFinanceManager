@@ -3,7 +3,9 @@ import React, { useState, useEffect } from 'react';
 import expenseService from '../services/expenseService';
 import categoryService from '../services/categoryService';
 import currencyService from '../services/currencyService';
+import { useTranslation } from '../hooks/useTranslation';
 import type { Category } from '../services/categoryService';
+import ConditionalDatePicker from './ConditionalDatePicker';
 import '../styles/AddExpense.css';
 
 interface AddExpenseProps {
@@ -29,10 +31,41 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   onClose, 
   onExpenseAdded, 
   prefilledData, 
-  title = "Add New Expense", 
+  title, 
   fromReceipt = false,
   userCurrency = 'USD'
 }) => {
+  const { t } = useTranslation();
+
+  // Function to translate category names
+  const getTranslatedCategoryName = (categoryName: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilities'),
+      'Food & Dining': t('categories.foodDining'),
+      'Transportation': t('categories.transportation'),
+      'Shopping': t('categories.shopping'),
+      'Entertainment': t('categories.entertainment'),
+      'Healthcare': t('categories.healthcare'),
+      'Education': t('categories.education'),
+      'Travel': t('categories.travel'),
+      'Groceries': t('categories.groceries'),
+      'Gas': t('categories.gas'),
+      'Insurance': t('categories.insurance'),
+      'Other': t('categories.other'),
+      'Business': t('categories.business'),
+      'Business Income': t('categories.businessIncome'),
+      'Freelance': t('categories.freelance'),
+      'Gifts & Bonuses': t('categories.giftsBonuses'),
+      'Gifts & Donations': t('categories.giftsDonations'),
+      'Home & Garden': t('categories.homeGarden'),
+      'Investment Returns': t('categories.investmentReturns'),
+      'Other Expenses': t('categories.otherExpenses'),
+      'Other Income': t('categories.otherIncome'),
+      'Personal Care': t('categories.personalCare'),
+      'Rental Income': t('categories.rentalIncome'),
+    };
+    return categoryMap[categoryName] || categoryName;
+  };
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
@@ -91,10 +124,10 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           setFormData(prev => ({ ...prev, categoryId: categoryList[0].id }));
         }
       } else {
-        setError('Failed to load categories');
+        setError(t('expenses.failedToLoadCategories'));
       }
     } catch (err) {
-      setError('Failed to load categories');
+        setError(t('expenses.failedToLoadCategories'));
     }
     setCategoriesLoading(false);
   };
@@ -118,19 +151,19 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
   const validateForm = (): string | null => {
     if (!formData.categoryId) {
-      return 'Please select a category';
+      return t('expenses.pleaseSelectCategory');
     }
     
     if (!formData.amount || parseFloat(formData.amount) <= 0) {
-      return 'Please enter a valid amount';
+      return t('expenses.pleaseEnterValidAmount');
     }
     
     if (parseFloat(formData.amount) > 999999.99) {
-      return 'Amount cannot exceed $999,999.99';
+      return t('expenses.amountCannotExceed');
     }
     
     if (!formData.transactionDate) {
-      return 'Please select a date and time';
+      return t('expenses.pleaseSelectDateTime');
     }
     
     return null;
@@ -189,10 +222,10 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           onClose();
         }
       } else {
-        setError(result.error || 'Failed to create expense');
+        setError(result.error || t('expenses.failedToCreateExpense'));
       }
     } catch (err) {
-      setError('Failed to create expense. Please try again.');
+      setError(t('expenses.failedToCreateExpenseTryAgain'));
     }
 
     setLoading(false);
@@ -239,7 +272,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     <div className="add-expense-overlay" onClick={handleCancel}>
       <div className="add-expense-modal" onClick={(e) => e.stopPropagation()}>
         <div className="add-expense-header">
-          <h2>{title}{fromReceipt && <span className="receipt-badge"> 📄 From Receipt</span>}</h2>
+          <h2>{title || t('expenses.addNewExpense')}{fromReceipt && <span className="receipt-badge"> 📄 {t('expenses.fromReceipt')}</span>}</h2>
           <button className="close-button" onClick={handleCancel}>
             ×
           </button>
@@ -251,37 +284,28 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           {/* Date & Time Input */}
           <div className="form-group">
             <label htmlFor="transactionDate">
-              Date & Time <span className="required">*</span>
+              {t('expenses.dateTime')} <span className="required">*</span>
             </label>
             <div className="date-input-container">
-              <input
-                type="datetime-local"
-                id="transactionDate"
-                name="transactionDate"
+              <ConditionalDatePicker
                 value={formData.transactionDate}
-                onChange={handleInputChange}
-                required
+                onChange={(value) => setFormData(prev => ({ ...prev, transactionDate: value }))}
                 disabled={loading}
+                placeholder={t('expenses.dateTime')}
+                showTime={true}
                 className="date-input"
+                type="datetime-local"
               />
-              <button
-                type="button"
-                className="now-button"
-                onClick={getCurrentDateTime}
-                disabled={loading}
-              >
-                Now
-              </button>
             </div>
           </div>
 
           {/* Category Selection */}
           <div className="form-group">
             <label htmlFor="categoryId">
-              Category <span className="required">*</span>
+              {t('expenses.category')} <span className="required">*</span>
             </label>
             {categoriesLoading ? (
-              <div className="loading-categories">Loading categories...</div>
+              <div className="loading-categories">{t('expenses.loadingCategories')}</div>
             ) : (
               <select
                 id="categoryId"
@@ -292,10 +316,10 @@ const AddExpense: React.FC<AddExpenseProps> = ({
                 disabled={loading}
                 className="category-select"
               >
-                <option value="">Select a category</option>
+                <option value="">{t('expenses.selectCategory')}</option>
                 {categories.map(category => (
                   <option key={category.id} value={category.id}>
-                    {category.icon} {category.name}
+                    {category.icon} {getTranslatedCategoryName(category.name)}
                   </option>
                 ))}
               </select>
@@ -305,7 +329,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           {/* Amount Input */}
           <div className="form-group">
             <label htmlFor="amount">
-              Amount <span className="required">*</span>
+              {t('expenses.amount')} <span className="required">*</span>
             </label>
             <div className="amount-input-container">
               <span className="currency-symbol">{currencyService.getCurrencyByCode(userCurrency)?.symbol || '$'}</span>
@@ -326,14 +350,14 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
           {/* Description Input */}
           <div className="form-group">
-            <label htmlFor="description">Description</label>
+            <label htmlFor="description">{t('expenses.description')}</label>
             <input
               type="text"
               id="description"
               name="description"
               value={formData.description}
               onChange={handleInputChange}
-              placeholder="What did you spend on?"
+              placeholder={t('expenses.whatDidYouSpendOn')}
               disabled={loading}
               className="description-input"
               maxLength={500}
@@ -342,14 +366,14 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
           {/* Location Input (Optional) */}
           <div className="form-group">
-            <label htmlFor="location">Location</label>
+            <label htmlFor="location">{t('expenses.location')}</label>
             <input
               type="text"
               id="location"
               name="location"
               value={formData.location}
               onChange={handleInputChange}
-              placeholder="Where did you make this purchase?"
+              placeholder={t('expenses.whereDidYouMakePurchase')}
               disabled={loading}
               className="location-input"
               maxLength={255}
@@ -358,13 +382,13 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
           {/* Notes Input (Optional) */}
           <div className="form-group">
-            <label htmlFor="notes">Notes</label>
+            <label htmlFor="notes">{t('expenses.notes')}</label>
             <textarea
               id="notes"
               name="notes"
               value={formData.notes}
               onChange={handleInputChange}
-              placeholder="Any additional notes or details..."
+              placeholder={t('expenses.additionalNotes')}
               disabled={loading}
               className="notes-input"
               rows={3}
@@ -380,14 +404,14 @@ const AddExpense: React.FC<AddExpenseProps> = ({
               onClick={handleCancel}
               disabled={loading}
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               className="btn-submit"
               disabled={loading || categoriesLoading}
             >
-              {loading ? 'Adding...' : 'Add Expense'}
+              {loading ? t('expenses.adding') : t('expenses.addExpense')}
             </button>
           </div>
         </form>

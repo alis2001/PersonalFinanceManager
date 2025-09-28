@@ -1,0 +1,231 @@
+/* Language Switcher Styles */
+.language-switcher {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.language-switcher-compact {
+  position: relative;
+  display: inline-block;
+}
+
+.language-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.language-selector {
+  position: relative;
+  display: inline-block;
+}
+
+.language-switcher-button,
+.language-switcher-button-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  min-width: 120px;
+  position: relative;
+}
+
+.language-switcher-button-compact {
+  padding: 6px 8px;
+  min-width: auto;
+  border-radius: 4px;
+}
+
+.language-switcher-button:hover,
+.language-switcher-button-compact:hover {
+  border-color: #007bff;
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.1);
+}
+
+.language-switcher-button:disabled,
+.language-switcher-button-compact:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.language-flag {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.language-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.dropdown-arrow {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: #666;
+  transition: transform 0.2s ease;
+}
+
+.language-switcher-button:hover .dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.loading-spinner {
+  position: absolute;
+  right: 8px;
+  animation: spin 1s linear infinite;
+  font-size: 0.9rem;
+  color: #007bff;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Dropdown Styles */
+.language-dropdown,
+.language-dropdown-compact {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+
+.language-dropdown-compact {
+  min-width: 120px;
+  right: auto;
+}
+
+.language-option,
+.language-option-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  width: 100%;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.language-option-compact {
+  padding: 8px 10px;
+}
+
+.language-option:hover,
+.language-option-compact:hover {
+  background-color: #f8f9fa;
+}
+
+.language-option.active,
+.language-option-compact.active {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.language-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.language-name-en {
+  font-size: 0.8rem;
+  color: #666;
+  font-weight: 400;
+}
+
+.checkmark {
+  color: #28a745;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .language-switcher {
+    gap: 6px;
+  }
+  
+  .language-switcher-button {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    min-width: 100px;
+  }
+  
+  .language-option {
+    padding: 8px 10px;
+    font-size: 0.85rem;
+  }
+  
+  .language-dropdown {
+    max-height: 150px;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .language-switcher-button,
+  .language-switcher-button-compact {
+    background: #2d3748;
+    border-color: #4a5568;
+    color: #e2e8f0;
+  }
+  
+  .language-switcher-button:hover,
+  .language-switcher-button-compact:hover {
+    border-color: #63b3ed;
+    background: #4a5568;
+  }
+  
+  .language-dropdown,
+  .language-dropdown-compact {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+  
+  .language-option,
+  .language-option-compact {
+    color: #e2e8f0;
+  }
+  
+  .language-option:hover,
+  .language-option-compact:hover {
+    background-color: #4a5568;
+  }
+  
+  .language-option.active,
+  .language-option-compact.active {
+    background-color: #2b6cb0;
+    color: #e2e8f0;
+  }
+  
+  .language-name-en {
+    color: #a0aec0;
+  }
+  
+  .language-label {
+    color: #e2e8f0;
+  }
+}

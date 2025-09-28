@@ -71,6 +71,11 @@ router.get('/profile',
   authController.getProfile
 );
 
+router.put('/update-language', 
+  authenticateToken, 
+  authController.updateLanguage
+);
+
 // Health check route - no middleware needed
 router.get('/health', 
   authController.health

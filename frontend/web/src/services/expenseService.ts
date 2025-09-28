@@ -261,8 +261,16 @@ class ExpenseService {
     }).format(amount);
   }
 
-  formatDate(date: string): string {
-    return new Date(date).toLocaleDateString('en-US', {
+  formatDate(date: string, language: string = 'en'): string {
+    // This function is deprecated - use dateConversionService.formatDateShort instead
+    // Keeping for backward compatibility
+    const d = new Date(date);
+    if (language === 'fa') {
+      // For Persian, we would need moment-jalaali, but this service doesn't have it
+      // Return basic format for now
+      return d.toLocaleDateString('fa-IR');
+    }
+    return d.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'

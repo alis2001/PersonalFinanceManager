@@ -48,7 +48,8 @@ const formatUserResponse = (user) => {
     createdAt: user.created_at,
     lastLogin: user.last_login,
     emailVerified: user.email_verified,
-    defaultCurrency: user.default_currency
+    defaultCurrency: user.default_currency,
+    preferredLanguage: user.preferred_language
   };
 };
 

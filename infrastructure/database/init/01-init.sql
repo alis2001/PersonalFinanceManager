@@ -24,6 +24,7 @@ CREATE TABLE users (
     company_name VARCHAR(255),
     default_currency VARCHAR(3) DEFAULT 'USD',
     currency_locale VARCHAR(10) DEFAULT 'en-US',
+    preferred_language VARCHAR(5) DEFAULT 'en',
     status user_status DEFAULT 'pending_verification',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

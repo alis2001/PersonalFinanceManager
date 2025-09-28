@@ -17,6 +17,7 @@ import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import analyticsService from '../services/analyticsService';
 import authService from '../services/authService';
 import currencyService from '../services/currencyService';
+import { useTranslation } from '../hooks/useTranslation';
 import '../styles/Analytics.css';
 
 // Register Chart.js components
@@ -80,6 +81,37 @@ interface User {
 
 const Analytics: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  // Function to translate category names
+  const getTranslatedCategoryName = (categoryName: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilities'),
+      'Food & Dining': t('categories.foodDining'),
+      'Transportation': t('categories.transportation'),
+      'Shopping': t('categories.shopping'),
+      'Entertainment': t('categories.entertainment'),
+      'Healthcare': t('categories.healthcare'),
+      'Education': t('categories.education'),
+      'Travel': t('categories.travel'),
+      'Groceries': t('categories.groceries'),
+      'Gas': t('categories.gas'),
+      'Insurance': t('categories.insurance'),
+      'Other': t('categories.other'),
+      'Business': t('categories.business'),
+      'Business Income': t('categories.businessIncome'),
+      'Freelance': t('categories.freelance'),
+      'Gifts & Bonuses': t('categories.giftsBonuses'),
+      'Gifts & Donations': t('categories.giftsDonations'),
+      'Home & Garden': t('categories.homeGarden'),
+      'Investment Returns': t('categories.investmentReturns'),
+      'Other Expenses': t('categories.otherExpenses'),
+      'Other Income': t('categories.otherIncome'),
+      'Personal Care': t('categories.personalCare'),
+      'Rental Income': t('categories.rentalIncome'),
+    };
+    return categoryMap[categoryName] || categoryName;
+  };
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
@@ -153,6 +185,160 @@ const Analytics: React.FC = () => {
 
   const formatPercentage = (value: number) => {
     return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+  };
+
+  // Map backend chart titles to translation keys
+  const getTranslatedChartTitle = (title: string): string => {
+    const titleMap: { [key: string]: string } = {
+      'Expense Distribution by Category': t('analytics.expenseDistributionByCategory'),
+      'Spending Map - All Transactions (Monthly)': t('analytics.spendingMapAllTransactions'),
+      'Monthly Spending Comparison': t('analytics.monthlySpendingComparison'),
+      'Top Spending Categories': t('analytics.topCategories'),
+    };
+    return titleMap[title] || title;
+  };
+
+
+  // Map backend insight content to translation keys
+  const getTranslatedInsight = (insight: any): any => {
+    if (insight.title === 'Spending Summary') {
+      return {
+        ...insight,
+        title: t('analytics.spendingSummary'),
+        description: t('analytics.youSpentAcrossTransactions', {
+          amount: formatCurrency(overview?.total_expenses || 0),
+          count: overview?.transaction_count || 0,
+          average: formatCurrency(overview?.average_daily_spending || 0)
+        })
+      };
+    }
+    
+    if (insight.title === 'Highest Spending' || insight.title?.toLowerCase().includes('highest spending')) {
+      const topCategory = overview?.top_expense_categories?.[0];
+      const translatedCategoryName = getTranslatedCategoryName(topCategory?.category_name || '');
+      return {
+        ...insight,
+        title: t('analytics.highestSpending', { category: translatedCategoryName }),
+        description: t('analytics.yourLargestExpenseCategory', {
+          category: translatedCategoryName,
+          amount: formatCurrency(topCategory?.total_amount || 0),
+          percentage: topCategory?.percentage_of_total?.toFixed(1) || '0'
+        })
+      };
+    }
+    
+    if (insight.title === 'Transaction Pattern') {
+      return {
+        ...insight,
+        title: t('analytics.transactionPattern'),
+        description: t('analytics.youAveragedPerTransaction', {
+          average: formatCurrency((overview?.total_expenses || 0) / (overview?.transaction_count || 1)),
+          count: overview?.transaction_count || 0
+        })
+      };
+    }
+    
+    if (insight.title === 'Spending Trend') {
+      return {
+        ...insight,
+        title: t('analytics.spendingTrend'),
+        description: t('analytics.spendingTrendDesc', {
+          period: insight.description.match(/this month|last month|this year|last year/i)?.[0] || '',
+          trend: insight.description.match(/increased|decreased|stable/i)?.[0] || ''
+        })
+      };
+    }
+    
+    if (insight.title === 'Category Breakdown') {
+      const categoryMatch = insight.description.match(/(\w+(?:\s+\w+)*)/);
+      const translatedCategoryName = categoryMatch ? getTranslatedCategoryName(categoryMatch[1]) : '';
+      return {
+        ...insight,
+        title: t('analytics.categoryBreakdown'),
+        description: t('analytics.categoryBreakdownDesc', {
+          category: translatedCategoryName,
+          amount: formatCurrency(insight.description.match(/\$[\d,]+\.?\d*/)?.[0] || '0'),
+          percentage: insight.description.match(/(\d+\.?\d*)%/)?.[1] || '0'
+        })
+      };
+    }
+    
+    if (insight.title === 'Monthly Comparison') {
+      return {
+        ...insight,
+        title: t('analytics.monthlyComparison'),
+        description: t('analytics.monthlyComparisonDesc', {
+          current: formatCurrency(insight.description.match(/\$[\d,]+\.?\d*/)?.[0] || '0'),
+          previous: formatCurrency(insight.description.match(/\$[\d,]+\.?\d*/g)?.[1] || '0')
+        })
+      };
+    }
+    
+    if (insight.title === 'Daily Average') {
+      return {
+        ...insight,
+        title: t('analytics.dailyAverage'),
+        description: t('analytics.dailyAverageDesc', {
+          amount: formatCurrency(insight.description.match(/\$[\d,]+\.?\d*/)?.[0] || '0')
+        })
+      };
+    }
+    
+    if (insight.title === 'Transaction Count') {
+      return {
+        ...insight,
+        title: t('analytics.transactionCount'),
+        description: t('analytics.transactionCountDesc', {
+          count: insight.description.match(/\d+/)?.[0] || '0'
+        })
+      };
+    }
+    
+    if (insight.title === 'Largest Transaction') {
+      const categoryMatch = insight.description.match(/for\s+(\w+(?:\s+\w+)*)/i);
+      const translatedCategoryName = categoryMatch ? getTranslatedCategoryName(categoryMatch[1]) : '';
+      return {
+        ...insight,
+        title: t('analytics.largestTransaction'),
+        description: t('analytics.largestTransactionDesc', {
+          amount: formatCurrency(insight.description.match(/\$[\d,]+\.?\d*/)?.[0] || '0'),
+          category: translatedCategoryName
+        })
+      };
+    }
+    
+    if (insight.title === 'Smallest Transaction') {
+      const categoryMatch = insight.description.match(/for\s+(\w+(?:\s+\w+)*)/i);
+      const translatedCategoryName = categoryMatch ? getTranslatedCategoryName(categoryMatch[1]) : '';
+      return {
+        ...insight,
+        title: t('analytics.smallestTransaction'),
+        description: t('analytics.smallestTransactionDesc', {
+          amount: formatCurrency(insight.description.match(/\$[\d,]+\.?\d*/)?.[0] || '0'),
+          category: translatedCategoryName
+        })
+      };
+    }
+    
+    // Fallback: try to translate common insight titles
+    const commonInsightTitles: { [key: string]: string } = {
+      'Highest Spending': t('analytics.highestSpending', { category: getTranslatedCategoryName(insight.title) }),
+      'Spending Summary': t('analytics.spendingSummary'),
+      'Transaction Pattern': t('analytics.transactionPattern'),
+      'Spending Trend': t('analytics.spendingTrend'),
+      'Category Breakdown': t('analytics.categoryBreakdown'),
+      'Monthly Comparison': t('analytics.monthlyComparison'),
+      'Daily Average': t('analytics.dailyAverage'),
+      'Transaction Count': t('analytics.transactionCount'),
+      'Largest Transaction': t('analytics.largestTransaction'),
+      'Smallest Transaction': t('analytics.smallestTransaction')
+    };
+
+    return {
+      ...insight,
+      title: commonInsightTitles[insight.title] || insight.title,
+      description: insight.description
+    };
   };
 
   const getSeverityColor = (severity: string) => {
@@ -235,7 +421,7 @@ const Analytics: React.FC = () => {
       case 'doughnut':
         if (chart.data && chart.data.length > 0) {
           const chartData = {
-            labels: chart.data.map((item: any) => item.label),
+            labels: chart.data.map((item: any) => getTranslatedCategoryName(item.label)),
             datasets: [{
               data: chart.data.map((item: any) => item.value),
               backgroundColor: chart.data.map((item: any) => item.color || '#64748b'),
@@ -279,6 +465,7 @@ const Analytics: React.FC = () => {
         if (chart.data && chart.data.labels && chart.data.labels.length > 0) {
           const modernBarData = {
             ...chart.data,
+            labels: chart.data.labels?.map((label: string) => getTranslatedCategoryName(label)) || chart.data.labels,
             datasets: chart.data.datasets.map((dataset: any, index: number) => ({
               ...dataset,
               backgroundColor: dataset.backgroundColor || modernColors[index % modernColors.length],
@@ -346,6 +533,7 @@ const Analytics: React.FC = () => {
         if (chart.data && chart.data.labels && chart.data.labels.length > 0) {
           const modernLineData = {
             ...chart.data,
+            labels: chart.data.labels?.map((label: string) => getTranslatedCategoryName(label)) || chart.data.labels,
             datasets: chart.data.datasets.map((dataset: any, index: number) => {
               const originalColor = dataset.borderColor || dataset.backgroundColor || modernColors[index % modernColors.length];
               return {
@@ -459,10 +647,10 @@ const Analytics: React.FC = () => {
     return (
       <div className="analytics-container">
         <div className="error-message">
-          <h3>Error Loading Analytics</h3>
+          <h3>{t('analytics.errorLoadingAnalytics')}</h3>
           <p>{error}</p>
           <button onClick={() => navigate('/dashboard')} className="btn-secondary">
-            Back to Dashboard
+            {t('analytics.backToDashboard')}
           </button>
         </div>
       </div>
@@ -472,21 +660,21 @@ const Analytics: React.FC = () => {
   return (
     <div className="analytics-container">
       <header className="analytics-header">
-        <h1>Financial Analytics</h1>
+        <h1>{t('analytics.financialAnalytics')}</h1>
         <div className="analytics-controls">
           <select 
             value={selectedPeriod} 
             onChange={(e) => setSelectedPeriod(e.target.value)}
             className="period-selector"
           >
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="quarterly">Quarterly</option>
-            <option value="yearly">Yearly</option>
+            <option value="daily">{t('analytics.daily')}</option>
+            <option value="weekly">{t('analytics.weekly')}</option>
+            <option value="monthly">{t('analytics.monthly')}</option>
+            <option value="quarterly">{t('analytics.quarterly')}</option>
+            <option value="yearly">{t('analytics.yearly')}</option>
           </select>
           <button onClick={() => navigate('/dashboard')} className="btn-secondary">
-            Back to Dashboard
+            {t('analytics.backToDashboard')}
           </button>
         </div>
       </header>
@@ -497,21 +685,21 @@ const Analytics: React.FC = () => {
           <div className="analytics-overview">
             <div className="overview-cards">
               <div className="overview-card expense">
-                <h3>Total Expenses</h3>
+                <h3>{t('analytics.totalExpenses')}</h3>
                 <p className="amount">{formatCurrency(overview.total_expenses)}</p>
-                <span className="label">This {selectedPeriod}</span>
+                <span className="label">{t('analytics.thisMonth')}</span>
               </div>
               
               <div className="overview-card transactions">
-                <h3>Total Transactions</h3>
+                <h3>{t('analytics.totalTransactions')}</h3>
                 <p className="amount">{overview.transaction_count}</p>
-                <span className="label">This {selectedPeriod}</span>
+                <span className="label">{t('analytics.thisMonth')}</span>
               </div>
               
               <div className="overview-card daily-avg">
-                <h3>Daily Average</h3>
+                <h3>{t('analytics.dailyAverage')}</h3>
                 <p className="amount">{formatCurrency(overview.average_daily_spending)}</p>
-                <span className="label">Average per day</span>
+                <span className="label">{t('analytics.averagePerDay')}</span>
               </div>
             </div>
           </div>
@@ -519,11 +707,11 @@ const Analytics: React.FC = () => {
           {/* Professional Charts Section */}
           {overview.charts && overview.charts.length > 0 && (
             <div className="charts-section">
-              <h2>Financial Analysis Charts</h2>
+              <h2>{t('analytics.financialAnalysisCharts')}</h2>
               <div className="charts-grid">
                 {overview.charts.map((chart, index) => (
                   <div key={index} className="chart-container">
-                    <h3>{chart.title}</h3>
+                    <h3>{getTranslatedChartTitle(chart.title)}</h3>
                     {renderChart(chart)}
                   </div>
                 ))}
@@ -534,7 +722,7 @@ const Analytics: React.FC = () => {
           {/* Trends Section */}
           {trends && (
             <div className="trends-section">
-              <h2>Spending Trends</h2>
+              <h2>{t('analytics.spendingTrends')}</h2>
               <div className="trend-summary">
                 <div className="trend-indicator">
                   <span className={`trend-direction ${trends.trend_direction}`}>
@@ -542,9 +730,9 @@ const Analytics: React.FC = () => {
                      trends.trend_direction === 'decreasing' ? '↘' : '→'}
                   </span>
                   <div className="trend-info">
-                    <h3>Trend: {trends.trend_direction}</h3>
-                    <p>Change: {formatPercentage(trends.trend_percentage)}</p>
-                    <p>Strength: {(trends.trend_strength * 100).toFixed(0)}%</p>
+                    <h3>{t('analytics.trend')}: {trends.trend_direction}</h3>
+                    <p>{t('analytics.change')}: {formatPercentage(trends.trend_percentage)}</p>
+                    <p>{t('analytics.strength')}: {(trends.trend_strength * 100).toFixed(0)}%</p>
                   </div>
                 </div>
               </div>
@@ -553,14 +741,14 @@ const Analytics: React.FC = () => {
 
           {/* Top Categories */}
           <div className="categories-section">
-            <h2>Top Spending Categories</h2>
+            <h2>{t('analytics.topCategories')}</h2>
             <div className="categories-list">
               {overview.top_expense_categories.map((category, index) => (
                 <div key={index} className="category-item">
                   <div className="category-info">
                     <span className="category-icon">{category.category_icon || '•'}</span>
                     <div className="category-details">
-                      <h4>{category.category_name}</h4>
+                      <h4>{getTranslatedCategoryName(category.category_name)}</h4>
                       <p>{formatCurrency(category.total_amount)} ({category.percentage_of_total.toFixed(1)}%)</p>
                     </div>
                   </div>
@@ -580,17 +768,20 @@ const Analytics: React.FC = () => {
 
           {/* Insights */}
           <div className="insights-section">
-            <h2>Financial Insights</h2>
+            <h2>{t('analytics.financialInsights')}</h2>
             <div className="insights-list">
-              {overview.insights.map((insight, index) => (
-                <div key={index} className="insight-item">
-                  <div className="insight-indicator"></div>
-                  <div className="insight-content">
-                    <h4>{insight.title}</h4>
-                    <p>{insight.description}</p>
+              {overview.insights.map((insight, index) => {
+                const translatedInsight = getTranslatedInsight(insight);
+                return (
+                  <div key={index} className="insight-item">
+                    <div className="insight-indicator"></div>
+                    <div className="insight-content">
+                      <h4>{translatedInsight.title}</h4>
+                      <p>{translatedInsight.description}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>

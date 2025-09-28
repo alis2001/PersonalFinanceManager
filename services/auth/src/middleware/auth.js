@@ -75,10 +75,42 @@ const authLimiter = rateLimit({
   }
 });
 
+// Internal service rate limiter (very permissive for service-to-service communication)
+const internalServiceLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // 1000 requests per window per IP (very permissive for internal services)
+  message: { 
+    error: 'Too many internal service requests',
+    message: 'Internal service rate limit exceeded',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: generateRateLimitKey,
+  handler: (req, res) => {
+    logger.warn('Rate limit exceeded for internal service requests', {
+      ip: generateRateLimitKey(req),
+      path: req.path,
+      method: req.method,
+      userAgent: req.get('User-Agent')
+    });
+    
+    res.status(429).json({
+      error: 'Too many internal service requests',
+      message: 'Internal service rate limit exceeded',
+      retryAfter: '15 minutes'
+    });
+  },
+  skip: (req) => {
+    // Skip rate limiting for health checks and internal service verification
+    return req.path === '/health' || req.path === '/verify';
+  }
+});
+
 // General rate limiter (more permissive for regular API usage)
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window per IP
+  max: 200, // 200 requests per window per IP (reasonable for user requests)
   message: { 
     error: 'Too many requests',
     message: 'Please slow down and try again later',
@@ -102,8 +134,8 @@ const generalLimiter = rateLimit({
     });
   },
   skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/health';
+    // Skip rate limiting for health checks and internal service verification
+    return req.path === '/health' || req.path === '/verify';
   }
 });
 
@@ -278,6 +310,7 @@ const middlewareErrorHandler = (err, req, res, next) => {
 
 module.exports = {
   authLimiter,
+  internalServiceLimiter,
   generalLimiter,
   authenticateToken,
   requireEmailVerification,

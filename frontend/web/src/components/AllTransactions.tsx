@@ -3,14 +3,48 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import expenseService from '../services/expenseService';
 import categoryService from '../services/categoryService';
+import dateConversionService from '../services/dateConversionService';
+import { useTranslation } from '../hooks/useTranslation';
 import type { Expense } from '../services/expenseService';
 import type { Category } from '../services/categoryService';
 import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
+import ConditionalDatePicker from './ConditionalDatePicker';
 import '../styles/AllTransactions.css';
 
 const AllTransactions: React.FC = () => {
   const navigate = useNavigate();
+  const { t, currentLanguage } = useTranslation();
+
+  // Function to translate category names
+  const getTranslatedCategoryName = (categoryName: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilities'),
+      'Food & Dining': t('categories.foodDining'),
+      'Transportation': t('categories.transportation'),
+      'Shopping': t('categories.shopping'),
+      'Entertainment': t('categories.entertainment'),
+      'Healthcare': t('categories.healthcare'),
+      'Education': t('categories.education'),
+      'Travel': t('categories.travel'),
+      'Groceries': t('categories.groceries'),
+      'Gas': t('categories.gas'),
+      'Insurance': t('categories.insurance'),
+      'Other': t('categories.other'),
+      'Business': t('categories.business'),
+      'Business Income': t('categories.businessIncome'),
+      'Freelance': t('categories.freelance'),
+      'Gifts & Bonuses': t('categories.giftsBonuses'),
+      'Gifts & Donations': t('categories.giftsDonations'),
+      'Home & Garden': t('categories.homeGarden'),
+      'Investment Returns': t('categories.investmentReturns'),
+      'Other Expenses': t('categories.otherExpenses'),
+      'Other Income': t('categories.otherIncome'),
+      'Personal Care': t('categories.personalCare'),
+      'Rental Income': t('categories.rentalIncome'),
+    };
+    return categoryMap[categoryName] || categoryName;
+  };
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -138,9 +172,9 @@ const AllTransactions: React.FC = () => {
         <div className="header-content">
           <div className="header-left">
             <button className="back-button" onClick={handleBackToDashboard}>
-              ← Back to Dashboard
+              ← {t('transactions.backToDashboard')}
             </button>
-            <h1>All Transactions</h1>
+            <h1>{t('transactions.allTransactions')}</h1>
           </div>
         </div>
       </header>
@@ -150,45 +184,45 @@ const AllTransactions: React.FC = () => {
           
           {/* Filter Section */}
           <div className="filters-section">
-            <h2>Filter Transactions</h2>
+            <h2>{t('transactions.filterTransactions')}</h2>
             <div className="filters-grid">
               
               {/* Date Range */}
               <div className="filter-group">
-                <label htmlFor="dateFrom">From Date</label>
-                <input
-                  type="date"
-                  id="dateFrom"
+                <label htmlFor="dateFrom">{t('transactions.fromDate')}</label>
+                <ConditionalDatePicker
                   value={filters.dateFrom}
-                  onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
+                  onChange={(value) => handleFilterChange('dateFrom', value)}
                   className="filter-input"
+                  type="date"
+                  showTime={false}
                 />
               </div>
 
               <div className="filter-group">
-                <label htmlFor="dateTo">To Date</label>
-                <input
-                  type="date"
-                  id="dateTo"
+                <label htmlFor="dateTo">{t('transactions.toDate')}</label>
+                <ConditionalDatePicker
                   value={filters.dateTo}
-                  onChange={(e) => handleFilterChange('dateTo', e.target.value)}
+                  onChange={(value) => handleFilterChange('dateTo', value)}
                   className="filter-input"
+                  type="date"
+                  showTime={false}
                 />
               </div>
 
               {/* Category Filter */}
               <div className="filter-group">
-                <label htmlFor="categoryId">Category</label>
+                <label htmlFor="categoryId">{t('expenses.category')}</label>
                 <select
                   id="categoryId"
                   value={filters.categoryId}
                   onChange={(e) => handleFilterChange('categoryId', e.target.value)}
                   className="filter-input"
                 >
-                  <option value="">All Categories</option>
+                  <option value="">{t('transactions.allCategories')}</option>
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.icon} {category.name}
+                      {category.icon} {getTranslatedCategoryName(category.name)}
                     </option>
                   ))}
                 </select>
@@ -196,13 +230,13 @@ const AllTransactions: React.FC = () => {
 
               {/* Search */}
               <div className="filter-group">
-                <label htmlFor="search">Search</label>
+                <label htmlFor="search">{t('transactions.search')}</label>
                 <input
                   type="text"
                   id="search"
                   value={filters.search}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
-                  placeholder="Search in description or notes..."
+                  placeholder={t('transactions.searchPlaceholder')}
                   className="filter-input"
                 />
               </div>
@@ -214,7 +248,7 @@ const AllTransactions: React.FC = () => {
                   className="clear-filters-btn"
                   onClick={handleClearFilters}
                 >
-                  Clear Filters
+                  {t('transactions.clearFilters')}
                 </button>
               </div>
 
@@ -224,9 +258,12 @@ const AllTransactions: React.FC = () => {
           {/* Results Summary */}
           <div className="results-summary">
             <p>
-              Showing {expenses.length} of {pagination.total} transactions
+              {t('transactions.showingResults', { showing: expenses.length, total: pagination.total })}
               {filters.dateFrom && filters.dateTo && (
-                <span> from {filters.dateFrom} to {filters.dateTo}</span>
+                <span> {t('transactions.dateRange', { 
+                  from: dateConversionService.formatDateShort(filters.dateFrom, currentLanguage), 
+                  to: dateConversionService.formatDateShort(filters.dateTo, currentLanguage) 
+                })}</span>
               )}
             </p>
           </div>
@@ -249,11 +286,11 @@ const AllTransactions: React.FC = () => {
                 onClick={() => handlePageChange(pagination.page - 1)}
                 className="pagination-btn"
               >
-                Previous
+                {t('transactions.previous')}
               </button>
               
               <span className="pagination-info">
-                Page {pagination.page} of {pagination.pages}
+                {t('transactions.pageInfo', { current: pagination.page, total: pagination.pages })}
               </span>
               
               <button 
@@ -261,7 +298,7 @@ const AllTransactions: React.FC = () => {
                 onClick={() => handlePageChange(pagination.page + 1)}
                 className="pagination-btn"
               >
-                Next
+                {t('transactions.next')}
               </button>
             </div>
           )}

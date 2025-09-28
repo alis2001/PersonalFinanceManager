@@ -2,6 +2,8 @@ import React from 'react';
 import type { Expense } from '../services/expenseService';
 import expenseService from '../services/expenseService';
 import currencyService from '../services/currencyService';
+import dateConversionService from '../services/dateConversionService';
+import { useTranslation } from '../hooks/useTranslation';
 import '../styles/RecentExpensesTable.css';
 
 interface RecentExpensesTableProps {
@@ -19,23 +21,44 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
   onRetry,
   userCurrency = 'USD'
 }) => {
+  const { t, currentLanguage } = useTranslation();
+
+  // Function to translate category names
+  const getTranslatedCategoryName = (categoryName: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilities'),
+      'Food & Dining': t('categories.foodDining'),
+      'Transportation': t('categories.transportation'),
+      'Shopping': t('categories.shopping'),
+      'Entertainment': t('categories.entertainment'),
+      'Healthcare': t('categories.healthcare'),
+      'Education': t('categories.education'),
+      'Travel': t('categories.travel'),
+      'Groceries': t('categories.groceries'),
+      'Gas': t('categories.gas'),
+      'Insurance': t('categories.insurance'),
+      'Other': t('categories.other'),
+      'Business': t('categories.business'),
+      'Business Income': t('categories.businessIncome'),
+      'Freelance': t('categories.freelance'),
+      'Gifts & Bonuses': t('categories.giftsBonuses'),
+      'Gifts & Donations': t('categories.giftsDonations'),
+      'Home & Garden': t('categories.homeGarden'),
+      'Investment Returns': t('categories.investmentReturns'),
+      'Other Expenses': t('categories.otherExpenses'),
+      'Other Income': t('categories.otherIncome'),
+      'Personal Care': t('categories.personalCare'),
+      'Rental Income': t('categories.rentalIncome'),
+    };
+    return categoryMap[categoryName] || categoryName;
+  };
 
   const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
+    return dateConversionService.formatDateShort(dateString, currentLanguage);
   };
 
   const formatTime = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    return dateConversionService.formatTime(dateString, currentLanguage);
   };
 
   const formatCurrency = (amount: number): string => {
@@ -63,14 +86,14 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
       <div className="expenses-table-container">
         <div className="table-empty">
           <div className="empty-icon">📊</div>
-          <h3>No expenses yet</h3>
-          <p>Your recent expenses will appear here once you start tracking them.</p>
+          <h3>{t('expenses.noExpensesYet')}</h3>
+          <p>{t('expenses.recentExpensesDescription')}</p>
           {onRetry && (
             <button 
               className="btn-retry"
               onClick={onRetry}
             >
-              Refresh
+              {t('expenses.refresh')}
             </button>
           )}
         </div>
@@ -84,14 +107,14 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
         <table className="expenses-table">
           <thead>
             <tr>
-              <th className="date-column">Date</th>
-              <th className="time-column">Time</th>
-              <th className="category-column">Category</th>
-              <th className="amount-column">Amount</th>
-              <th className="description-column">Description</th>
-              <th className="location-column">Location</th>
-              <th className="notes-column">Notes</th>
-              <th className="actions-column">Actions</th>
+              <th className="date-column">{t('expenses.date')}</th>
+              <th className="time-column">{t('expenses.time')}</th>
+              <th className="category-column">{t('expenses.category')}</th>
+              <th className="amount-column">{t('expenses.amount')}</th>
+              <th className="description-column">{t('expenses.description')}</th>
+              <th className="location-column">{t('expenses.location')}</th>
+              <th className="notes-column">{t('expenses.notes')}</th>
+              <th className="actions-column">{t('expenses.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -133,7 +156,7 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
                       {expense.category.icon}
                     </div>
                     <span className="category-name">
-                      {expense.category.name}
+                      {getTranslatedCategoryName(expense.category.name)}
                     </span>
                   </div>
                 </td>
@@ -169,7 +192,7 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
                       e.stopPropagation();
                       onExpenseClick(expense);
                     }}
-                    title="Edit expense"
+                    title={t('expenses.editExpenseTitle')}
                   >
                     ✏️
                   </button>
@@ -182,12 +205,12 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
       
       {expenses.length === 10 && (
         <div className="table-footer">
-          <p className="showing-text">Showing last 10 expenses</p>
+          <p className="showing-text">{t('expenses.showingLast10')}</p>
           <button 
             className="view-all-button"
             onClick={() => console.log('View all expenses')}
           >
-            View All Expenses
+            {t('expenses.viewAllExpenses')}
           </button>
         </div>
       )}

@@ -312,6 +312,44 @@ class AuthController {
     }
   }
 
+  async updateLanguage(req, res) {
+    try {
+      const userId = req.user.userId;
+      const { preferredLanguage } = req.body;
+
+      // Validate language code
+      const supportedLanguages = ['en', 'fr', 'es', 'de', 'fa', 'ar'];
+      if (!supportedLanguages.includes(preferredLanguage)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Unsupported language code'
+        });
+      }
+
+      // Update user language preference
+      const result = await authService.updateUserLanguage(userId, preferredLanguage);
+
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Language preference updated successfully',
+          user: result.user
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.message || 'Failed to update language preference'
+        });
+      }
+    } catch (error) {
+      logger.error('Update language error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
   async verifyToken(req, res) {
     try {
       const { token } = req.body;

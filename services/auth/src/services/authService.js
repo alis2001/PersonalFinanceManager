@@ -1,5 +1,5 @@
 const { db, redisClient } = require('../config/database');
-const { hashPassword, comparePassword, generateTokens, verifyToken } = require('../utils/token');
+const { hashPassword, comparePassword, generateTokens, verifyToken, formatUserResponse } = require('../utils/token');
 const emailService = require('./EmailService');
 const emailLogger = require('./EmailLogger');
 const emailConfig = require('../config/email');
@@ -605,6 +605,28 @@ class AuthService {
 
   async validateUserPassword(user, password) {
     return await comparePassword(password, user.password_hash);
+  }
+
+  async updateUserLanguage(userId, preferredLanguage) {
+    try {
+      const result = await db.query(
+        'UPDATE users SET preferred_language = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+        [preferredLanguage, userId]
+      );
+
+      if (result.rows.length === 0) {
+        return { success: false, message: 'User not found' };
+      }
+
+      const user = result.rows[0];
+      return {
+        success: true,
+        user: formatUserResponse(user)
+      };
+    } catch (error) {
+      logger.error('Error updating user language:', error);
+      return { success: false, message: 'Failed to update language preference' };
+    }
   }
 }
 
