@@ -139,6 +139,9 @@ class TranslationService {
       return;
     }
 
+    // Note: Currency-based language selection will be handled by dateSystemService
+    // when the user is authenticated. For now, we'll use browser language or default to English.
+
     // Try browser language
     const browserLanguage = navigator.language.split('-')[0];
     if (this.supportedLanguages.find(lang => lang.code === browserLanguage)) {
@@ -186,6 +189,31 @@ class TranslationService {
       }
     } catch (error) {
       console.warn('Error loading user language from backend:', error);
+    }
+  }
+
+  // Set language based on user's currency (IRR = Persian, others = English)
+  setLanguageBasedOnCurrency(): void {
+    try {
+      // Import authService dynamically to avoid circular dependency
+      import('./authService').then(({ default: authService }) => {
+        const user = authService.getUser();
+        
+        if (user && user.defaultCurrency) {
+          // IRR users default to Persian, others default to English
+          const currencyBasedLanguage = user.defaultCurrency === 'IRR' ? 'fa' : 'en';
+          if (this.supportedLanguages.find(lang => lang.code === currencyBasedLanguage)) {
+            this.currentLanguage = currencyBasedLanguage;
+            localStorage.setItem('preferred_language', currencyBasedLanguage);
+            // Notify listeners
+            this.listeners.forEach(listener => listener(currencyBasedLanguage));
+          }
+        }
+      }).catch((error) => {
+        console.warn('Error setting language based on currency:', error);
+      });
+    } catch (error) {
+      console.warn('Error setting language based on currency:', error);
     }
   }
 }

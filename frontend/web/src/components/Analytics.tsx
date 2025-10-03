@@ -17,6 +17,8 @@ import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import analyticsService from '../services/analyticsService';
 import authService from '../services/authService';
 import currencyService from '../services/currencyService';
+import dateSystemService from '../services/dateSystemService';
+import dateConversionService from '../services/dateConversionService';
 import { useTranslation } from '../hooks/useTranslation';
 import '../styles/Analytics.css';
 
@@ -181,6 +183,18 @@ const Analytics: React.FC = () => {
   const formatCurrency = (amount: number) => {
     const currency = user?.defaultCurrency || 'USD';
     return currencyService.formatCurrency(amount, currency);
+  };
+
+  // Format dates based on user's currency (IRR = Persian, others = Gregorian)
+  const formatDateForUser = (dateString: string): string => {
+    const dateSystem = dateSystemService.getUserDateSystem();
+    if (dateSystem === 'persian') {
+      // Use Persian date formatting for IRR users
+      return dateConversionService.formatDateShort(dateString, 'fa');
+    } else {
+      // Use Gregorian date formatting for all other currencies
+      return dateConversionService.formatDateShort(dateString, 'en');
+    }
   };
 
   const formatPercentage = (value: number) => {
@@ -421,7 +435,13 @@ const Analytics: React.FC = () => {
       case 'doughnut':
         if (chart.data && chart.data.length > 0) {
           const chartData = {
-            labels: chart.data.map((item: any) => getTranslatedCategoryName(item.label)),
+            labels: chart.data.map((item: any) => {
+              // If the label looks like a date, format it based on user's currency
+              if (item.label && /^\d{4}-\d{2}-\d{2}/.test(item.label)) {
+                return formatDateForUser(item.label);
+              }
+              return getTranslatedCategoryName(item.label);
+            }),
             datasets: [{
               data: chart.data.map((item: any) => item.value),
               backgroundColor: chart.data.map((item: any) => item.color || '#64748b'),
@@ -465,7 +485,13 @@ const Analytics: React.FC = () => {
         if (chart.data && chart.data.labels && chart.data.labels.length > 0) {
           const modernBarData = {
             ...chart.data,
-            labels: chart.data.labels?.map((label: string) => getTranslatedCategoryName(label)) || chart.data.labels,
+            labels: chart.data.labels?.map((label: string) => {
+              // If the label looks like a date, format it based on user's currency
+              if (label && /^\d{4}-\d{2}-\d{2}/.test(label)) {
+                return formatDateForUser(label);
+              }
+              return getTranslatedCategoryName(label);
+            }) || chart.data.labels,
             datasets: chart.data.datasets.map((dataset: any, index: number) => ({
               ...dataset,
               backgroundColor: dataset.backgroundColor || modernColors[index % modernColors.length],
@@ -533,7 +559,13 @@ const Analytics: React.FC = () => {
         if (chart.data && chart.data.labels && chart.data.labels.length > 0) {
           const modernLineData = {
             ...chart.data,
-            labels: chart.data.labels?.map((label: string) => getTranslatedCategoryName(label)) || chart.data.labels,
+            labels: chart.data.labels?.map((label: string) => {
+              // If the label looks like a date, format it based on user's currency
+              if (label && /^\d{4}-\d{2}-\d{2}/.test(label)) {
+                return formatDateForUser(label);
+              }
+              return getTranslatedCategoryName(label);
+            }) || chart.data.labels,
             datasets: chart.data.datasets.map((dataset: any, index: number) => {
               const originalColor = dataset.borderColor || dataset.backgroundColor || modernColors[index % modernColors.length];
               return {

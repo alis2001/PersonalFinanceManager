@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from '../hooks/useTranslation';
 import PersianDatePicker from './PersianDatePicker';
+import dateSystemService from '../services/dateSystemService';
 
 interface ConditionalDatePickerProps {
   value: string;
@@ -21,10 +22,11 @@ const ConditionalDatePicker: React.FC<ConditionalDatePickerProps> = ({
   className = '',
   type = 'datetime-local'
 }) => {
-  const { currentLanguage } = useTranslation();
+  // Use currency-based date system instead of language
+  const shouldUsePersianCalendar = dateSystemService.shouldUsePersianCalendar();
 
-  // Use Persian date picker only for Persian language
-  if (currentLanguage === 'fa') {
+  // Use Persian date picker only for users with Iranian Rial currency
+  if (shouldUsePersianCalendar) {
     return (
       <PersianDatePicker
         value={value}
@@ -37,7 +39,7 @@ const ConditionalDatePicker: React.FC<ConditionalDatePickerProps> = ({
     );
   }
 
-  // Use regular HTML date/datetime-local input for other languages
+  // Use regular HTML date/datetime-local input for all other currencies
   return (
     <input
       type={type}

@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 const winston = require('winston');
 const Joi = require('joi');
 const axios = require('axios');
+const moment = require('moment-jalaali');
 require('dotenv').config();
 
 const app = express();
@@ -133,25 +134,73 @@ app.get('/stats', authenticateToken, async (req, res) => {
   try {
     const { period = 'monthly' } = req.query;
     
+    // Get user's currency to determine date system
+    const userResult = await db.query(
+      'SELECT default_currency FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+    
+    const userCurrency = userResult.rows.length > 0 ? userResult.rows[0].default_currency : 'USD';
+    
     let dateFilter = '';
     let periodName = '';
     
-    switch(period) {
-      case 'weekly':
-        dateFilter = 'transaction_date >= CURRENT_DATE - INTERVAL \'7 days\'';
-        periodName = 'This Week';
-        break;
-      case 'monthly':
-        dateFilter = 'transaction_date >= DATE_TRUNC(\'month\', CURRENT_DATE)';
-        periodName = 'This Month';
-        break;
-      case 'yearly':
-        dateFilter = 'transaction_date >= DATE_TRUNC(\'year\', CURRENT_DATE)';
-        periodName = 'This Year';
-        break;
-      default:
-        dateFilter = 'transaction_date >= DATE_TRUNC(\'month\', CURRENT_DATE)';
-        periodName = 'This Month';
+    // Use Persian calendar calculations for IRR users
+    if (userCurrency === 'IRR') {
+      // Use proper Persian calendar with moment-jalaali
+      const now = moment();
+      
+      switch(period) {
+        case 'weekly':
+          // Persian week starts on Saturday (day 6 in moment-jalaali)
+          const persianWeekStart = now.clone().startOf('jWeek');
+          const persianWeekEnd = now.clone().endOf('jWeek');
+          dateFilter = `transaction_date >= '${persianWeekStart.format('YYYY-MM-DD')}' AND transaction_date <= '${persianWeekEnd.format('YYYY-MM-DD')}'`;
+          periodName = 'This Week';
+          break;
+        case 'monthly':
+          // Current Persian month
+          const persianMonthStart = now.clone().startOf('jMonth');
+          const persianMonthEnd = now.clone().endOf('jMonth');
+          dateFilter = `transaction_date >= '${persianMonthStart.format('YYYY-MM-DD')}' AND transaction_date <= '${persianMonthEnd.format('YYYY-MM-DD')}'`;
+          periodName = 'This Month';
+          break;
+        case 'yearly':
+          // Current Persian year
+          const persianYearStart = now.clone().startOf('jYear');
+          const persianYearEnd = now.clone().endOf('jYear');
+          dateFilter = `transaction_date >= '${persianYearStart.format('YYYY-MM-DD')}' AND transaction_date <= '${persianYearEnd.format('YYYY-MM-DD')}'`;
+          periodName = 'This Year';
+          break;
+        default:
+          const defaultMonthStart = now.clone().startOf('jMonth');
+          const defaultMonthEnd = now.clone().endOf('jMonth');
+          dateFilter = `transaction_date >= '${defaultMonthStart.format('YYYY-MM-DD')}' AND transaction_date <= '${defaultMonthEnd.format('YYYY-MM-DD')}'`;
+          periodName = 'This Month';
+      }
+    } else {
+      // Use Gregorian calendar for all other currencies
+      switch(period) {
+        case 'weekly':
+          // Gregorian week starts on Monday (day 1)
+          // Calculate Monday of current week and add 6 days for Sunday
+          const weekStart = 'CURRENT_DATE - INTERVAL \'1 day\' * ((EXTRACT(DOW FROM CURRENT_DATE) + 6) % 7)';
+          const weekEnd = weekStart + ' + INTERVAL \'6 days\'';
+          dateFilter = `transaction_date >= ${weekStart} AND transaction_date <= ${weekEnd}`;
+          periodName = 'This Week';
+          break;
+        case 'monthly':
+          dateFilter = 'transaction_date >= DATE_TRUNC(\'month\', CURRENT_DATE)';
+          periodName = 'This Month';
+          break;
+        case 'yearly':
+          dateFilter = 'transaction_date >= DATE_TRUNC(\'year\', CURRENT_DATE)';
+          periodName = 'This Year';
+          break;
+        default:
+          dateFilter = 'transaction_date >= DATE_TRUNC(\'month\', CURRENT_DATE)';
+          periodName = 'This Month';
+      }
     }
     
     // Get total expense for period

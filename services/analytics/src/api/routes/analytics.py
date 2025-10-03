@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Request, HTTPException, status, Depends, Query
 import structlog
+import jdatetime
 
 from ...config.database import execute_query, execute_fetchrow
 from ...middleware.auth import get_user_id
@@ -29,8 +30,11 @@ async def get_analytics_overview(
     start_time = time.time()
     
     try:
-        # Calculate date range for the selected period
-        date_range = calculate_period_date_range(period)
+        # Get user's currency to determine date system
+        user_currency = await get_user_currency(user_id)
+        
+        # Calculate date range for the period based on user's currency
+        date_range = calculate_period_date_range(period, user_currency)
         
         # Get real expense overview
         overview_data = await get_expense_overview(user_id, date_range)
@@ -277,10 +281,25 @@ async def get_individual_transaction_map(user_id: str, date_range: dict, period:
         "period": period
     }
 
-def calculate_period_date_range(period: str) -> dict:
+async def get_user_currency(user_id: str) -> str:
+    """Get user's default currency from database"""
+    try:
+        query = "SELECT default_currency FROM users WHERE id = $1"
+        result = await execute_fetchrow(query, user_id)
+        return result["default_currency"] if result else "USD"
+    except Exception as e:
+        logger.warning("Failed to get user currency", user_id=user_id, error=str(e))
+        return "USD"
+
+def calculate_period_date_range(period: str, user_currency: str = "USD") -> dict:
     """Calculate exact date range for the selected period"""
     today = date.today()
     
+    # For IRR users, use Persian calendar calculations
+    if user_currency == "IRR":
+        return calculate_persian_period_date_range(period)
+    
+    # For all other currencies, use Gregorian calendar
     if period == "daily":
         # Today only
         start_date = today
@@ -316,6 +335,77 @@ def calculate_period_date_range(period: str) -> dict:
         # Default to current month
         start_date = today.replace(day=1)
         end_date = today
+    
+    return {"start": start_date, "end": end_date}
+
+def calculate_persian_period_date_range(period: str) -> dict:
+    """Calculate date range using Persian calendar for IRR users"""
+    today_persian = jdatetime.date.today()
+    today_gregorian = date.today()
+    
+    if period == "daily":
+        # Today only
+        start_date = today_gregorian
+        end_date = today_gregorian
+    elif period == "weekly":
+        # Persian week calculation - Persian week starts on Saturday
+        # Get the Persian weekday (0=Saturday, 1=Sunday, ..., 6=Friday)
+        persian_weekday = today_persian.weekday()
+        # Calculate days since Saturday (start of Persian week)
+        days_since_saturday = (persian_weekday + 1) % 7  # Convert to Saturday-based week
+        
+        # Get start of Persian week (Saturday)
+        start_persian = today_persian - timedelta(days=days_since_saturday)
+        # Get end of Persian week (Friday)
+        end_persian = start_persian + timedelta(days=6)
+        
+        # Convert to Gregorian for database queries
+        start_date = start_persian.togregorian()
+        end_date = end_persian.togregorian()
+    elif period == "monthly":
+        # Current Persian month
+        # Get first day of current Persian month
+        start_persian = jdatetime.date(today_persian.year, today_persian.month, 1)
+        # Get last day of current Persian month
+        if today_persian.month == 12:
+            end_persian = jdatetime.date(today_persian.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            end_persian = jdatetime.date(today_persian.year, today_persian.month + 1, 1) - timedelta(days=1)
+        
+        # Convert to Gregorian for database queries
+        start_date = start_persian.togregorian()
+        end_date = end_persian.togregorian()
+    elif period == "quarterly":
+        # Current Persian quarter
+        quarter = (today_persian.month - 1) // 3 + 1
+        start_month = (quarter - 1) * 3 + 1
+        start_persian = jdatetime.date(today_persian.year, start_month, 1)
+        
+        if quarter == 4:
+            end_persian = jdatetime.date(today_persian.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            end_month = quarter * 3 + 1
+            end_persian = jdatetime.date(today_persian.year, end_month, 1) - timedelta(days=1)
+        
+        # Convert to Gregorian for database queries
+        start_date = start_persian.togregorian()
+        end_date = end_persian.togregorian()
+    elif period == "yearly":
+        # Current Persian year
+        start_persian = jdatetime.date(today_persian.year, 1, 1)
+        end_persian = jdatetime.date(today_persian.year, 12, 29)  # Persian year has 29 days in last month
+        
+        # Convert to Gregorian for database queries
+        start_date = start_persian.togregorian()
+        end_date = end_persian.togregorian()
+    else:
+        # Default to current Persian month
+        start_persian = jdatetime.date(today_persian.year, today_persian.month, 1)
+        end_persian = jdatetime.date(today_persian.year, today_persian.month, today_persian.day)
+        
+        # Convert to Gregorian for database queries
+        start_date = start_persian.togregorian()
+        end_date = end_persian.togregorian()
     
     return {"start": start_date, "end": end_date}
 
