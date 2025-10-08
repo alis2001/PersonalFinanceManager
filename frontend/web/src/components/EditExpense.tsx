@@ -152,11 +152,21 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
     setLoading(true);
 
     try {
+      // Extract user's local date and time from the input field
+      const [datePart, timePart] = formData.transactionDate.split('T');
+      const userDate = datePart;  // YYYY-MM-DD (exactly as user entered)
+      const userTime = `${timePart}:00`;  // HH:MM:SS (add seconds)
+      
+      // Now create Date object for UTC storage
+      const parsedDate = expenseService.parseDateTimeFromInput(formData.transactionDate);
+      
       const updateData = {
         categoryId: formData.categoryId,
         amount: parseFloat(formData.amount),
         description: formData.description.trim() || undefined,
-        transactionDate: expenseService.parseDateTimeFromInput(formData.transactionDate).toISOString(),
+        transactionDate: parsedDate.toISOString(),
+        userDate: userDate,
+        userTime: userTime,
         location: formData.location.trim() || undefined,
         notes: formData.notes.trim() || undefined
       };

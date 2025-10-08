@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '../services/AuthContext';
 import currencyService from '../services/currencyService';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface RegisterProps {
   navigation?: any;
@@ -24,6 +25,7 @@ interface RegisterFormData {
 
 const Register: React.FC<RegisterProps> = ({ navigation }) => {
   const { register } = useAuth();
+  const { t } = useTranslation();
   
   const [formData, setFormData] = useState<RegisterFormData>({
     firstName: '',
@@ -145,8 +147,8 @@ const Register: React.FC<RegisterProps> = ({ navigation }) => {
                     style={styles.picker}
                     enabled={!loading}
                   >
-                    <Picker.Item label="Personal Account" value="personal" />
-                    <Picker.Item label="Business Account" value="business" />
+                    <Picker.Item label={t('auth.personal')} value="personal" />
+                    <Picker.Item label={t('auth.business')} value="business" />
                   </Picker>
                 </View>
               </View>
@@ -156,7 +158,7 @@ const Register: React.FC<RegisterProps> = ({ navigation }) => {
                 <View style={styles.formGroup}>
                   <TextInput
                     style={styles.input}
-                    placeholder="Company Name"
+                    placeholder={t('auth.companyName')}
                     placeholderTextColor="#999999"
                     value={formData.companyName}
                     onChangeText={(value) => handleChange('companyName', value)}
@@ -190,7 +192,7 @@ const Register: React.FC<RegisterProps> = ({ navigation }) => {
                 <View style={styles.formRowGroup}>
                   <TextInput
                     style={styles.input}
-                    placeholder="First Name"
+                    placeholder={t('auth.firstName')}
                     placeholderTextColor="#999999"
                     value={formData.firstName}
                     onChangeText={(value) => handleChange('firstName', value)}
@@ -201,7 +203,7 @@ const Register: React.FC<RegisterProps> = ({ navigation }) => {
                 <View style={styles.formRowGroup}>
                   <TextInput
                     style={styles.input}
-                    placeholder="Last Name"
+                    placeholder={t('auth.lastName')}
                     placeholderTextColor="#999999"
                     value={formData.lastName}
                     onChangeText={(value) => handleChange('lastName', value)}
@@ -214,7 +216,7 @@ const Register: React.FC<RegisterProps> = ({ navigation }) => {
               <View style={styles.formGroup}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Email"
+                  placeholder={t('auth.email')}
                   placeholderTextColor="#999999"
                   value={formData.email}
                   onChangeText={(value) => handleChange('email', value)}
@@ -228,7 +230,7 @@ const Register: React.FC<RegisterProps> = ({ navigation }) => {
               <View style={styles.formGroup}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Password (8+ chars, uppercase, number, special)"
+                  placeholder={t('auth.password')}
                   placeholderTextColor="#999999"
                   value={formData.password}
                   onChangeText={(value) => handleChange('password', value)}
@@ -242,7 +244,7 @@ const Register: React.FC<RegisterProps> = ({ navigation }) => {
               <View style={styles.formGroup}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Confirm Password"
+                  placeholder={t('auth.confirmPassword')}
                   placeholderTextColor="#999999"
                   value={formData.confirmPassword}
                   onChangeText={(value) => handleChange('confirmPassword', value)}
@@ -275,7 +277,7 @@ const Register: React.FC<RegisterProps> = ({ navigation }) => {
                 disabled={loading}
               >
                 <Text style={styles.btnPrimaryText}>
-                  {loading ? 'Creating Account...' : 'Create Account'}
+                  {loading ? t('common.loading') : t('auth.createAccount')}
                 </Text>
               </TouchableOpacity>
             </View>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, TextInput, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
+import ProfessionalDatePicker from './ProfessionalDatePicker';
 import BottomNavigation from './BottomNavigation';
 import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
@@ -9,20 +10,65 @@ import { Expense } from '../services/expenseService';
 import { Category } from '../services/categoryService';
 import expenseService from '../services/expenseService';
 import categoryService from '../services/categoryService';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface AllTransactionsProps {
   navigation?: any;
   activeRoute?: string;
   onNavigate?: (route: string) => void;
   onAddExpense?: () => void;
+  onSettings?: () => void;
 }
 
 const AllTransactions: React.FC<AllTransactionsProps> = ({ 
   navigation, 
   activeRoute = 'Transactions', 
   onNavigate,
-  onAddExpense
+  onAddExpense,
+  onSettings
 }) => {
+  const { t } = useTranslation();
+  
+  // Function to translate category names
+  const getTranslatedCategoryName = (categoryName: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilities'),
+      'Food & Dining': t('categories.foodDining'),
+      'Transportation': t('categories.transportation'),
+      'Shopping': t('categories.shopping'),
+      'Entertainment': t('categories.entertainment'),
+      'Healthcare': t('categories.healthcare'),
+      'Education': t('categories.education'),
+      'Travel': t('categories.travel'),
+      'Groceries': t('categories.groceries'),
+      'Gas': t('categories.gas'),
+      'Insurance': t('categories.insurance'),
+      'Other': t('categories.other'),
+      'Business': t('categories.business'),
+      'Business Income': t('categories.businessIncome'),
+      'Freelance': t('categories.freelance'),
+      'Gifts & Bonuses': t('categories.giftsBonuses'),
+      'Gifts & Donations': t('categories.giftsDonations'),
+      'Home & Garden': t('categories.homeGarden'),
+      'Investment Returns': t('categories.investmentReturns'),
+      'Other Expenses': t('categories.otherExpenses'),
+      'Other Income': t('categories.otherIncome'),
+      'Personal Care': t('categories.personalCare'),
+      'Rental Income': t('categories.rentalIncome'),
+    };
+    return categoryMap[categoryName] || categoryName;
+  };
+
+  // Function to translate category types
+  const getTranslatedCategoryType = (type: string): string => {
+    const typeMap: { [key: string]: string } = {
+      'expense': t('categories.expense'),
+      'income': t('categories.income'),
+      'both': t('categories.both'),
+    };
+    return typeMap[type] || type;
+  };
+
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -31,6 +77,9 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [showEditExpense, setShowEditExpense] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [activeDateField, setActiveDateField] = useState<'dateFrom' | 'dateTo' | null>(null);
   
   // Pagination state
   const [pagination, setPagination] = useState({
@@ -52,6 +101,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
     search: ''
   });
 
+
   useEffect(() => {
     loadCategories();
     // Don't set default date filters - load all expenses by default
@@ -68,6 +118,37 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
   const formatDateForInput = (date: Date): string => {
     return date.toISOString().split('T')[0];
   };
+
+  // Date picker handlers
+  const openDatePicker = (field: 'dateFrom' | 'dateTo') => {
+    setActiveDateField(field);
+    
+    // If there's already a date, use it; otherwise use current date
+    const existingDate = field === 'dateFrom' ? filters.dateFrom : filters.dateTo;
+    if (existingDate) {
+      setSelectedDate(new Date(existingDate));
+    } else {
+      setSelectedDate(new Date());
+    }
+    
+    setShowDatePicker(true);
+  };
+
+  const handleDateConfirm = (date: Date) => {
+    if (activeDateField) {
+      setSelectedDate(date);
+      const formattedDate = formatDateForInput(date);
+      handleFilterChange(activeDateField, formattedDate);
+    }
+    setShowDatePicker(false);
+    setActiveDateField(null);
+  };
+
+  const handleDateCancel = () => {
+    setShowDatePicker(false);
+    setActiveDateField(null);
+  };
+
 
   const loadCategories = async () => {
     try {
@@ -211,7 +292,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
     >
       <SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Filter Transactions</Text>
+          <Text style={styles.modalTitle}>{t('transactions.filterTransactions')}</Text>
           <TouchableOpacity style={styles.closeButton} onPress={() => setShowFilters(false)}>
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
@@ -219,25 +300,41 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
 
         <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
           <View style={styles.filterGroup}>
-            <Text style={styles.label}>From Date</Text>
-            <TextInput
-              style={styles.input}
-              value={filters.dateFrom}
-              onChangeText={(value) => handleFilterChange('dateFrom', value)}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#999"
-            />
+            <Text style={styles.label}>{t('transactions.fromDate')}</Text>
+            <TouchableOpacity 
+              style={styles.datePickerButton}
+              onPress={() => openDatePicker('dateFrom')}
+            >
+              <View style={styles.datePickerButtonContent}>
+                <View style={styles.datePickerTextContainer}>
+                  <Text style={styles.datePickerDateText}>
+                    {filters.dateFrom ? formatDateForInput(new Date(filters.dateFrom)) : t('transactions.fromDate')}
+                  </Text>
+                </View>
+                <View style={styles.datePickerIcon}>
+                  <Text style={styles.datePickerIconText}>📅</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.filterGroup}>
-            <Text style={styles.label}>To Date</Text>
-            <TextInput
-              style={styles.input}
-              value={filters.dateTo}
-              onChangeText={(value) => handleFilterChange('dateTo', value)}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#999"
-            />
+            <Text style={styles.label}>{t('transactions.toDate')}</Text>
+            <TouchableOpacity 
+              style={styles.datePickerButton}
+              onPress={() => openDatePicker('dateTo')}
+            >
+              <View style={styles.datePickerButtonContent}>
+                <View style={styles.datePickerTextContainer}>
+                  <Text style={styles.datePickerDateText}>
+                    {filters.dateTo ? formatDateForInput(new Date(filters.dateTo)) : t('transactions.toDate')}
+                  </Text>
+                </View>
+                <View style={styles.datePickerIcon}>
+                  <Text style={styles.datePickerIconText}>📅</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.filterGroup}>
@@ -248,21 +345,21 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
                 onValueChange={(value) => handleFilterChange('categoryId', value)}
                 style={styles.picker}
               >
-                <Picker.Item label="All Categories" value="" />
+                <Picker.Item label={t('transactions.allCategories')} value="" />
                 {categories.map((category) => (
-                  <Picker.Item key={category.id} label={`${category.icon} ${category.name}`} value={category.id} />
+                  <Picker.Item key={category.id} label={`${category.icon} ${getTranslatedCategoryName(category.name)}`} value={category.id} />
                 ))}
               </Picker>
             </View>
           </View>
 
           <View style={styles.filterGroup}>
-            <Text style={styles.label}>Search</Text>
+            <Text style={styles.label}>{t('transactions.search')}</Text>
             <TextInput
               style={styles.input}
               value={filters.search}
               onChangeText={(value) => handleFilterChange('search', value)}
-              placeholder="Search in description or notes..."
+              placeholder={t('transactions.searchPlaceholder')}
               placeholderTextColor="#999"
             />
           </View>
@@ -272,17 +369,28 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
               style={[styles.button, styles.clearButton]}
               onPress={handleClearFilters}
             >
-              <Text style={styles.clearButtonText}>Clear Filters</Text>
+              <Text style={styles.clearButtonText}>{t('transactions.clearFilters')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.button, styles.applyButton]}
               onPress={() => setShowFilters(false)}
             >
-              <Text style={styles.applyButtonText}>Apply Filters</Text>
+              <Text style={styles.applyButtonText}>{t('common.apply')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </SafeAreaView>
+      
+      {/* Professional Date Picker */}
+      <ProfessionalDatePicker
+        visible={showDatePicker}
+        mode="date"
+        value={selectedDate}
+        onConfirm={handleDateConfirm}
+        onCancel={handleDateCancel}
+        minimumDate={new Date(2020, 0, 1)}
+        maximumDate={new Date()}
+      />
     </Modal>
   );
 
@@ -297,7 +405,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
           disabled={loadingMore}
         >
           <Text style={styles.loadMoreButtonText}>
-            {loadingMore ? 'Loading...' : 'Load More'}
+            {loadingMore ? t('common.loading') : t('transactions.loadMore')}
           </Text>
         </TouchableOpacity>
         <Text style={styles.loadMoreInfo}>
@@ -312,12 +420,12 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.title}>All Transactions</Text>
+          <Text style={styles.title}>{t('transactions.allTransactions')}</Text>
           <TouchableOpacity 
             style={styles.filterButton}
             onPress={() => setShowFilters(true)}
           >
-            <Text style={styles.filterButtonText}>🔍 Filter</Text>
+            <Text style={styles.filterButtonText}>🔍 {t('common.filter')}</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.subtitle}>
@@ -369,10 +477,11 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
       )}
 
       {/* Bottom Navigation */}
-      <BottomNavigation 
-        activeRoute={activeRoute} 
-        onNavigate={handleNavigate}
-        onAddExpense={onAddExpense}
+        <BottomNavigation 
+          activeRoute={activeRoute} 
+          onNavigate={handleNavigate}
+          onAddExpense={onAddExpense}
+          onSettings={onSettings}
       />
     </SafeAreaView>
   );
@@ -404,7 +513,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#1a1a1a',
     fontSize: 24,
-    fontWeight: '300',
+    fontWeight: '700',
     fontFamily: Platform.OS === 'ios' ? '-apple-system' : 'Roboto',
   },
   filterButton: {
@@ -520,6 +629,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1a1a1a',
     backgroundColor: '#ffffff',
+  },
+  
+  // Date Picker Styles
+  datePickerButton: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  datePickerButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+  },
+  datePickerTextContainer: {
+    flex: 1,
+  },
+  datePickerDateText: {
+    fontSize: 16,
+    color: '#1a1a1a',
+  },
+  datePickerIcon: {
+    marginLeft: 12,
+  },
+  datePickerIconText: {
+    fontSize: 20,
   },
   pickerContainer: {
     borderWidth: 1,

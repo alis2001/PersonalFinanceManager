@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, Platform, RefreshControl } from 'react-native';
 import { Expense } from '../services/expenseService';
 import currencyService from '../services/currencyService';
+import { useTranslation } from '../hooks/useTranslation';
+import { formatDateForDisplay } from '../utils/dateFormatter';
 
 interface RecentExpensesTableProps {
   expenses: Expense[];
@@ -22,11 +24,57 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
   refreshing = false,
   onRefresh
 }) => {
+  const { t } = useTranslation();
+  const [formattedDates, setFormattedDates] = useState<{[key: string]: string}>({});
+  
+  // Function to translate category names
+  const getTranslatedCategoryName = (categoryName: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilities'),
+      'Food & Dining': t('categories.foodDining'),
+      'Transportation': t('categories.transportation'),
+      'Shopping': t('categories.shopping'),
+      'Entertainment': t('categories.entertainment'),
+      'Healthcare': t('categories.healthcare'),
+      'Education': t('categories.education'),
+      'Travel': t('categories.travel'),
+      'Groceries': t('categories.groceries'),
+      'Gas': t('categories.gas'),
+      'Insurance': t('categories.insurance'),
+      'Other': t('categories.other'),
+      'Business': t('categories.business'),
+      'Business Income': t('categories.businessIncome'),
+      'Freelance': t('categories.freelance'),
+      'Gifts & Bonuses': t('categories.giftsBonuses'),
+      'Gifts & Donations': t('categories.giftsDonations'),
+      'Home & Garden': t('categories.homeGarden'),
+      'Investment Returns': t('categories.investmentReturns'),
+      'Other Expenses': t('categories.otherExpenses'),
+      'Other Income': t('categories.otherIncome'),
+      'Personal Care': t('categories.personalCare'),
+      'Rental Income': t('categories.rentalIncome'),
+    };
+    return categoryMap[categoryName] || categoryName;
+  };
   const formatCurrency = (amount: number): string => {
     return currencyService.formatCurrency(amount, userCurrency);
   };
 
+  // Format dates when expenses change
+  useEffect(() => {
+    const formatAllDates = async () => {
+      const newFormattedDates: {[key: string]: string} = {};
+      for (const expense of expenses) {
+        const date = new Date(expense.date);
+        newFormattedDates[expense.id] = await formatDateForDisplay(date, false);
+      }
+      setFormattedDates(newFormattedDates);
+    };
+    formatAllDates();
+  }, [expenses]);
+
   const formatDate = (dateString: string): string => {
+    // For now, return a simple fallback while async formatting loads
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       month: 'short',
@@ -65,7 +113,7 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
               {truncateText(item.description, 30) || '—'}
             </Text>
             <Text style={styles.expenseCategory}>
-              {item.category.name}
+              {getTranslatedCategoryName(item.category.name)}
             </Text>
           </View>
         </View>
@@ -75,7 +123,7 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
             {formatCurrency(item.amount)}
           </Text>
           <Text style={styles.expenseDate}>
-            {formatDate(item.transactionDate)}
+            {formattedDates[item.id] || formatDate(item.transactionDate)}
           </Text>
           <Text style={styles.expenseTime}>
             {formatTime(item.transactionDate)}

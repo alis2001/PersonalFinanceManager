@@ -182,11 +182,24 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     setLoading(true);
 
     try {
+      // Parse the transactionDate value from the input field
+      // This is CRITICAL: formData.transactionDate is in format "YYYY-MM-DDTHH:mm"
+      // We need to extract the date/time AS THE USER SEES IT (local), not after UTC conversion
+      
+      const [datePart, timePart] = formData.transactionDate.split('T');
+      const userDate = datePart;  // YYYY-MM-DD (exactly as user entered)
+      const userTime = `${timePart}:00`;  // HH:MM:SS (add seconds)
+      
+      // Now create Date object for UTC storage
+      const parsedDate = expenseService.parseDateTimeFromInput(formData.transactionDate);
+      
       const expenseData = {
         categoryId: formData.categoryId,
         amount: parseFloat(formData.amount),
         description: formData.description.trim() || undefined,
-        transactionDate: expenseService.parseDateTimeFromInput(formData.transactionDate).toISOString(),
+        transactionDate: parsedDate.toISOString(),  // UTC for ordering
+        userDate: userDate,  // Local date as user entered
+        userTime: userTime,  // Local time as user entered
         location: formData.location.trim() || undefined,
         notes: formData.notes.trim() || undefined
       };

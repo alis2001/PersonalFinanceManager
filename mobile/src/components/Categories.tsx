@@ -14,11 +14,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
 import categoryService, { Category } from '../services/categoryService';
 import BottomNavigation from './BottomNavigation';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface CategoriesProps {
   activeRoute?: string;
   onNavigate?: (route: string) => void;
   onAddExpense?: () => void;
+  onSettings?: () => void;
 }
 
 interface CategoryFormData {
@@ -51,7 +53,79 @@ const predefinedColors = [
   '#AED6F1', '#F9E79F', '#D7BDE2', '#A3E4D7', '#FADBD8', '#D5DBDB'
 ];
 
-const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onNavigate, onAddExpense }) => {
+const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onNavigate, onAddExpense, onSettings }) => {
+  const { t } = useTranslation();
+  
+  // Function to translate category names
+  const getTranslatedCategoryName = (categoryName: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilities'),
+      'Food & Dining': t('categories.foodDining'),
+      'Transportation': t('categories.transportation'),
+      'Shopping': t('categories.shopping'),
+      'Entertainment': t('categories.entertainment'),
+      'Healthcare': t('categories.healthcare'),
+      'Education': t('categories.education'),
+      'Travel': t('categories.travel'),
+      'Groceries': t('categories.groceries'),
+      'Gas': t('categories.gas'),
+      'Insurance': t('categories.insurance'),
+      'Other': t('categories.other'),
+      'Business': t('categories.business'),
+      'Business Income': t('categories.businessIncome'),
+      'Freelance': t('categories.freelance'),
+      'Gifts & Bonuses': t('categories.giftsBonuses'),
+      'Gifts & Donations': t('categories.giftsDonations'),
+      'Home & Garden': t('categories.homeGarden'),
+      'Investment Returns': t('categories.investmentReturns'),
+      'Other Expenses': t('categories.otherExpenses'),
+      'Other Income': t('categories.otherIncome'),
+      'Personal Care': t('categories.personalCare'),
+      'Rental Income': t('categories.rentalIncome'),
+    };
+    return categoryMap[categoryName] || categoryName;
+  };
+
+  // Function to translate category types
+  const getTranslatedCategoryType = (type: string): string => {
+    const typeMap: { [key: string]: string } = {
+      'expense': t('categories.expense'),
+      'income': t('categories.income'),
+      'both': t('categories.both'),
+    };
+    return typeMap[type] || type;
+  };
+
+  // Function to translate category descriptions
+  const getTranslatedCategoryDescription = (categoryName: string): string => {
+    const descriptionMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilitiesDesc'),
+      'Food & Dining': t('categories.foodDiningDesc'),
+      'Transportation': t('categories.transportationDesc'),
+      'Shopping': t('categories.shoppingDesc'),
+      'Entertainment': t('categories.entertainmentDesc'),
+      'Healthcare': t('categories.healthcareDesc'),
+      'Education': t('categories.educationDesc'),
+      'Travel': t('categories.travelDesc'),
+      'Groceries': t('categories.groceriesDesc'),
+      'Gas': t('categories.gasDesc'),
+      'Insurance': t('categories.insuranceDesc'),
+      'Other': t('categories.otherDesc'),
+      'Business': t('categories.businessDesc'),
+      'Business Income': t('categories.businessIncomeDesc'),
+      'Freelance': t('categories.freelanceDesc'),
+      'Gifts & Bonuses': t('categories.giftsBonusesDesc'),
+      'Gifts & Donations': t('categories.giftsDonationsDesc'),
+      'Home & Garden': t('categories.homeGardenDesc'),
+      'Investment Returns': t('categories.investmentReturnsDesc'),
+      'Other Expenses': t('categories.otherExpensesDesc'),
+      'Other Income': t('categories.otherIncomeDesc'),
+      'Personal Care': t('categories.personalCareDesc'),
+      'Rental Income': t('categories.rentalIncomeDesc'),
+    };
+    return descriptionMap[categoryName] || '';
+  };
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -270,29 +344,29 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
           <Text style={styles.categoryIconText}>{category.icon}</Text>
         </View>
         <View style={styles.categoryInfo}>
-          <Text style={[styles.categoryName, !category.is_active && styles.categoryNameInactive]}>{category.name}</Text>
+          <Text style={[styles.categoryName, !category.is_active && styles.categoryNameInactive]}>{getTranslatedCategoryName(category.name)}</Text>
           <View style={[styles.typeBadge, getTypeBadgeStyle(category.type)]}>
             <Text style={[styles.typeBadgeText, getTypeBadgeTextStyle(category.type)]}>
-              {category.type.charAt(0).toUpperCase() + category.type.slice(1)}
+              {getTranslatedCategoryType(category.type)}
             </Text>
           </View>
         </View>
         <View style={styles.categoryStatus}>
           {category.is_active ? (
             <View style={styles.statusActive}>
-              <Text style={styles.statusActiveText}>Active</Text>
+              <Text style={styles.statusActiveText}>{t('categories.active')}</Text>
             </View>
           ) : (
             <View style={styles.statusInactive}>
-              <Text style={styles.statusInactiveText}>Inactive</Text>
+              <Text style={styles.statusInactiveText}>{t('categories.inactive')}</Text>
             </View>
           )}
         </View>
       </View>
       
-      {category.description && (
+      {(category.description || getTranslatedCategoryDescription(category.name)) && (
         <Text style={[styles.categoryDescription, !category.is_active && styles.categoryDescriptionInactive]} numberOfLines={2}>
-          {category.description}
+          {category.description || getTranslatedCategoryDescription(category.name)}
         </Text>
       )}
       
@@ -301,14 +375,14 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
           style={styles.actionButton}
           onPress={() => handleEdit(category)}
         >
-          <Text style={styles.actionButtonText}>Edit</Text>
+          <Text style={styles.actionButtonText}>{t('common.edit')}</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.actionButton, styles.toggleButton]}
           onPress={() => handleToggleActive(category)}
         >
           <Text style={styles.actionButtonText}>
-            {category.is_active ? 'Deactivate' : 'Activate'}
+            {category.is_active ? t('categories.deactivate') : t('categories.activate')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity 
@@ -316,7 +390,7 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
           onPress={() => handleDelete(category.id)}
         >
           <Text style={[styles.actionButtonText, deleteConfirm === category.id && styles.deleteButtonTextConfirm]}>
-            {deleteConfirm === category.id ? 'Confirm' : 'Delete'}
+            {deleteConfirm === category.id ? t('common.confirm') : t('common.delete')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -332,10 +406,10 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
   const renderErrorState = () => (
     <View style={styles.centerContainer}>
       <Text style={styles.errorIcon}>⚠️</Text>
-      <Text style={styles.errorTitle}>Error Loading Categories</Text>
+      <Text style={styles.errorTitle}>{t('categories.failedToLoadCategories')}</Text>
       <Text style={styles.errorText}>{error}</Text>
       <TouchableOpacity style={styles.retryButton} onPress={loadCategories}>
-        <Text style={styles.retryButtonText}>Retry</Text>
+        <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -343,12 +417,12 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
   const renderEmptyState = () => (
     <View style={styles.centerContainer}>
       <Text style={styles.emptyIcon}>🏷️</Text>
-      <Text style={styles.emptyTitle}>No Categories</Text>
+      <Text style={styles.emptyTitle}>{t('categories.noCategoriesFound')}</Text>
       <Text style={styles.emptyText}>
         No categories found. Contact support if this seems incorrect.
       </Text>
       <TouchableOpacity style={styles.createFirstButton} onPress={() => setShowForm(true)}>
-        <Text style={styles.createFirstButtonText}>Create Your First Category</Text>
+        <Text style={styles.createFirstButtonText}>{t('categories.createFirstCategory')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -362,7 +436,7 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
       <SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>
-            {editingCategory ? 'Edit Category' : 'Add New Category'}
+            {editingCategory ? t('categories.editCategory') : t('categories.addNewCategory')}
           </Text>
           <TouchableOpacity style={styles.closeButton} onPress={resetForm}>
             <Text style={styles.closeButtonText}>✕</Text>
@@ -387,12 +461,12 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
           )}
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Category Name *</Text>
+            <Text style={styles.label}>{t('categories.categoryName')} *</Text>
             <TextInput
               style={styles.input}
               value={formData.name}
               onChangeText={(value) => handleInputChange('name', value)}
-              placeholder="Enter category name"
+              placeholder={t('categories.enterCategoryName')}
               placeholderTextColor="#999"
               editable={!formLoading}
               maxLength={100}
@@ -400,12 +474,12 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Description</Text>
+            <Text style={styles.label}>{t('categories.description')}</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={formData.description}
               onChangeText={(value) => handleInputChange('description', value)}
-              placeholder="Optional description"
+              placeholder={t('categories.optionalDescription')}
               placeholderTextColor="#999"
               editable={!formLoading}
               multiline
@@ -415,7 +489,7 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Category Type *</Text>
+            <Text style={styles.label}>{t('categories.categoryType')} *</Text>
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={formData.type}
@@ -423,15 +497,15 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
                 style={styles.picker}
                 enabled={!formLoading}
               >
-                <Picker.Item label="Expense" value="expense" />
-                <Picker.Item label="Income" value="income" />
-                <Picker.Item label="Both" value="both" />
+                <Picker.Item label={t('categories.expense')} value="expense" />
+                <Picker.Item label={t('categories.income')} value="income" />
+                <Picker.Item label={t('categories.both')} value="both" />
               </Picker>
             </View>
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Icon</Text>
+            <Text style={styles.label}>{t('categories.icon')}</Text>
             <ScrollView 
               style={styles.iconSelector} 
               showsVerticalScrollIndicator={true}
@@ -453,7 +527,7 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Color</Text>
+            <Text style={styles.label}>{t('categories.color')}</Text>
             <View style={styles.colorSelector}>
               {predefinedColors.map((color) => (
                 <TouchableOpacity
@@ -475,7 +549,7 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
               <View style={[styles.checkbox, formData.is_active && styles.checkboxChecked]}>
                 {formData.is_active && <Text style={styles.checkmark}>✓</Text>}
               </View>
-              <Text style={styles.checkboxLabel}>Active Category</Text>
+              <Text style={styles.checkboxLabel}>{t('categories.activeCategory')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -485,7 +559,7 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
               onPress={resetForm}
               disabled={formLoading}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.button, styles.submitButton, formLoading && styles.buttonDisabled]}
@@ -493,7 +567,7 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
               disabled={formLoading}
             >
               <Text style={styles.submitButtonText}>
-                {formLoading ? 'Saving...' : (editingCategory ? 'Update Category' : 'Create Category')}
+                {formLoading ? t('categories.saving') : (editingCategory ? t('categories.updateCategory') : t('categories.createCategory'))}
               </Text>
             </TouchableOpacity>
           </View>
@@ -507,12 +581,12 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Categories</Text>
+          <Text style={styles.headerTitle}>{t('categories.title')}</Text>
           <TouchableOpacity 
             style={styles.addButton}
             onPress={() => setShowForm(true)}
           >
-            <Text style={styles.addButtonText}>+ Add</Text>
+            <Text style={styles.addButtonText}>+ {t('categories.addCategory')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -538,10 +612,11 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
       {renderForm()}
 
       {/* Bottom Navigation */}
-      <BottomNavigation 
-        activeRoute={activeRoute} 
-        onNavigate={handleNavigate}
-        onAddExpense={onAddExpense}
+        <BottomNavigation 
+          activeRoute={activeRoute} 
+          onNavigate={handleNavigate}
+          onAddExpense={onAddExpense}
+          onSettings={onSettings}
       />
     </SafeAreaView>
   );
@@ -572,7 +647,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: '#1a1a1a',
     fontSize: 24,
-    fontWeight: '300',
+    fontWeight: '700',
     fontFamily: Platform.OS === 'ios' ? '-apple-system' : 'Roboto',
   },
   addButton: {

@@ -51,6 +51,8 @@ const expenseSchema = Joi.object({
   amount: Joi.number().positive().max(999999.99).required(),
   description: Joi.string().max(500).optional().allow(''),
   transactionDate: Joi.date().required(),
+  userDate: Joi.date().optional(),  // User's local date (timezone-independent)
+  userTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/).optional(),  // HH:MM:SS format
   location: Joi.string().max(255).optional().allow(''),
   tags: Joi.array().items(Joi.string().max(50)).max(10).optional(),
   notes: Joi.string().max(1000).optional().allow('')
@@ -59,7 +61,9 @@ const expenseSchema = Joi.object({
 const expenseUpdateSchema = expenseSchema.keys({
   categoryId: Joi.string().uuid().optional(),
   amount: Joi.number().positive().max(999999.99).optional(),
-  transactionDate: Joi.date().optional()
+  transactionDate: Joi.date().optional(),
+  userDate: Joi.date().optional(),
+  userTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/).optional()
 });
 
 // Auth middleware
@@ -152,30 +156,39 @@ app.get('/stats', authenticateToken, async (req, res) => {
       
       switch(period) {
         case 'weekly':
-          // Persian week starts on Saturday (day 6 in moment-jalaali)
-          const persianWeekStart = now.clone().startOf('jWeek');
-          const persianWeekEnd = now.clone().endOf('jWeek');
-          dateFilter = `transaction_date >= '${persianWeekStart.format('YYYY-MM-DD')}' AND transaction_date <= '${persianWeekEnd.format('YYYY-MM-DD')}'`;
+          // Persian week starts on Saturday and ends on Friday
+          // Calculate days since last Saturday
+          const dayOfWeek = now.day(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+          let daysFromSaturday;
+          if (dayOfWeek === 6) {
+            daysFromSaturday = 0; // Today is Saturday
+          } else {
+            daysFromSaturday = (dayOfWeek + 1) % 7; // Days since last Saturday
+          }
+          
+          const persianWeekStart = now.clone().subtract(daysFromSaturday, 'days').startOf('day');
+          const persianWeekEnd = persianWeekStart.clone().add(6, 'days').endOf('day');
+          dateFilter = `user_date >= '${persianWeekStart.format('YYYY-MM-DD')}' AND user_date <= '${persianWeekEnd.format('YYYY-MM-DD')}'`;
           periodName = 'This Week';
           break;
         case 'monthly':
-          // Current Persian month
+          // Current Persian month - use user_date for timezone-independent filtering
           const persianMonthStart = now.clone().startOf('jMonth');
           const persianMonthEnd = now.clone().endOf('jMonth');
-          dateFilter = `transaction_date >= '${persianMonthStart.format('YYYY-MM-DD')}' AND transaction_date <= '${persianMonthEnd.format('YYYY-MM-DD')}'`;
+          dateFilter = `user_date >= '${persianMonthStart.format('YYYY-MM-DD')}' AND user_date <= '${persianMonthEnd.format('YYYY-MM-DD')}'`;
           periodName = 'This Month';
           break;
         case 'yearly':
-          // Current Persian year
+          // Current Persian year - use user_date for timezone-independent filtering
           const persianYearStart = now.clone().startOf('jYear');
           const persianYearEnd = now.clone().endOf('jYear');
-          dateFilter = `transaction_date >= '${persianYearStart.format('YYYY-MM-DD')}' AND transaction_date <= '${persianYearEnd.format('YYYY-MM-DD')}'`;
+          dateFilter = `user_date >= '${persianYearStart.format('YYYY-MM-DD')}' AND user_date <= '${persianYearEnd.format('YYYY-MM-DD')}'`;
           periodName = 'This Year';
           break;
         default:
           const defaultMonthStart = now.clone().startOf('jMonth');
           const defaultMonthEnd = now.clone().endOf('jMonth');
-          dateFilter = `transaction_date >= '${defaultMonthStart.format('YYYY-MM-DD')}' AND transaction_date <= '${defaultMonthEnd.format('YYYY-MM-DD')}'`;
+          dateFilter = `user_date >= '${defaultMonthStart.format('YYYY-MM-DD')}' AND user_date <= '${defaultMonthEnd.format('YYYY-MM-DD')}'`;
           periodName = 'This Month';
       }
     } else {
@@ -186,30 +199,37 @@ app.get('/stats', authenticateToken, async (req, res) => {
           // Calculate Monday of current week and add 6 days for Sunday
           const weekStart = 'CURRENT_DATE - INTERVAL \'1 day\' * ((EXTRACT(DOW FROM CURRENT_DATE) + 6) % 7)';
           const weekEnd = weekStart + ' + INTERVAL \'6 days\'';
-          dateFilter = `transaction_date >= ${weekStart} AND transaction_date <= ${weekEnd}`;
+          dateFilter = `user_date >= (${weekStart}) AND user_date <= (${weekEnd})`;
           periodName = 'This Week';
           break;
         case 'monthly':
-          dateFilter = 'transaction_date >= DATE_TRUNC(\'month\', CURRENT_DATE)';
+          // Current Gregorian month only - use user_date for timezone-independent filtering
+          dateFilter = 'user_date >= DATE_TRUNC(\'month\', CURRENT_DATE)::DATE AND user_date <= (DATE_TRUNC(\'month\', CURRENT_DATE) + INTERVAL \'1 month\' - INTERVAL \'1 day\')::DATE';
           periodName = 'This Month';
           break;
         case 'yearly':
-          dateFilter = 'transaction_date >= DATE_TRUNC(\'year\', CURRENT_DATE)';
+          // Current Gregorian year only - use user_date for timezone-independent filtering
+          dateFilter = 'user_date >= DATE_TRUNC(\'year\', CURRENT_DATE)::DATE AND user_date <= (DATE_TRUNC(\'year\', CURRENT_DATE) + INTERVAL \'1 year\' - INTERVAL \'1 day\')::DATE';
           periodName = 'This Year';
           break;
         default:
-          dateFilter = 'transaction_date >= DATE_TRUNC(\'month\', CURRENT_DATE)';
+          // Default to current Gregorian month
+          dateFilter = 'user_date >= DATE_TRUNC(\'month\', CURRENT_DATE)::DATE AND user_date <= (DATE_TRUNC(\'month\', CURRENT_DATE) + INTERVAL \'1 month\' - INTERVAL \'1 day\')::DATE';
           periodName = 'This Month';
       }
     }
     
-    // Get total expense for period
-    const totalResult = await db.query(
-      `SELECT COALESCE(SUM(amount), 0) as total 
+    // Get total expense for period - using user_date for timezone-independent filtering
+    const totalQuery = `SELECT COALESCE(SUM(amount), 0) as total 
        FROM expenses 
-       WHERE user_id = $1 AND ${dateFilter}`,
-      [req.user.userId]
-    );
+       WHERE user_id = $1 AND ${dateFilter}`;
+    
+    logger.info(`[STATS] Period: ${period}, Currency: ${userCurrency}`);
+    logger.info(`[STATS] Query: ${totalQuery}`);
+    
+    const totalResult = await db.query(totalQuery, [req.user.userId]);
+    
+    logger.info(`[STATS] Result: ${totalResult.rows[0].total}`);
     
     // Get category breakdown
     const categoryResult = await db.query(
@@ -286,7 +306,10 @@ app.get('/expenses', authenticateToken, async (req, res) => {
     
     if (dateTo) {
       query += ` AND e.transaction_date <= $${++paramCount}`;
-      params.push(dateTo);
+      // Add time to include the entire end date
+      const endDate = new Date(dateTo);
+      endDate.setHours(23, 59, 59, 999);
+      params.push(endDate.toISOString());
     }
 
     // NEW: Add search functionality for description and notes
@@ -335,7 +358,10 @@ app.get('/expenses', authenticateToken, async (req, res) => {
     
     if (dateTo) {
       countQuery += ` AND e.transaction_date <= $${++countParamCount}`;
-      countParams.push(dateTo);
+      // Add time to include the entire end date
+      const endDate = new Date(dateTo);
+      endDate.setHours(23, 59, 59, 999);
+      countParams.push(endDate.toISOString());
     }
 
     // NEW: Add search to count query
@@ -436,7 +462,7 @@ app.post('/expenses', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: error.details[0].message });
     }
     
-    const { categoryId, amount, description, transactionDate, location, tags, notes } = value;
+    const { categoryId, amount, description, transactionDate, userDate, userTime, location, tags, notes } = value;
     
     // Verify category exists and belongs to user
     const categoryCheck = await db.query(
@@ -448,12 +474,22 @@ app.post('/expenses', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid category or category not found' });
     }
     
+    // Validate that user_date and user_time are provided (required from frontend)
+    if (!userDate || !userTime) {
+      return res.status(400).json({ 
+        error: 'user_date and user_time are required. Please update your app.' 
+      });
+    }
+    
+    const finalUserDate = userDate;
+    const finalUserTime = userTime;
+    
     // Create expense
     const result = await db.query(
-      `INSERT INTO expenses (user_id, category_id, amount, description, transaction_date, location, tags, notes) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+      `INSERT INTO expenses (user_id, category_id, amount, description, transaction_date, user_date, user_time, location, tags, notes) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
        RETURNING *`,
-      [req.user.userId, categoryId, amount, description, transactionDate, location, tags, notes]
+      [req.user.userId, categoryId, amount, description, transactionDate, finalUserDate, finalUserTime, location, tags, notes]
     );
     
     // Get expense with category info
@@ -533,9 +569,23 @@ app.put('/expenses/:id', authenticateToken, async (req, res) => {
     const values = [];
     let paramCount = 0;
     
+    // Map frontend field names to database column names
+    const fieldMapping = {
+      'categoryId': 'category_id',
+      'transactionDate': 'transaction_date',
+      'userDate': 'user_date',
+      'userTime': 'user_time',
+      'description': 'description',
+      'amount': 'amount',
+      'location': 'location',
+      'tags': 'tags',
+      'notes': 'notes'
+    };
+    
     Object.keys(value).forEach(key => {
       if (value[key] !== undefined) {
-        updateFields.push(`${key === 'categoryId' ? 'category_id' : key === 'transactionDate' ? 'transaction_date' : key} = $${++paramCount}`);
+        const dbColumn = fieldMapping[key] || key;
+        updateFields.push(`${dbColumn} = $${++paramCount}`);
         values.push(value[key]);
       }
     });

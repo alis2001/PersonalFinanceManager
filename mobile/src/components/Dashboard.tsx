@@ -5,6 +5,8 @@ import { useAuth } from '../services/AuthContext';
 import expenseService, { ExpenseStats } from '../services/expenseService';
 import currencyService from '../services/currencyService';
 import BottomNavigation from './BottomNavigation';
+import { useTranslation } from '../hooks/useTranslation';
+import { formatDateForDisplay } from '../utils/dateFormatter';
 
 interface User {
   id: string;
@@ -19,10 +21,12 @@ interface DashboardProps {
   activeRoute?: string;
   onNavigate?: (route: string) => void;
   onAddExpense?: () => void;
+  onSettings?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashboard', onNavigate, onAddExpense }) => {
+const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashboard', onNavigate, onAddExpense, onSettings }) => {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
   
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -33,6 +37,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashbo
   useEffect(() => {
     loadUserStats();
   }, []);
+
 
   const loadUserStats = async () => {
     setStatsLoading(true);
@@ -45,7 +50,10 @@ const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashbo
       ]);
 
       if (weeklyResult.success && weeklyResult.stats) {
+        console.log('Weekly stats received:', weeklyResult.stats);
         setWeeklyStats(weeklyResult.stats);
+      } else {
+        console.log('Weekly stats failed or empty:', weeklyResult);
       }
       if (monthlyResult.success && monthlyResult.stats) {
         setMonthlyStats(monthlyResult.stats);
@@ -55,7 +63,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashbo
       }
     } catch (error) {
       console.error('Error loading stats:', error);
-      Alert.alert('Error', 'Failed to load dashboard data');
+      Alert.alert(t('common.error'), t('dashboard.failedToLoadData'));
     } finally {
       setStatsLoading(false);
       setLoading(false);
@@ -67,7 +75,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashbo
       await logout();
     } catch (error) {
       console.error('Logout error:', error);
-      Alert.alert('Error', 'Failed to logout');
+      Alert.alert(t('common.error'), t('auth.logoutError'));
     }
   };
 
@@ -182,27 +190,27 @@ const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashbo
           {/* Weekly Expenses Card */}
           <StatCard
             icon="📅"
-            title="Weekly Expenses"
+            title={t('dashboard.weeklyExpenses')}
             value={formatCurrency(weeklyStats?.total || 0)}
-            label={`${weeklyStats?.transactionCount || 0} transactions`}
+            label={`${weeklyStats?.transactionCount || 0} ${t('dashboard.transactions')}`}
             loading={statsLoading}
           />
 
           {/* Monthly Expenses Card */}
           <StatCard
             icon="📊"
-            title="Monthly Expenses"
+            title={t('dashboard.monthlyExpenses')}
             value={formatCurrency(monthlyStats?.total || 0)}
-            label={`${monthlyStats?.transactionCount || 0} transactions`}
+            label={`${monthlyStats?.transactionCount || 0} ${t('dashboard.transactions')}`}
             loading={statsLoading}
           />
 
           {/* Yearly Expenses Card */}
           <StatCard
             icon="📈"
-            title="Yearly Expenses"
+            title={t('dashboard.yearlyExpenses')}
             value={formatCurrency(yearlyStats?.total || 0)}
-            label={`${yearlyStats?.transactionCount || 0} transactions`}
+            label={`${yearlyStats?.transactionCount || 0} ${t('dashboard.transactions')}`}
             loading={statsLoading}
           />
         </View>
@@ -213,6 +221,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashbo
         activeRoute={activeRoute} 
         onNavigate={handleNavigate}
         onAddExpense={onAddExpense}
+        onSettings={onSettings}
       />
     </SafeAreaView>
   );

@@ -373,9 +373,12 @@ class DateConversionService {
         };
       } else if (period === 'weekly') {
         // Persian week (Saturday to Friday)
-        const dayOfWeek = (now as any).day(); // 0 = Saturday, 6 = Friday
-        const startOfWeek = (now as any).subtract(dayOfWeek, 'days');
-        const endOfWeek = (startOfWeek as any).add(6, 'days');
+        // moment.day(): 0=Sunday, 1=Monday, ..., 6=Saturday
+        const dayOfWeek = (now as any).day();
+        // Calculate days since last Saturday
+        const daysFromSaturday = dayOfWeek === 6 ? 0 : (dayOfWeek + 1) % 7;
+        const startOfWeek = (now as any).clone().subtract(daysFromSaturday, 'days').startOf('day');
+        const endOfWeek = startOfWeek.clone().add(6, 'days').endOf('day');
         return {
           start: (startOfWeek as any).format('YYYY-MM-DD'),
           end: (endOfWeek as any).format('YYYY-MM-DD')

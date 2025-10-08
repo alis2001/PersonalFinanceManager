@@ -36,6 +36,9 @@ async def get_analytics_overview(
         # Calculate date range for the period based on user's currency
         date_range = calculate_period_date_range(period, user_currency)
         
+        # Debug logging
+        logger.info(f"[ANALYTICS] Period: {period}, Currency: {user_currency}, Date range: {date_range['start']} to {date_range['end']}")
+        
         # Get real expense overview
         overview_data = await get_expense_overview(user_id, date_range)
         
@@ -225,6 +228,8 @@ async def get_individual_transaction_map(user_id: str, date_range: dict, period:
         e.id,
         e.amount,
         e.description,
+        e.user_date,
+        e.user_time,
         e.transaction_date,
         e.location,
         c.name as category_name,
@@ -233,8 +238,8 @@ async def get_individual_transaction_map(user_id: str, date_range: dict, period:
     FROM expenses e
     JOIN categories c ON e.category_id = c.id
     WHERE e.user_id = $1
-        AND e.transaction_date BETWEEN $2 AND $3
-    ORDER BY e.transaction_date ASC
+        AND e.user_date >= $2 AND e.user_date < $3
+    ORDER BY e.user_date ASC, e.user_time ASC
     """
     
     results = await execute_query(query, user_id, date_range["start"], date_range["end"])
@@ -248,13 +253,13 @@ async def get_individual_transaction_map(user_id: str, date_range: dict, period:
     point_colors = []
     
     for row in results:
-        # Format transaction data
+        # Format transaction data using user's local date/time
         transaction_data = {
             "id": str(row["id"]),
             "amount": float(row["amount"]),
             "description": row["description"] or "No description",
-            "date": row["transaction_date"].strftime("%Y-%m-%d"),
-            "time": row["transaction_date"].strftime("%H:%M"),
+            "date": row["user_date"].strftime("%Y-%m-%d"),
+            "time": str(row["user_time"])[:5] if row["user_time"] else "00:00",  # HH:MM format
             "location": row["location"] or "No location",
             "category": row["category_name"],
             "category_color": row["category_color"] or "#64748b",
@@ -263,11 +268,11 @@ async def get_individual_transaction_map(user_id: str, date_range: dict, period:
         
         transactions.append(transaction_data)
         
-        # Format labels based on period
+        # Format labels based on period using user's local date/time
         if period == "daily":
-            labels.append(row["transaction_date"].strftime("%H:%M"))
+            labels.append(str(row["user_time"])[:5] if row["user_time"] else "00:00")  # HH:MM
         else:
-            labels.append(row["transaction_date"].strftime("%m/%d"))
+            labels.append(row["user_date"].strftime("%m/%d"))
         
         amounts.append(float(row["amount"]))
         point_colors.append(row["category_color"] or "#64748b")
@@ -305,36 +310,39 @@ def calculate_period_date_range(period: str, user_currency: str = "USD") -> dict
         start_date = today
         end_date = today
     elif period == "weekly":
-        # This week (Monday to Sunday)
+        # This week (Monday to Sunday, end+1 for < comparison)
         days_since_monday = today.weekday()
         start_date = today - timedelta(days=days_since_monday)
-        end_date = start_date + timedelta(days=6)
+        end_date = start_date + timedelta(days=7)  # Next Monday for < comparison
     elif period == "monthly":
-        # This month
+        # This month (start to end+1 for < comparison)
         start_date = today.replace(day=1)
         if today.month == 12:
-            end_date = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+            end_date = today.replace(year=today.year + 1, month=1, day=1)
         else:
-            end_date = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
+            end_date = today.replace(month=today.month + 1, day=1)
     elif period == "quarterly":
-        # This quarter
+        # This quarter (end+1 for < comparison)
         quarter = (today.month - 1) // 3 + 1
         start_month = (quarter - 1) * 3 + 1
         start_date = today.replace(month=start_month, day=1)
         
         if quarter == 4:
-            end_date = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+            end_date = today.replace(year=today.year + 1, month=1, day=1)
         else:
             end_month = quarter * 3 + 1
-            end_date = today.replace(month=end_month, day=1) - timedelta(days=1)
+            end_date = today.replace(month=end_month, day=1)
     elif period == "yearly":
-        # This year
+        # This year (end+1 for < comparison)
         start_date = today.replace(month=1, day=1)
-        end_date = today.replace(month=12, day=31)
+        end_date = today.replace(year=today.year + 1, month=1, day=1)
     else:
-        # Default to current month
+        # Default to current month (end+1 for < comparison)
         start_date = today.replace(day=1)
-        end_date = today
+        if today.month == 12:
+            end_date = today.replace(year=today.year + 1, month=1, day=1)
+        else:
+            end_date = today.replace(month=today.month + 1, day=1)
     
     return {"start": start_date, "end": end_date}
 
@@ -349,59 +357,64 @@ def calculate_persian_period_date_range(period: str) -> dict:
         end_date = today_gregorian
     elif period == "weekly":
         # Persian week calculation - Persian week starts on Saturday
-        # Get the Persian weekday (0=Saturday, 1=Sunday, ..., 6=Friday)
+        # jdatetime.weekday() returns: 0=Saturday, 1=Sunday, 2=Monday, ..., 6=Friday
         persian_weekday = today_persian.weekday()
-        # Calculate days since Saturday (start of Persian week)
-        days_since_saturday = (persian_weekday + 1) % 7  # Convert to Saturday-based week
+        # Days since Saturday (start of Persian week)
+        days_since_saturday = persian_weekday
         
         # Get start of Persian week (Saturday)
         start_persian = today_persian - timedelta(days=days_since_saturday)
-        # Get end of Persian week (Friday)
-        end_persian = start_persian + timedelta(days=6)
+        # Get end of Persian week (Friday) + 1 day to include the full Friday
+        end_persian = start_persian + timedelta(days=7)
         
         # Convert to Gregorian for database queries
         start_date = start_persian.togregorian()
         end_date = end_persian.togregorian()
     elif period == "monthly":
-        # Current Persian month
+        # Current Persian month (end+1 for < comparison)
         # Get first day of current Persian month
         start_persian = jdatetime.date(today_persian.year, today_persian.month, 1)
-        # Get last day of current Persian month
+        # Get first day of NEXT Persian month for < comparison
         if today_persian.month == 12:
-            end_persian = jdatetime.date(today_persian.year + 1, 1, 1) - timedelta(days=1)
+            end_persian = jdatetime.date(today_persian.year + 1, 1, 1)
         else:
-            end_persian = jdatetime.date(today_persian.year, today_persian.month + 1, 1) - timedelta(days=1)
+            end_persian = jdatetime.date(today_persian.year, today_persian.month + 1, 1)
         
         # Convert to Gregorian for database queries
         start_date = start_persian.togregorian()
         end_date = end_persian.togregorian()
     elif period == "quarterly":
-        # Current Persian quarter
+        # Current Persian quarter (end+1 for < comparison)
         quarter = (today_persian.month - 1) // 3 + 1
         start_month = (quarter - 1) * 3 + 1
         start_persian = jdatetime.date(today_persian.year, start_month, 1)
         
+        # First day of next quarter for < comparison
         if quarter == 4:
-            end_persian = jdatetime.date(today_persian.year + 1, 1, 1) - timedelta(days=1)
+            end_persian = jdatetime.date(today_persian.year + 1, 1, 1)
         else:
             end_month = quarter * 3 + 1
-            end_persian = jdatetime.date(today_persian.year, end_month, 1) - timedelta(days=1)
+            end_persian = jdatetime.date(today_persian.year, end_month, 1)
         
         # Convert to Gregorian for database queries
         start_date = start_persian.togregorian()
         end_date = end_persian.togregorian()
     elif period == "yearly":
-        # Current Persian year
+        # Current Persian year (end+1 for < comparison)
         start_persian = jdatetime.date(today_persian.year, 1, 1)
-        end_persian = jdatetime.date(today_persian.year, 12, 29)  # Persian year has 29 days in last month
+        # First day of next year for < comparison
+        end_persian = jdatetime.date(today_persian.year + 1, 1, 1)
         
         # Convert to Gregorian for database queries
         start_date = start_persian.togregorian()
         end_date = end_persian.togregorian()
     else:
-        # Default to current Persian month
+        # Default to current Persian month (end+1 for < comparison)
         start_persian = jdatetime.date(today_persian.year, today_persian.month, 1)
-        end_persian = jdatetime.date(today_persian.year, today_persian.month, today_persian.day)
+        if today_persian.month == 12:
+            end_persian = jdatetime.date(today_persian.year + 1, 1, 1)
+        else:
+            end_persian = jdatetime.date(today_persian.year, today_persian.month + 1, 1)
         
         # Convert to Gregorian for database queries
         start_date = start_persian.togregorian()
@@ -450,17 +463,23 @@ async def get_monthly_comparison_data(user_id: str) -> dict:
 # EXISTING HELPER FUNCTIONS (keep all previous functions)
 
 async def get_expense_overview(user_id: str, date_range: dict) -> dict:
-    """Get real expense overview from database"""
+    """Get real expense overview from database - using user_date for timezone-independent filtering"""
+    # Use >= and < to properly include the full end date
+    # date_range["end"] is the day AFTER the last day we want to include
     query = """
     SELECT 
         COALESCE(SUM(amount), 0) as total_expenses,
         COUNT(*) as transaction_count,
         COALESCE(AVG(amount), 0) as avg_transaction_amount
     FROM expenses 
-    WHERE user_id = $1 AND transaction_date BETWEEN $2 AND $3
+    WHERE user_id = $1 AND user_date >= $2 AND user_date < $3
     """
     
+    logger.info(f"[ANALYTICS] Query: {query}, Params: user_id={user_id}, start={date_range['start']}, end={date_range['end']}")
+    
     result = await execute_fetchrow(query, user_id, date_range["start"], date_range["end"])
+    
+    logger.info(f"[ANALYTICS] Result: total={result['total_expenses'] if result else 0}, count={result['transaction_count'] if result else 0}")
     
     if not result:
         return {
@@ -482,7 +501,7 @@ async def get_expense_overview(user_id: str, date_range: dict) -> dict:
     }
 
 async def get_top_categories(user_id: str, date_range: dict) -> List[dict]:
-    """Get real top expense categories from database"""
+    """Get real top expense categories from database - using user_date for timezone-independent filtering"""
     query = """
     SELECT 
         c.name as category_name,
@@ -493,7 +512,7 @@ async def get_top_categories(user_id: str, date_range: dict) -> List[dict]:
     FROM categories c
     LEFT JOIN expenses e ON c.id = e.category_id 
         AND e.user_id = $1 
-        AND e.transaction_date BETWEEN $2 AND $3
+        AND e.user_date >= $2 AND e.user_date < $3
     WHERE c.user_id = $1 AND c.type IN ('expense', 'both')
     GROUP BY c.id, c.name, c.color, c.icon
     HAVING COALESCE(SUM(e.amount), 0) > 0

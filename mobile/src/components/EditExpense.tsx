@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Modal, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Modal, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import ConditionalDatePicker from './ConditionalDatePicker';
 import expenseService from '../services/expenseService';
 import categoryService, { Category } from '../services/categoryService';
 import { Expense } from '../services/expenseService';
+import { useTranslation } from '../hooks/useTranslation';
+import { formatDateForDisplay, formatDateForInput, parseDateFromInput } from '../utils/dateFormatter';
 
 interface EditExpenseProps {
   isOpen: boolean;
@@ -22,28 +24,77 @@ const EditExpense: React.FC<EditExpenseProps> = ({
   onExpenseUpdated, 
   userCurrency = 'USD' 
 }) => {
+  const { t } = useTranslation();
+  
+  // Function to translate category names
+  const getTranslatedCategoryName = (categoryName: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilities'),
+      'Food & Dining': t('categories.foodDining'),
+      'Transportation': t('categories.transportation'),
+      'Shopping': t('categories.shopping'),
+      'Entertainment': t('categories.entertainment'),
+      'Healthcare': t('categories.healthcare'),
+      'Education': t('categories.education'),
+      'Travel': t('categories.travel'),
+      'Groceries': t('categories.groceries'),
+      'Gas': t('categories.gas'),
+      'Insurance': t('categories.insurance'),
+      'Other': t('categories.other'),
+      'Business': t('categories.business'),
+      'Business Income': t('categories.businessIncome'),
+      'Freelance': t('categories.freelance'),
+      'Gifts & Bonuses': t('categories.giftsBonuses'),
+      'Gifts & Donations': t('categories.giftsDonations'),
+      'Home & Garden': t('categories.homeGarden'),
+      'Investment Returns': t('categories.investmentReturns'),
+      'Other Expenses': t('categories.otherExpenses'),
+      'Other Income': t('categories.otherIncome'),
+      'Personal Care': t('categories.personalCare'),
+      'Rental Income': t('categories.rentalIncome'),
+    };
+    return categoryMap[categoryName] || categoryName;
+  };
+
+  // Function to translate category types
+  const getTranslatedCategoryType = (type: string): string => {
+    const typeMap: { [key: string]: string } = {
+      'expense': t('categories.expense'),
+      'income': t('categories.income'),
+      'both': t('categories.both'),
+    };
+    return typeMap[type] || type;
+  };
+
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [error, setError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [formattedDate, setFormattedDate] = useState('');
+  const [formattedTime, setFormattedTime] = useState('');
   
-  // Date formatting functions (matching web version)
-  const formatDateTimeForInput = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  // Date formatting functions - now using smart date formatter
+  const formatDateTimeForInput = async (date: Date): Promise<string> => {
+    return await formatDateForInput(date, true);
   };
 
-  const parseDateTimeFromInput = (dateTimeString: string): Date => {
-    return new Date(dateTimeString);
+  const parseDateTimeFromInput = async (dateTimeString: string): Promise<Date> => {
+    return await parseDateFromInput(dateTimeString);
   };
+
+  // Update formatted date when selectedDate changes
+  useEffect(() => {
+    const updateFormattedDate = async () => {
+      const dateStr = await formatDateForDisplay(selectedDate, false);
+      const timeStr = await formatDateForDisplay(selectedDate, true);
+      setFormattedDate(dateStr);
+      setFormattedTime(timeStr.split(' ').slice(-2).join(' '));
+    };
+    updateFormattedDate();
+  }, [selectedDate]);
   
   // Form data
   const [formData, setFormData] = useState({
@@ -70,7 +121,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
       if (result.success && result.categories) {
         setCategories(result.categories);
       } else {
-        setError('Failed to load categories');
+        setError(t('expenses.failedToLoadCategories'));
       }
     } catch (err) {
       setError('Failed to load categories');
@@ -93,6 +144,20 @@ const EditExpense: React.FC<EditExpenseProps> = ({
     });
   };
 
+  const handleDateConfirm = (date: Date) => {
+    setSelectedDate(date);
+    setFormData(prev => ({
+      ...prev,
+      transactionDate: formatDateTimeForInput(date)
+    }));
+    setShowDatePicker(false);
+  };
+
+  const handleDateCancel = () => {
+    setShowDatePicker(false);
+  };
+
+
   const handleInputChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
     
@@ -110,13 +175,13 @@ const EditExpense: React.FC<EditExpenseProps> = ({
 
   const validateForm = (): string | null => {
     if (!formData.categoryId.trim()) {
-      return 'Please select a category';
+      return t('expenses.pleaseSelectCategory');
     }
     if (!formData.amount.trim() || parseFloat(formData.amount) <= 0) {
-      return 'Please enter a valid amount';
+      return t('expenses.pleaseEnterValidAmount');
     }
     if (!formData.transactionDate.trim()) {
-      return 'Please select a transaction date';
+      return t('expenses.pleaseSelectDateTime');
     }
     return null;
   };
@@ -132,11 +197,29 @@ const EditExpense: React.FC<EditExpenseProps> = ({
     setError('');
 
     try {
+      const parsedDate = await parseDateTimeFromInput(formData.transactionDate);
+      console.log('EditExpense - Form transactionDate string:', formData.transactionDate);
+      console.log('EditExpense - Parsed date:', parsedDate);
+      console.log('EditExpense - ISO string being sent:', parsedDate.toISOString());
+      
+      // Extract user's LOCAL date and time (before converting to UTC)
+      const year = parsedDate.getFullYear();
+      const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(parsedDate.getDate()).padStart(2, '0');
+      const hours = String(parsedDate.getHours()).padStart(2, '0');
+      const minutes = String(parsedDate.getMinutes()).padStart(2, '0');
+      const seconds = String(parsedDate.getSeconds()).padStart(2, '0');
+      
+      const userDate = `${year}-${month}-${day}`;  // User's local date
+      const userTime = `${hours}:${minutes}:${seconds}`;  // User's local time
+      
       const updateData = {
         categoryId: formData.categoryId,
         amount: parseFloat(formData.amount),
         description: formData.description.trim() || undefined,
-        transactionDate: parseDateTimeFromInput(formData.transactionDate).toISOString(),
+        transactionDate: parsedDate.toISOString(),
+        userDate: userDate,
+        userTime: userTime,
         location: formData.location.trim() || undefined,
         notes: formData.notes.trim() || undefined,
       };
@@ -147,10 +230,10 @@ const EditExpense: React.FC<EditExpenseProps> = ({
         onExpenseUpdated();
         onClose();
       } else {
-        setError(result.error || 'Failed to update expense');
+        setError(result.error || t('expenses.failedToUpdateExpenseTryAgain'));
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to update expense');
+      setError(err.message || t('expenses.failedToUpdateExpenseTryAgain'));
     }
 
     setLoading(false);
@@ -172,10 +255,10 @@ const EditExpense: React.FC<EditExpenseProps> = ({
         onExpenseUpdated();
         onClose();
       } else {
-        setError(result.error || 'Failed to delete expense');
+        setError(result.error || t('expenses.failedToDeleteExpenseTryAgain'));
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to delete expense');
+      setError(err.message || t('expenses.failedToDeleteExpenseTryAgain'));
     }
 
     setLoading(false);
@@ -187,22 +270,6 @@ const EditExpense: React.FC<EditExpenseProps> = ({
     onClose();
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    // Always close the picker after selection
-    setShowDatePicker(false);
-    
-    if (selectedDate) {
-      setSelectedDate(selectedDate);
-      setFormData(prev => ({
-        ...prev,
-        transactionDate: formatDateTimeForInput(selectedDate)
-      }));
-    }
-  };
-
-  const showDatePickerModal = () => {
-    setShowDatePicker(true);
-  };
 
   return (
     <>
@@ -213,7 +280,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
       >
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Edit Transaction</Text>
+            <Text style={styles.modalTitle}>{t('expenses.editExpense')}</Text>
             <TouchableOpacity style={styles.closeButton} onPress={handleCancel}>
               <Text style={styles.closeButtonText}>✕</Text>
             </TouchableOpacity>
@@ -227,7 +294,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
           )}
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Category *</Text>
+            <Text style={styles.label}>{t('expenses.category')} *</Text>
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={formData.categoryId}
@@ -238,7 +305,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
                 {categories.map((category) => (
                   <Picker.Item 
                     key={category.id} 
-                    label={`${category.icon} ${category.name}`} 
+                    label={`${category.icon} ${getTranslatedCategoryName(category.name)}`} 
                     value={category.id} 
                   />
                 ))}
@@ -247,7 +314,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Amount *</Text>
+            <Text style={styles.label}>{t('expenses.amount')} *</Text>
             <TextInput
               style={styles.input}
               value={formData.amount}
@@ -260,12 +327,12 @@ const EditExpense: React.FC<EditExpenseProps> = ({
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Description</Text>
+            <Text style={styles.label}>{t('expenses.description')}</Text>
             <TextInput
               style={styles.input}
               value={formData.description}
               onChangeText={(value) => handleInputChange('description', value)}
-              placeholder="Transaction description"
+              placeholder={t('expenses.whatDidYouSpendOn')}
               placeholderTextColor="#999"
               editable={!loading}
               maxLength={200}
@@ -273,34 +340,35 @@ const EditExpense: React.FC<EditExpenseProps> = ({
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Date & Time *</Text>
+            <Text style={styles.label}>{t('expenses.dateTime')} *</Text>
             <TouchableOpacity 
-              style={styles.dateInputButton}
-              onPress={showDatePickerModal}
+              style={styles.datePickerButton}
+              onPress={() => setShowDatePicker(true)}
               disabled={loading}
             >
-              <Text style={[styles.dateInputText, loading && styles.dateInputTextDisabled]}>
-                {selectedDate.toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit'
-                })} at {selectedDate.toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: true
-                })}
-              </Text>
-              <Text style={styles.dateInputIcon}>📅</Text>
+              <View style={styles.datePickerButtonContent}>
+                <View style={styles.datePickerTextContainer}>
+                  <Text style={styles.datePickerDateText}>
+                    {formattedDate}
+                  </Text>
+                  <Text style={styles.datePickerTimeText}>
+                    {formattedTime}
+                  </Text>
+                </View>
+                <View style={styles.datePickerIcon}>
+                  <Text style={styles.calendarIcon}>📅</Text>
+                </View>
+              </View>
             </TouchableOpacity>
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Location</Text>
+            <Text style={styles.label}>{t('expenses.location')}</Text>
             <TextInput
               style={styles.input}
               value={formData.location}
               onChangeText={(value) => handleInputChange('location', value)}
-              placeholder="Transaction location"
+              placeholder={t('expenses.whereDidYouMakePurchase')}
               placeholderTextColor="#999"
               editable={!loading}
               maxLength={100}
@@ -308,12 +376,12 @@ const EditExpense: React.FC<EditExpenseProps> = ({
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Notes</Text>
+            <Text style={styles.label}>{t('expenses.notes')}</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={formData.notes}
               onChangeText={(value) => handleInputChange('notes', value)}
-              placeholder="Additional notes"
+              placeholder={t('expenses.additionalNotes')}
               placeholderTextColor="#999"
               editable={!loading}
               multiline
@@ -330,7 +398,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
                 disabled={loading}
               >
                 <Text style={styles.deleteButtonText}>
-                  🗑️ Delete
+                  🗑️ {t('common.delete')}
                 </Text>
               </TouchableOpacity>
               
@@ -339,7 +407,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
                 onPress={handleCancel}
                 disabled={loading}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
             </View>
             
@@ -349,26 +417,26 @@ const EditExpense: React.FC<EditExpenseProps> = ({
               disabled={loading}
             >
               <Text style={styles.updateButtonText}>
-                {loading ? 'Updating...' : 'Update'}
+                {loading ? t('expenses.updating') : t('expenses.updateExpense')}
               </Text>
             </TouchableOpacity>
           </View>
           </ScrollView>
         </SafeAreaView>
         
-        {/* Date Time Picker */}
-        {showDatePicker && (
-          <View style={styles.datePickerContainer}>
-            <DateTimePicker
-              value={selectedDate}
-              mode="datetime"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleDateChange}
-              maximumDate={new Date()}
-            />
-          </View>
-        )}
       </Modal>
+      
+      {/* Smart Date Time Picker - Persian for IRR users, Gregorian for others */}
+      <ConditionalDatePicker
+        visible={showDatePicker}
+        mode="datetime"
+        value={selectedDate}
+        onConfirm={handleDateConfirm}
+        onCancel={handleDateCancel}
+        minimumDate={new Date(2020, 0, 1)}
+        maximumDate={new Date()}
+      />
+      
       
       {showDeleteConfirm && (
         <Modal
@@ -379,28 +447,28 @@ const EditExpense: React.FC<EditExpenseProps> = ({
           <View style={styles.deleteConfirmOverlay}>
             <View style={styles.deleteConfirmModal}>
               <View style={styles.deleteConfirmHeader}>
-                <Text style={styles.deleteConfirmTitle}>Delete Transaction</Text>
+                <Text style={styles.deleteConfirmTitle}>{t('expenses.deleteExpense')}</Text>
               </View>
               
               <View style={styles.deleteConfirmBody}>
                 <Text style={styles.deleteConfirmMessage}>
-                  Are you sure you want to delete this transaction? This action cannot be undone.
+                  {t('expenses.deleteConfirm')} {t('expenses.deleteWarning')}
                 </Text>
                 
                 <View style={styles.expensePreview}>
                   <View style={styles.expensePreviewItem}>
-                    <Text style={styles.expensePreviewLabel}>Amount:</Text>
+                    <Text style={styles.expensePreviewLabel}>{t('expenses.amount')}:</Text>
                     <Text style={styles.expensePreviewValue}>
                       {expense.amount.toFixed(2)} {userCurrency}
                     </Text>
                   </View>
                   <View style={styles.expensePreviewItem}>
-                    <Text style={styles.expensePreviewLabel}>Category:</Text>
-                    <Text style={styles.expensePreviewValue}>{expense.category.name}</Text>
+                    <Text style={styles.expensePreviewLabel}>{t('expenses.category')}:</Text>
+                    <Text style={styles.expensePreviewValue}>{getTranslatedCategoryName(expense.category.name)}</Text>
                   </View>
                   {expense.description && (
                     <View style={styles.expensePreviewItem}>
-                      <Text style={styles.expensePreviewLabel}>Description:</Text>
+                      <Text style={styles.expensePreviewLabel}>{t('expenses.description')}:</Text>
                       <Text style={styles.expensePreviewValue}>{expense.description}</Text>
                     </View>
                   )}
@@ -417,7 +485,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
                   onPress={() => setShowDeleteConfirm(false)}
                   disabled={loading}
                 >
-                  <Text style={styles.cancelDeleteButtonText}>Cancel</Text>
+                  <Text style={styles.cancelDeleteButtonText}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity
@@ -426,7 +494,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
                   disabled={loading}
                 >
                   <Text style={styles.confirmDeleteButtonText}>
-                    {loading ? 'Deleting...' : 'Delete Transaction'}
+                    {loading ? t('expenses.deleting') : t('expenses.deleteExpense')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -457,7 +525,53 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? '-apple-system' : 'Roboto',
+    fontFamily: 'System',
+  },
+  datePickerButton: {
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  datePickerButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  datePickerTextContainer: {
+    flex: 1,
+  },
+  datePickerDateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 2,
+  },
+  datePickerTimeText: {
+    fontSize: 14,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  datePickerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calendarIcon: {
+    fontSize: 20,
   },
   closeButton: {
     width: 30,

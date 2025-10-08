@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface NavigationItem {
   id: string;
@@ -12,31 +13,34 @@ interface BottomNavigationProps {
   activeRoute: string;
   onNavigate: (route: string) => void;
   onAddExpense?: () => void;
+  onSettings?: () => void;
 }
 
-const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeRoute, onNavigate, onAddExpense }) => {
+const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeRoute, onNavigate, onAddExpense, onSettings }) => {
+  const { t } = useTranslation();
+  
   const navigationItems: NavigationItem[] = [
     {
       id: 'dashboard',
-      label: 'Dashboard',
+      label: t('navigation.dashboard'),
       icon: '🏠',
       route: 'Dashboard',
     },
     {
       id: 'transactions',
-      label: 'Transactions',
+      label: t('navigation.expenses'),
       icon: '📋',
       route: 'Transactions',
     },
     {
       id: 'analytics',
-      label: 'Analytics',
+      label: t('navigation.analytics'),
       icon: '📊',
       route: 'Analytics',
     },
     {
       id: 'categories',
-      label: 'Categories',
+      label: t('navigation.categories'),
       icon: '🏷️',
       route: 'Categories',
     },
@@ -68,6 +72,15 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeRoute, onNavi
           activeOpacity={0.8}
         >
           <Text style={styles.addButtonIcon}>+</Text>
+        </TouchableOpacity>
+        
+        {/* Settings Button */}
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={onSettings}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.settingsIcon}>⚙️</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -163,6 +176,30 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '300',
     lineHeight: 28,
+  },
+  settingsButton: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  settingsIcon: {
+    fontSize: 20,
   },
 });
 

@@ -1,14 +1,13 @@
-// Translation Service for Mobile
-// Handles internationalization and language management
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export interface Language {
+interface Language {
   code: string;
   name: string;
   nativeName: string;
   flag: string;
 }
 
-export interface TranslationData {
+interface TranslationData {
   [key: string]: string | TranslationData;
 }
 
@@ -50,194 +49,189 @@ class TranslationService {
     }
 
     this.currentLanguage = languageCode;
+    await AsyncStorage.setItem('preferred_language', languageCode);
     
-    try {
-      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      await AsyncStorage.setItem('preferred_language', languageCode);
-    } catch (error) {
-      console.error('Error saving language preference:', error);
-    }
-
-    this.notifyListeners();
-  }
-
-  // Load user's preferred language
-  private async loadUserLanguage(): Promise<void> {
-    try {
-      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      const savedLanguage = await AsyncStorage.getItem('preferred_language');
-      if (savedLanguage && this.supportedLanguages.find(lang => lang.code === savedLanguage)) {
-        this.currentLanguage = savedLanguage;
-      }
-    } catch (error) {
-      console.error('Error loading language preference:', error);
-    }
-  }
-
-  // Load translations from backend
-  async loadUserLanguageFromBackend(): Promise<void> {
-    try {
-      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      const token = await AsyncStorage.getItem('accessToken');
-      
-      if (!token) {
-        return;
-      }
-
-      const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.123:8080/api';
-      const response = await fetch(`${baseURL}/auth/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const userData = await response.json();
-        if (userData.preferred_language) {
-          await this.setLanguage(userData.preferred_language);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading language from backend:', error);
-    }
-  }
-
-  // Load translations (simplified for mobile)
-  private loadTranslations(): void {
-    // Basic translations for mobile
-    this.translations = {
-      en: {
-        common: {
-          save: 'Save',
-          cancel: 'Cancel',
-          delete: 'Delete',
-          edit: 'Edit',
-          add: 'Add',
-          loading: 'Loading...',
-          error: 'Error',
-          success: 'Success',
-          logout: 'Logout',
-        },
-        dashboard: {
-          welcome: 'Welcome, {{name}}',
-          weeklyExpenses: 'Weekly Expenses',
-          monthlyExpenses: 'Monthly Expenses',
-          yearlyExpenses: 'Yearly Expenses',
-          transactions: 'transactions',
-        },
-        auth: {
-          login: 'Login',
-          register: 'Register',
-          email: 'Email',
-          password: 'Password',
-          confirmPassword: 'Confirm Password',
-        },
-      },
-      fr: {
-        common: {
-          save: 'Enregistrer',
-          cancel: 'Annuler',
-          delete: 'Supprimer',
-          edit: 'Modifier',
-          add: 'Ajouter',
-          loading: 'Chargement...',
-          error: 'Erreur',
-          success: 'Succès',
-          logout: 'Déconnexion',
-        },
-        dashboard: {
-          welcome: 'Bienvenue, {{name}}',
-          weeklyExpenses: 'Dépenses Hebdomadaires',
-          monthlyExpenses: 'Dépenses Mensuelles',
-          yearlyExpenses: 'Dépenses Annuelles',
-          transactions: 'transactions',
-        },
-        auth: {
-          login: 'Connexion',
-          register: 'S\'inscrire',
-          email: 'Email',
-          password: 'Mot de passe',
-          confirmPassword: 'Confirmer le mot de passe',
-        },
-      },
-    };
-  }
-
-  // Translate function
-  t(key: string, options?: { [key: string]: string | number }): string {
-    const keys = key.split('.');
-    let value: any = this.translations[this.currentLanguage];
-
-    for (const k of keys) {
-      if (value && typeof value === 'object' && k in value) {
-        value = value[k];
-      } else {
-        // Fallback to English
-        value = this.translations['en'];
-        for (const fallbackKey of keys) {
-          if (value && typeof value === 'object' && fallbackKey in value) {
-            value = value[fallbackKey];
-          } else {
-            return key; // Return key if translation not found
-          }
-        }
-        break;
-      }
-    }
-
-    if (typeof value !== 'string') {
-      return key;
-    }
-
-    // Replace placeholders
-    if (options) {
-      for (const [optionKey, optionValue] of Object.entries(options)) {
-        value = value.replace(new RegExp(`{{${optionKey}}}`, 'g'), String(optionValue));
-      }
-    }
-
-    return value;
+    // Save to backend if user is authenticated
+    await this.saveUserLanguagePreference(languageCode);
+    
+    // Notify listeners
+    this.listeners.forEach(listener => listener(languageCode));
   }
 
   // Subscribe to language changes
-  subscribe(listener: (language: string) => void): () => void {
-    this.listeners.push(listener);
+  onLanguageChange(callback: (language: string) => void): () => void {
+    this.listeners.push(callback);
     return () => {
-      const index = this.listeners.indexOf(listener);
+      const index = this.listeners.indexOf(callback);
       if (index > -1) {
         this.listeners.splice(index, 1);
       }
     };
   }
 
-  // Notify listeners of language changes
-  private notifyListeners(): void {
-    this.listeners.forEach(listener => listener(this.currentLanguage));
+  // Translate function
+  t(key: string, params?: { [key: string]: string | number }): string {
+    const translation = this.getTranslation(key);
+    
+    if (!translation) {
+      console.warn(`Translation missing for key: ${key}`);
+      return key; // Return key as fallback
+    }
+
+    // Replace parameters
+    if (params) {
+      return this.replaceParams(translation, params);
+    }
+
+    return translation;
   }
 
-  // Format date according to current language
-  formatDate(date: Date): string {
-    return new Intl.DateTimeFormat(this.currentLanguage, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(date);
+  // Get translation by key
+  private getTranslation(key: string): string | null {
+    const keys = key.split('.');
+    let current: any = this.translations[this.currentLanguage];
+
+    for (const k of keys) {
+      if (current && typeof current === 'object' && k in current) {
+        current = current[k];
+      } else {
+        return null;
+      }
+    }
+
+    return typeof current === 'string' ? current : null;
   }
 
-  // Format number according to current language
-  formatNumber(number: number): string {
-    return new Intl.NumberFormat(this.currentLanguage).format(number);
+  // Replace parameters in translation
+  private replaceParams(text: string, params: { [key: string]: string | number }): string {
+    return text.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+      return params[key]?.toString() || match;
+    });
   }
 
-  // Format currency according to current language
-  formatCurrency(amount: number, currency: string = 'USD'): string {
-    return new Intl.NumberFormat(this.currentLanguage, {
-      style: 'currency',
-      currency: currency,
-    }).format(amount);
+  // Load translations
+  private async loadTranslations(): Promise<void> {
+    try {
+      // Import translation files using require (React Native compatible)
+      const enTranslations = require('../assets/locales/en.json');
+      const faTranslations = require('../assets/locales/fa.json');
+      const frTranslations = require('../assets/locales/fr.json');
+      const esTranslations = require('../assets/locales/es.json');
+      const deTranslations = require('../assets/locales/de.json');
+      const arTranslations = require('../assets/locales/ar.json');
+
+      this.translations = {
+        en: enTranslations,
+        fa: faTranslations,
+        fr: frTranslations,
+        es: esTranslations,
+        de: deTranslations,
+        ar: arTranslations,
+      };
+    } catch (error) {
+      console.error('Error loading translations:', error);
+      // Set empty translations as fallback
+      this.translations = {
+        en: {},
+        fa: {},
+        fr: {},
+        es: {},
+        de: {},
+        ar: {},
+      };
+    }
+  }
+
+  // Load user language preference
+  private async loadUserLanguage(): Promise<void> {
+    try {
+      // Try AsyncStorage first
+      const storedLanguage = await AsyncStorage.getItem('preferred_language');
+      if (storedLanguage && this.supportedLanguages.find(lang => lang.code === storedLanguage)) {
+        this.currentLanguage = storedLanguage;
+        return;
+      }
+
+      // Try to get from backend if user is authenticated
+      await this.loadUserLanguageFromBackend();
+
+      // If still no language set, try device language
+      if (!this.currentLanguage || this.currentLanguage === 'en') {
+        // Note: For React Native, we could use react-native-localize to get device language
+        // For now, default to English
+        this.currentLanguage = 'en';
+      }
+    } catch (error) {
+      console.warn('Error loading user language:', error);
+      this.currentLanguage = 'en';
+    }
+  }
+
+  // Save user language preference to backend
+  private async saveUserLanguagePreference(languageCode: string): Promise<void> {
+    try {
+      // Import authService dynamically to avoid circular dependency
+      const { default: authService } = await import('./authService');
+      
+      if (!authService.isAuthenticated()) {
+        return;
+      }
+      
+      const success = await authService.updateLanguage(languageCode);
+      if (!success) {
+        console.warn('Failed to save language preference to backend');
+      }
+    } catch (error) {
+      console.warn('Error saving language preference:', error);
+    }
+  }
+
+  // Get user language preference from backend
+  async loadUserLanguageFromBackend(): Promise<void> {
+    try {
+      // Import authService dynamically to avoid circular dependency
+      const { default: authService } = await import('./authService');
+      
+      if (!authService.isAuthenticated()) {
+        return;
+      }
+      
+      const profile = await authService.getProfile();
+      if (profile && profile.preferredLanguage && this.supportedLanguages.find(lang => lang.code === profile.preferredLanguage)) {
+        this.currentLanguage = profile.preferredLanguage;
+        await AsyncStorage.setItem('preferred_language', profile.preferredLanguage);
+      }
+    } catch (error) {
+      console.warn('Error loading user language from backend:', error);
+    }
+  }
+
+  // Set language based on user's currency (IRR = Persian, others = English)
+  setLanguageBasedOnCurrency(): void {
+    try {
+      // Import authService dynamically to avoid circular dependency
+      import('./authService').then(({ default: authService }) => {
+        const user = authService.getUser();
+        
+        if (user && user.defaultCurrency) {
+          // IRR users default to Persian, others default to English
+          const currencyBasedLanguage = user.defaultCurrency === 'IRR' ? 'fa' : 'en';
+          if (this.supportedLanguages.find(lang => lang.code === currencyBasedLanguage)) {
+            this.currentLanguage = currencyBasedLanguage;
+            AsyncStorage.setItem('preferred_language', currencyBasedLanguage);
+            // Notify listeners
+            this.listeners.forEach(listener => listener(currencyBasedLanguage));
+          }
+        }
+      }).catch((error) => {
+        console.warn('Error setting language based on currency:', error);
+      });
+    } catch (error) {
+      console.warn('Error setting language based on currency:', error);
+    }
   }
 }
 
+// Create singleton instance
 const translationService = new TranslationService();
 export default translationService;

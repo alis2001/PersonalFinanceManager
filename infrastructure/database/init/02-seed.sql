@@ -42,24 +42,24 @@ INSERT INTO categories (user_id, name, description, color, icon, type, is_defaul
 ('00000000-0000-0000-0000-000000000001'::uuid, 'Other Income', 'Miscellaneous income sources', '#85C1E9', '➕', 'income', TRUE)
 ON CONFLICT (user_id, name) DO NOTHING;
 
--- Sample expenses for demo user (last 30 days) - FIXED UUID
-INSERT INTO expenses (user_id, category_id, amount, description, transaction_date, location) VALUES
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Food & Dining' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 45.67, 'Grocery shopping', CURRENT_DATE - INTERVAL '2 days', 'Whole Foods Market'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Transportation' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 85.00, 'Gas fill-up', CURRENT_DATE - INTERVAL '3 days', 'Shell Station'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Food & Dining' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 32.50, 'Lunch at restaurant', CURRENT_DATE - INTERVAL '1 days', 'Local Bistro'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Entertainment' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 15.99, 'Netflix subscription', CURRENT_DATE - INTERVAL '5 days', 'Online'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Bills & Utilities' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 125.00, 'Electric bill', CURRENT_DATE - INTERVAL '7 days', 'Online Payment'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Shopping' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 89.99, 'New shoes', CURRENT_DATE - INTERVAL '10 days', 'Nike Store'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Healthcare' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 25.00, 'Pharmacy prescription', CURRENT_DATE - INTERVAL '12 days', 'CVS Pharmacy'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Food & Dining' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 67.43, 'Weekly groceries', CURRENT_DATE - INTERVAL '9 days', 'Target'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Transportation' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 12.50, 'Uber ride', CURRENT_DATE - INTERVAL '6 days', 'Downtown'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Personal Care' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 35.00, 'Haircut', CURRENT_DATE - INTERVAL '14 days', 'Hair Salon');
+-- Sample expenses for demo user (last 30 days) - FIXED UUID with user_date and user_time
+INSERT INTO expenses (user_id, category_id, amount, description, transaction_date, user_date, user_time, location) VALUES
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Food & Dining' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 45.67, 'Grocery shopping', CURRENT_DATE - INTERVAL '2 days', (CURRENT_DATE - INTERVAL '2 days')::DATE, '14:30:00', 'Whole Foods Market'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Transportation' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 85.00, 'Gas fill-up', CURRENT_DATE - INTERVAL '3 days', (CURRENT_DATE - INTERVAL '3 days')::DATE, '09:15:00', 'Shell Station'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Food & Dining' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 32.50, 'Lunch at restaurant', CURRENT_DATE - INTERVAL '1 days', (CURRENT_DATE - INTERVAL '1 days')::DATE, '12:45:00', 'Local Bistro'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Entertainment' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 15.99, 'Netflix subscription', CURRENT_DATE - INTERVAL '5 days', (CURRENT_DATE - INTERVAL '5 days')::DATE, '19:00:00', 'Online'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Bills & Utilities' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 125.00, 'Electric bill', CURRENT_DATE - INTERVAL '7 days', (CURRENT_DATE - INTERVAL '7 days')::DATE, '10:20:00', 'Online Payment'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Shopping' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 89.99, 'New shoes', CURRENT_DATE - INTERVAL '10 days', (CURRENT_DATE - INTERVAL '10 days')::DATE, '16:30:00', 'Nike Store'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Healthcare' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 25.00, 'Pharmacy prescription', CURRENT_DATE - INTERVAL '12 days', (CURRENT_DATE - INTERVAL '12 days')::DATE, '11:00:00', 'CVS Pharmacy'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Food & Dining' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 67.43, 'Weekly groceries', CURRENT_DATE - INTERVAL '9 days', (CURRENT_DATE - INTERVAL '9 days')::DATE, '15:20:00', 'Target'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Transportation' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 12.50, 'Uber ride', CURRENT_DATE - INTERVAL '6 days', (CURRENT_DATE - INTERVAL '6 days')::DATE, '18:45:00', 'Downtown'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Personal Care' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 35.00, 'Haircut', CURRENT_DATE - INTERVAL '14 days', (CURRENT_DATE - INTERVAL '14 days')::DATE, '13:00:00', 'Hair Salon');
 
--- Sample income for demo user (FIXED UUID)
-INSERT INTO income (user_id, category_id, amount, description, frequency, transaction_date, is_recurring, source) VALUES
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Salary' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 4500.00, 'Monthly salary', 'monthly', CURRENT_DATE - INTERVAL '5 days', TRUE, 'Tech Company Inc.'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Freelance' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 850.00, 'Website development project', 'one_time', CURRENT_DATE - INTERVAL '8 days', FALSE, 'Client ABC'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Investment Returns' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 125.30, 'Stock dividends', 'quarterly', CURRENT_DATE - INTERVAL '15 days', TRUE, 'Investment Portfolio');
+-- Sample income for demo user (FIXED UUID) with user_date and user_time
+INSERT INTO income (user_id, category_id, amount, description, frequency, transaction_date, user_date, user_time, is_recurring, source) VALUES
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Salary' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 4500.00, 'Monthly salary', 'monthly', CURRENT_DATE - INTERVAL '5 days', (CURRENT_DATE - INTERVAL '5 days')::DATE, '09:00:00', TRUE, 'Tech Company Inc.'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Freelance' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 850.00, 'Website development project', 'one_time', CURRENT_DATE - INTERVAL '8 days', (CURRENT_DATE - INTERVAL '8 days')::DATE, '14:30:00', FALSE, 'Client ABC'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Investment Returns' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 125.30, 'Stock dividends', 'quarterly', CURRENT_DATE - INTERVAL '15 days', (CURRENT_DATE - INTERVAL '15 days')::DATE, '10:15:00', TRUE, 'Investment Portfolio');
 
 -- Sample budgets (FIXED UUID)
 INSERT INTO budgets (user_id, category_id, amount, period, start_date) VALUES

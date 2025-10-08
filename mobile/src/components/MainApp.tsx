@@ -5,10 +5,12 @@ import Analytics from './Analytics';
 import AllTransactions from './AllTransactions';
 import Categories from './Categories';
 import AddExpense from './AddExpense';
+import Settings from './Settings';
 
 const MainApp: React.FC = () => {
   const [activeRoute, setActiveRoute] = useState('Dashboard');
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleNavigate = (route: string) => {
     setActiveRoute(route);
@@ -24,6 +26,14 @@ const MainApp: React.FC = () => {
     // The individual components will handle their own data refresh
   };
 
+  const handleSettings = () => {
+    setShowSettings(true);
+  };
+
+  const handleBackFromSettings = () => {
+    setShowSettings(false);
+  };
+
   const renderActiveScreen = () => {
     console.log('Rendering screen for route:', activeRoute);
     
@@ -34,6 +44,7 @@ const MainApp: React.FC = () => {
             activeRoute={activeRoute}
             onNavigate={handleNavigate}
             onAddExpense={handleAddExpense}
+            onSettings={handleSettings}
           />
         );
       case 'Transactions':
@@ -42,6 +53,7 @@ const MainApp: React.FC = () => {
             activeRoute={activeRoute}
             onNavigate={handleNavigate}
             onAddExpense={handleAddExpense}
+            onSettings={handleSettings}
           />
         );
       case 'Categories':
@@ -50,6 +62,7 @@ const MainApp: React.FC = () => {
             activeRoute={activeRoute}
             onNavigate={handleNavigate}
             onAddExpense={handleAddExpense}
+            onSettings={handleSettings}
           />
         );
       case 'Dashboard':
@@ -60,6 +73,7 @@ const MainApp: React.FC = () => {
             activeRoute={activeRoute}
             onNavigate={handleNavigate}
             onAddExpense={handleAddExpense}
+            onSettings={handleSettings}
           />
         );
     }
@@ -67,7 +81,11 @@ const MainApp: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {renderActiveScreen()}
+      {showSettings ? (
+        <Settings onBack={handleBackFromSettings} />
+      ) : (
+        renderActiveScreen()
+      )}
       
       {/* Add Expense Modal */}
       <AddExpense

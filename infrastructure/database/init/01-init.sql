@@ -102,7 +102,9 @@ CREATE TABLE expenses (
     category_id UUID NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
     amount DECIMAL(12,2) NOT NULL CHECK (amount > 0),
     description TEXT,
-    transaction_date DATE NOT NULL,
+    transaction_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    user_date DATE NOT NULL,
+    user_time TIME NOT NULL,
     location VARCHAR(255),
     tags TEXT[],
     receipt_url VARCHAR(500),
@@ -119,7 +121,9 @@ CREATE TABLE income (
     amount DECIMAL(12,2) NOT NULL CHECK (amount > 0),
     description TEXT NOT NULL,
     frequency income_frequency NOT NULL DEFAULT 'monthly',
-    transaction_date DATE NOT NULL,
+    transaction_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    user_date DATE NOT NULL,
+    user_time TIME NOT NULL,
     next_expected_date DATE,
     is_recurring BOOLEAN DEFAULT FALSE,
     source VARCHAR(255),
@@ -213,10 +217,13 @@ CREATE INDEX idx_expenses_category_id ON expenses(category_id);
 CREATE INDEX idx_expenses_transaction_date ON expenses(transaction_date);
 CREATE INDEX idx_expenses_amount ON expenses(amount);
 CREATE INDEX idx_expenses_user_date ON expenses(user_id, transaction_date);
+CREATE INDEX idx_expenses_user_local_date ON expenses(user_id, user_date DESC, user_time DESC);
+CREATE INDEX idx_expenses_user_date_range ON expenses(user_id, user_date) WHERE user_date >= CURRENT_DATE - INTERVAL '90 days';
 
 CREATE INDEX idx_income_user_id ON income(user_id);
 CREATE INDEX idx_income_category_id ON income(category_id);
 CREATE INDEX idx_income_transaction_date ON income(transaction_date);
+CREATE INDEX idx_income_user_local_date ON income(user_id, user_date DESC, user_time DESC);
 CREATE INDEX idx_income_frequency ON income(frequency);
 CREATE INDEX idx_income_is_recurring ON income(is_recurring);
 

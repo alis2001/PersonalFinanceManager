@@ -145,6 +145,7 @@
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
   margin-bottom: 10px;
+  direction: ltr;
 }
 
 .weekday {
@@ -159,6 +160,7 @@
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
+  direction: ltr;
 }
 
 .calendar-day {

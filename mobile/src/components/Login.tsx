@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../services/AuthContext';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface LoginProps {
   navigation?: any;
@@ -9,6 +10,7 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ navigation }) => {
   const { login } = useAuth();
+  const { t } = useTranslation();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,8 +51,8 @@ const Login: React.FC<LoginProps> = ({ navigation }) => {
       >
         <View style={styles.loginContainer}>
           <View style={styles.loginHeader}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to your account</Text>
+            <Text style={styles.title}>{t('auth.welcomeBack')}</Text>
+            <Text style={styles.subtitle}>{t('auth.signIn')}</Text>
           </View>
 
           <View style={styles.loginForm}>
@@ -63,7 +65,7 @@ const Login: React.FC<LoginProps> = ({ navigation }) => {
             <View style={styles.formGroup}>
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder={t('auth.email')}
                 placeholderTextColor="#999999"
                 value={email}
                 onChangeText={setEmail}
@@ -77,7 +79,7 @@ const Login: React.FC<LoginProps> = ({ navigation }) => {
             <View style={styles.formGroup}>
               <TextInput
                 style={styles.input}
-                placeholder="Password"
+                placeholder={t('auth.password')}
                 placeholderTextColor="#999999"
                 value={password}
                 onChangeText={setPassword}
@@ -94,19 +96,19 @@ const Login: React.FC<LoginProps> = ({ navigation }) => {
               disabled={loading}
             >
               <Text style={styles.btnPrimaryText}>
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? t('common.loading') : t('auth.signIn')}
               </Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.loginFooter}>
             <Text style={styles.footerText}>
-              Don't have an account?{' '}
+              {t('auth.dontHaveAccount')}{' '}
               <Text 
                 style={styles.linkButton}
                 onPress={handleRegister}
               >
-                Sign up
+                {t('auth.signUp')}
               </Text>
             </Text>
           </View>

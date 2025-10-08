@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import ConditionalDatePicker from './ConditionalDatePicker';
 import expenseService from '../services/expenseService';
 import categoryService, { Category } from '../services/categoryService';
 import currencyService from '../services/currencyService';
+import { useTranslation } from '../hooks/useTranslation';
+import { formatDateForDisplay, formatDateForInput, parseDateFromInput } from '../utils/dateFormatter';
 
 interface AddExpenseProps {
   isOpen: boolean;
@@ -38,38 +40,87 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   onClose, 
   onExpenseAdded, 
   prefilledData,
-  title = 'Add New Expense',
+  title,
   fromReceipt = false,
   userCurrency = 'USD'
 }) => {
+  const { t } = useTranslation();
+  
+  // Function to translate category names
+  const getTranslatedCategoryName = (categoryName: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Bills & Utilities': t('categories.billsUtilities'),
+      'Food & Dining': t('categories.foodDining'),
+      'Transportation': t('categories.transportation'),
+      'Shopping': t('categories.shopping'),
+      'Entertainment': t('categories.entertainment'),
+      'Healthcare': t('categories.healthcare'),
+      'Education': t('categories.education'),
+      'Travel': t('categories.travel'),
+      'Groceries': t('categories.groceries'),
+      'Gas': t('categories.gas'),
+      'Insurance': t('categories.insurance'),
+      'Other': t('categories.other'),
+      'Business': t('categories.business'),
+      'Business Income': t('categories.businessIncome'),
+      'Freelance': t('categories.freelance'),
+      'Gifts & Bonuses': t('categories.giftsBonuses'),
+      'Gifts & Donations': t('categories.giftsDonations'),
+      'Home & Garden': t('categories.homeGarden'),
+      'Investment Returns': t('categories.investmentReturns'),
+      'Other Expenses': t('categories.otherExpenses'),
+      'Other Income': t('categories.otherIncome'),
+      'Personal Care': t('categories.personalCare'),
+      'Rental Income': t('categories.rentalIncome'),
+    };
+    return categoryMap[categoryName] || categoryName;
+  };
+
+  // Function to translate category types
+  const getTranslatedCategoryType = (type: string): string => {
+    const typeMap: { [key: string]: string } = {
+      'expense': t('categories.expense'),
+      'income': t('categories.income'),
+      'both': t('categories.both'),
+    };
+    return typeMap[type] || type;
+  };
+
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [formattedDate, setFormattedDate] = useState('');
+  const [formattedTime, setFormattedTime] = useState('');
   
-  // Date formatting functions (matching web version)
-  const formatDateTimeForInput = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  // Date formatting functions - now using smart date formatter
+  const formatDateTimeForInput = async (date: Date): Promise<string> => {
+    return await formatDateForInput(date, true);
   };
 
-  const parseDateTimeFromInput = (dateTimeString: string): Date => {
-    return new Date(dateTimeString);
+  const parseDateTimeFromInput = async (dateTimeString: string): Promise<Date> => {
+    return await parseDateFromInput(dateTimeString);
   };
+
+  // Update formatted date when selectedDate changes
+  useEffect(() => {
+    const updateFormattedDate = async () => {
+      const dateStr = await formatDateForDisplay(selectedDate, false);
+      const timeStr = await formatDateForDisplay(selectedDate, true);
+      setFormattedDate(dateStr);
+      setFormattedTime(timeStr.split(' ').slice(-2).join(' '));
+    };
+    updateFormattedDate();
+  }, [selectedDate]);
   
   // Form data
   const [formData, setFormData] = useState<ExpenseFormData>({
     categoryId: '',
     amount: '',
     description: '',
-    transactionDate: formatDateTimeForInput(new Date()),
+    transactionDate: '',
     location: '',
     notes: ''
   });
@@ -81,33 +132,44 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     }
   }, [isOpen]);
 
+  // Initialize date formatting and check date system
+  useEffect(() => {
+    const formattedDate = formatDateTimeForInput(new Date());
+    setFormData(prev => ({ ...prev, transactionDate: formattedDate }));
+  }, []);
+
   // Initialize form with prefilled data from receipt
   useEffect(() => {
-    if (isOpen && prefilledData) {
-      const prefilledDate = prefilledData.transactionDate ? 
-        parseDateTimeFromInput(prefilledData.transactionDate) : new Date();
-      setSelectedDate(prefilledDate);
-      setFormData({
-        categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
-        amount: prefilledData.amount ? prefilledData.amount.toString() : '',
-        description: prefilledData.description || '',
-        transactionDate: formatDateTimeForInput(prefilledDate),
-        location: prefilledData.location || '',
-        notes: prefilledData.notes || ''
-      });
-    } else if (isOpen && !prefilledData) {
-      // Reset to defaults for manual entry
-      const now = new Date();
-      setSelectedDate(now);
-      setFormData({
-        categoryId: categories.length > 0 ? categories[0].id : '',
-        amount: '',
-        description: '',
-        transactionDate: formatDateTimeForInput(now),
-        location: '',
-        notes: ''
-      });
-    }
+    const initializeFormData = async () => {
+      if (isOpen && prefilledData) {
+        const prefilledDate = prefilledData.transactionDate ? 
+          parseDateTimeFromInput(prefilledData.transactionDate) : new Date();
+        setSelectedDate(prefilledDate);
+        const formattedDate = await formatDateTimeForInput(prefilledDate);
+        setFormData({
+          categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
+          amount: prefilledData.amount ? prefilledData.amount.toString() : '',
+          description: prefilledData.description || '',
+          transactionDate: formattedDate,
+          location: prefilledData.location || '',
+          notes: prefilledData.notes || ''
+        });
+      } else if (isOpen && !prefilledData) {
+        // Reset to defaults for manual entry
+        const now = new Date();
+        setSelectedDate(now);
+        const formattedDate = await formatDateTimeForInput(now);
+        setFormData({
+          categoryId: categories.length > 0 ? categories[0].id : '',
+          amount: '',
+          description: '',
+          transactionDate: formattedDate,
+          location: '',
+          notes: ''
+        });
+      }
+    };
+    initializeFormData();
   }, [isOpen, prefilledData, categories]);
 
   const loadCategories = async () => {
@@ -122,10 +184,10 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           setFormData(prev => ({ ...prev, categoryId: categoryList[0].id }));
         }
       } else {
-        setError('Failed to load categories');
+        setError(t('expenses.failedToLoadCategories'));
       }
     } catch (err) {
-        setError('Failed to load categories');
+        setError(t('expenses.failedToLoadCategories'));
     }
     setCategoriesLoading(false);
   };
@@ -147,19 +209,19 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
   const validateForm = (): string | null => {
     if (!formData.categoryId) {
-      return 'Please select a category';
+      return t('expenses.pleaseSelectCategory');
     }
     
     if (!formData.amount || parseFloat(formData.amount) <= 0) {
-      return 'Please enter a valid amount';
+      return t('expenses.pleaseEnterValidAmount');
     }
     
     if (parseFloat(formData.amount) > 999999.99) {
-      return 'Amount cannot exceed 999,999.99';
+      return t('expenses.amountCannotExceed');
     }
     
     if (!formData.transactionDate) {
-      return 'Please select date and time';
+      return t('expenses.pleaseSelectDateTime');
     }
     
     return null;
@@ -177,11 +239,29 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     setLoading(true);
 
     try {
+      const parsedDate = await parseDateTimeFromInput(formData.transactionDate);
+      console.log('Form transactionDate string:', formData.transactionDate);
+      console.log('Parsed date:', parsedDate);
+      console.log('ISO string being sent:', parsedDate.toISOString());
+      
+      // Extract user's LOCAL date and time (before converting to UTC)
+      const year = parsedDate.getFullYear();
+      const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(parsedDate.getDate()).padStart(2, '0');
+      const hours = String(parsedDate.getHours()).padStart(2, '0');
+      const minutes = String(parsedDate.getMinutes()).padStart(2, '0');
+      const seconds = String(parsedDate.getSeconds()).padStart(2, '0');
+      
+      const userDate = `${year}-${month}-${day}`;  // User's local date
+      const userTime = `${hours}:${minutes}:${seconds}`;  // User's local time
+      
       const expenseData = {
         categoryId: formData.categoryId,
         amount: parseFloat(formData.amount),
         description: formData.description.trim() || undefined,
-        transactionDate: parseDateTimeFromInput(formData.transactionDate).toISOString(),
+        transactionDate: parsedDate.toISOString(),
+        userDate: userDate,
+        userTime: userTime,
         location: formData.location.trim() || undefined,
         notes: formData.notes.trim() || undefined
       };
@@ -190,13 +270,16 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
       if (result.success) {
         // Reset form based on mode
+        const now = new Date();
+        const formattedDate = await formatDateTimeForInput(now);
+        
         if (prefilledData) {
           // If from receipt, restore prefilled data for next transaction
           setFormData({
             categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
             amount: prefilledData.amount ? prefilledData.amount.toString() : '',
             description: prefilledData.description || '',
-            transactionDate: prefilledData.transactionDate || new Date().toISOString().slice(0, 16),
+            transactionDate: prefilledData.transactionDate || formattedDate,
             location: prefilledData.location || '',
             notes: prefilledData.notes || ''
           });
@@ -206,7 +289,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
             categoryId: categories.length > 0 ? categories[0].id : '',
             amount: '',
             description: '',
-            transactionDate: new Date().toISOString().slice(0, 16),
+            transactionDate: formattedDate,
             location: '',
             notes: ''
           });
@@ -217,24 +300,27 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           onClose();
         }
       } else {
-        setError(result.error || 'Failed to create expense');
+        setError(result.error || t('expenses.failedToCreateExpenseTryAgain'));
       }
     } catch (err) {
-      setError('Failed to create expense. Please try again.');
+      setError(t('expenses.failedToCreateExpenseTryAgain'));
     }
 
     setLoading(false);
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     // Reset form based on mode
+    const now = new Date();
+    const formattedDate = await formatDateTimeForInput(now);
+    
     if (prefilledData) {
       // If from receipt, restore prefilled data
       setFormData({
         categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
         amount: prefilledData.amount ? prefilledData.amount.toString() : '',
         description: prefilledData.description || '',
-        transactionDate: prefilledData.transactionDate || new Date().toISOString().slice(0, 16),
+        transactionDate: prefilledData.transactionDate || formattedDate,
         location: prefilledData.location || '',
         notes: prefilledData.notes || ''
       });
@@ -244,7 +330,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
         categoryId: categories.length > 0 ? categories[0].id : '',
         amount: '',
         description: '',
-        transactionDate: new Date().toISOString().slice(0, 16),
+        transactionDate: formattedDate,
         location: '',
         notes: ''
       });
@@ -253,31 +339,37 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     onClose();
   };
 
-  const getCurrentDateTime = () => {
+  const getCurrentDateTime = async () => {
     const now = new Date();
+    const formattedDate = await formatDateTimeForInput(now);
     setSelectedDate(now);
     setFormData(prev => ({ 
       ...prev, 
-      transactionDate: formatDateTimeForInput(now)
+      transactionDate: formattedDate
     }));
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    // Always close the picker after selection
-    setShowDatePicker(false);
+  const handleDateConfirm = async (date: Date) => {
+    console.log('Date confirmed:', date);
+    console.log('Hours:', date.getHours());
+    console.log('Minutes:', date.getMinutes());
     
-    if (selectedDate) {
-      setSelectedDate(selectedDate);
-      setFormData(prev => ({
-        ...prev,
-        transactionDate: formatDateTimeForInput(selectedDate)
-      }));
-    }
+    const formattedDate = await formatDateTimeForInput(date);
+    console.log('Formatted date:', formattedDate);
+    
+    setSelectedDate(date);
+    setFormData(prev => ({
+      ...prev,
+      transactionDate: formattedDate
+    }));
+    setShowDatePicker(false);
   };
 
-  const showDatePickerModal = () => {
-    setShowDatePicker(true);
+  const handleDateCancel = () => {
+    setShowDatePicker(false);
   };
+
+
 
   if (!isOpen) return null;
 
@@ -290,7 +382,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
       <SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>
-            {title}{fromReceipt && ' 📄 From Receipt'}
+            {title || t('expenses.addNewExpense')}{fromReceipt && ` 📄 ${t('expenses.fromReceipt')}`}
           </Text>
           <TouchableOpacity style={styles.closeButton} onPress={handleCancel}>
             <Text style={styles.closeButtonText}>✕</Text>
@@ -307,39 +399,40 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           {/* Date & Time Input */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              Date & Time <Text style={styles.required}>*</Text>
+              {t('expenses.dateTime')} <Text style={styles.required}>*</Text>
             </Text>
             <TouchableOpacity 
-              style={styles.dateInputButton}
-              onPress={showDatePickerModal}
+              style={styles.datePickerButton}
+              onPress={() => setShowDatePicker(true)}
               disabled={loading}
             >
-              <Text style={[styles.dateInputText, loading && styles.dateInputTextDisabled]}>
-                {selectedDate.toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit'
-                })} at {selectedDate.toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: true
-                })}
-              </Text>
-              <Text style={styles.dateInputIcon}>📅</Text>
+              <View style={styles.datePickerButtonContent}>
+                <View style={styles.datePickerTextContainer}>
+                  <Text style={styles.datePickerDateText}>
+                    {formattedDate}
+                  </Text>
+                  <Text style={styles.datePickerTimeText}>
+                    {formattedTime}
+                  </Text>
+                </View>
+                <View style={styles.datePickerIcon}>
+                  <Text style={styles.calendarIcon}>📅</Text>
+                </View>
+              </View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.currentTimeButton} onPress={getCurrentDateTime}>
-              <Text style={styles.currentTimeButtonText}>Use Current Time</Text>
+              <Text style={styles.currentTimeButtonText}>{t('expenses.now')}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Category Selection */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              Category <Text style={styles.required}>*</Text>
+              {t('expenses.category')} <Text style={styles.required}>*</Text>
             </Text>
             {categoriesLoading ? (
               <View style={styles.loadingCategories}>
-                <Text style={styles.loadingCategoriesText}>Loading categories...</Text>
+                <Text style={styles.loadingCategoriesText}>{t('expenses.loadingCategories')}</Text>
               </View>
             ) : (
               <View style={styles.pickerContainer}>
@@ -349,11 +442,11 @@ const AddExpense: React.FC<AddExpenseProps> = ({
                   style={styles.picker}
                   enabled={!loading}
                 >
-                  <Picker.Item label="Select Category" value="" />
+                  <Picker.Item label={t('expenses.selectCategory')} value="" />
                   {categories.map(category => (
                     <Picker.Item 
                       key={category.id} 
-                      label={`${category.icon} ${category.name}`} 
+                      label={`${category.icon} ${getTranslatedCategoryName(category.name)}`} 
                       value={category.id} 
                     />
                   ))}
@@ -365,7 +458,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           {/* Amount Input */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              Amount <Text style={styles.required}>*</Text>
+              {t('expenses.amount')} <Text style={styles.required}>*</Text>
             </Text>
             <View style={styles.amountInputContainer}>
               <Text style={styles.currencySymbol}>
@@ -386,12 +479,12 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
           {/* Description Input */}
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Description</Text>
+            <Text style={styles.label}>{t('expenses.description')}</Text>
             <TextInput
               style={styles.input}
               value={formData.description}
               onChangeText={(value) => handleInputChange('description', value)}
-              placeholder="What did you spend on?"
+              placeholder={t('expenses.whatDidYouSpendOn')}
               placeholderTextColor="#999"
               editable={!loading}
               maxLength={500}
@@ -400,12 +493,12 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
           {/* Location Input (Optional) */}
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Location</Text>
+            <Text style={styles.label}>{t('expenses.location')}</Text>
             <TextInput
               style={styles.input}
               value={formData.location}
               onChangeText={(value) => handleInputChange('location', value)}
-              placeholder="Where did you make the purchase?"
+              placeholder={t('expenses.whereDidYouMakePurchase')}
               placeholderTextColor="#999"
               editable={!loading}
               maxLength={255}
@@ -414,12 +507,12 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
           {/* Notes Input (Optional) */}
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Notes</Text>
+            <Text style={styles.label}>{t('expenses.notes')}</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={formData.notes}
               onChangeText={(value) => handleInputChange('notes', value)}
-              placeholder="Additional notes"
+              placeholder={t('expenses.additionalNotes')}
               placeholderTextColor="#999"
               editable={!loading}
               multiline
@@ -435,7 +528,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
               onPress={handleCancel}
               disabled={loading}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.button, styles.submitButton, loading && styles.buttonDisabled]}
@@ -443,25 +536,24 @@ const AddExpense: React.FC<AddExpenseProps> = ({
               disabled={loading || categoriesLoading}
             >
               <Text style={styles.submitButtonText}>
-                {loading ? 'Adding...' : 'Add Expense'}
+                {loading ? t('expenses.adding') : t('expenses.addExpense')}
               </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
         
-        {/* Date Time Picker */}
-        {showDatePicker && (
-          <View style={styles.datePickerContainer}>
-            <DateTimePicker
-              value={selectedDate}
-              mode="datetime"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleDateChange}
-              maximumDate={new Date()}
-            />
-          </View>
-        )}
       </SafeAreaView>
+      
+      {/* Smart Date Time Picker - Persian for IRR users, Gregorian for others */}
+      <ConditionalDatePicker
+        visible={showDatePicker}
+        mode="datetime"
+        value={selectedDate}
+        onConfirm={handleDateConfirm}
+        onCancel={handleDateCancel}
+        minimumDate={new Date(2020, 0, 1)}
+        maximumDate={new Date()}
+      />
     </Modal>
   );
 };
@@ -485,7 +577,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? '-apple-system' : 'Roboto',
+    fontFamily: 'System',
   },
   closeButton: {
     width: 30,
@@ -594,8 +686,54 @@ const styles = StyleSheet.create({
     height: 80,
     textAlignVertical: 'top',
   },
+  datePickerButton: {
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  datePickerButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  datePickerTextContainer: {
+    flex: 1,
+  },
+  datePickerDateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 2,
+  },
+  datePickerTimeText: {
+    fontSize: 14,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  datePickerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calendarIcon: {
+    fontSize: 20,
+  },
   currentTimeButton: {
-    marginTop: 8,
+    marginTop: 12,
     paddingVertical: 8,
     paddingHorizontal: 12,
     backgroundColor: '#f7fafc',

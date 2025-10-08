@@ -91,7 +91,15 @@ const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
     
     // Get first day of the month
     const firstDay = moment().jYear(year).jMonth(month).jDate(1);
-    const firstDayOfWeek = firstDay.day(); // 0 for Saturday, 6 for Friday
+    
+    // moment.day(): 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
+    // Persian calendar starts on Saturday
+    // Headers in LTR: ['ش (Sat)', 'ی (Sun)', 'د (Mon)', 'س (Tue)', 'چ (Wed)', 'پ (Thu)', 'ج (Fri)']
+    // Position mapping: Sat=0, Sun=1, Mon=2, Tue=3, Wed=4, Thu=5, Fri=6
+    // Convert moment.day() to Persian grid position:
+    // Sunday(0)→1, Monday(1)→2, Tuesday(2)→3, Wednesday(3)→4, Thursday(4)→5, Friday(5)→6, Saturday(6)→0
+    const momentDay = firstDay.day();
+    const firstDayOfWeek = (momentDay + 1) % 7;
     
     // Get days in month - Persian months have 29 or 30 days, except for the last month which can have 29 or 30
     // We'll use a simple approach: try to set day 30, if it's invalid, the month has 29 days

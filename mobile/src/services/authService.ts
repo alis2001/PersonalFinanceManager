@@ -193,6 +193,43 @@ class AuthService {
       console.error('Clear tokens error:', error);
     }
   }
+
+  /**
+   * Get current user data from AsyncStorage
+   * This is a fallback method - the main user data should come from AuthContext
+   */
+  async getUser(): Promise<any> {
+    try {
+      const userData = await AsyncStorage.getItem('userData');
+      return userData ? JSON.parse(userData) : null;
+    } catch (error) {
+      console.error('Get user error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Store user data in AsyncStorage
+   * This is used to persist user data for the date system service
+   */
+  async setUser(userData: any): Promise<void> {
+    try {
+      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+    } catch (error) {
+      console.error('Set user error:', error);
+    }
+  }
+
+  /**
+   * Clear user data from AsyncStorage
+   */
+  async clearUser(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem('userData');
+    } catch (error) {
+      console.error('Clear user error:', error);
+    }
+  }
 }
 
 const authService = new AuthService();

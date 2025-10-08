@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import authService from './authService';
+import dateSystemService from './dateSystemService';
 
 interface User {
   id: string;
@@ -61,6 +62,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (isAuth) {
         const userProfile = await authService.getProfile();
         if (userProfile) {
+          dateSystemService.setUserCurrency(userProfile.defaultCurrency); // Initialize date system service
           setUser(userProfile);
         }
       }
@@ -77,6 +79,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       if (result.success && result.user && result.tokens) {
         await authService.setTokens(result.tokens.accessToken, result.tokens.refreshToken);
+        await authService.setUser(result.user); // Store user data for date system service
+        dateSystemService.setUserCurrency(result.user.defaultCurrency); // Initialize date system service
         setUser(result.user);
         return { success: true };
       } else {
@@ -102,6 +106,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       if (result.success && result.user && result.tokens) {
         await authService.setTokens(result.tokens.accessToken, result.tokens.refreshToken);
+        await authService.setUser(result.user); // Store user data for date system service
+        dateSystemService.setUserCurrency(result.user.defaultCurrency); // Initialize date system service
         setUser(result.user);
         return { success: true };
       } else {
@@ -124,10 +130,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       await authService.logout();
+      await authService.clearUser(); // Clear user data from AsyncStorage
       setUser(null);
     } catch (error) {
       console.error('Logout error:', error);
       // Even if logout fails on server, clear local state
+      await authService.clearUser(); // Clear user data from AsyncStorage
       setUser(null);
     }
   };
