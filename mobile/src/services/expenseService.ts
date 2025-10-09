@@ -12,6 +12,8 @@ export interface Expense {
   amount: number;
   description?: string;
   transactionDate: string;
+  userDate?: string;  // User's local date (YYYY-MM-DD) - timezone-independent
+  userTime?: string;  // User's local time (HH:MM:SS) - timezone-independent
   location?: string;
   tags?: string[];
   notes?: string;
@@ -36,6 +38,8 @@ export interface CreateExpenseData {
   amount: number;
   description?: string;
   transactionDate: string;
+  userDate?: string;  // User's local date (YYYY-MM-DD) - timezone-independent
+  userTime?: string;  // User's local time (HH:MM:SS) - timezone-independent
   location?: string;
   tags?: string[];
   notes?: string;

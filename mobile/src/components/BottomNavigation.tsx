@@ -73,15 +73,6 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeRoute, onNavi
         >
           <Text style={styles.addButtonIcon}>+</Text>
         </TouchableOpacity>
-        
-        {/* Settings Button */}
-        <TouchableOpacity
-          style={styles.settingsButton}
-          onPress={onSettings}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.settingsIcon}>⚙️</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -176,30 +167,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '300',
     lineHeight: 28,
-  },
-  settingsButton: {
-    position: 'absolute',
-    right: 8,
-    top: 8,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f8f9fa',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-  },
-  settingsIcon: {
-    fontSize: 20,
   },
 });
 

@@ -177,8 +177,10 @@ const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashbo
           <View style={styles.logo}>
             <Text style={styles.logoText}>Rapilot</Text>
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutButtonText}>Logout</Text>
+          <TouchableOpacity style={styles.menuButton} onPress={onSettings}>
+            <View style={styles.menuLine} />
+            <View style={styles.menuLine} />
+            <View style={styles.menuLine} />
           </TouchableOpacity>
         </View>
       </View>
@@ -269,18 +271,18 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     fontFamily: '-apple-system',
   },
-  logoutButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 6,
+  menuButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 5,
   },
-  logoutButtonText: {
-    color: '#1a1a1a',
-    fontSize: 16,
-    fontWeight: '400',
+  menuLine: {
+    width: 24,
+    height: 2,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 1,
   },
   main: {
     flex: 1,

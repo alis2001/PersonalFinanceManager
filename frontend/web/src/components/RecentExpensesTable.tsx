@@ -53,12 +53,14 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
     return categoryMap[categoryName] || categoryName;
   };
 
-  const formatDate = (dateString: string): string => {
-    return dateConversionService.formatDateShort(dateString, currentLanguage);
+  const formatDate = (userDate: string): string => {
+    // userDate is already in YYYY-MM-DD format (user's local date)
+    return dateConversionService.formatDateShort(userDate, currentLanguage);
   };
 
-  const formatTime = (dateString: string): string => {
-    return dateConversionService.formatTime(dateString, currentLanguage);
+  const formatTime = (userTime: string): string => {
+    // userTime is in HH:MM:SS format, extract HH:MM for display
+    return userTime ? userTime.substring(0, 5) : '00:00';
   };
 
   const formatCurrency = (amount: number): string => {
@@ -134,13 +136,13 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
               >
                 <td className="date-cell">
                   <span className="date-text">
-                    {formatDate(expense.transactionDate)}
+                    {formatDate(expense.userDate || expense.transactionDate)}
                   </span>
                 </td>
                 
                 <td className="time-cell">
                   <span className="time-text">
-                    {formatTime(expense.transactionDate)}
+                    {formatTime(expense.userTime || expense.transactionDate)}
                   </span>
                 </td>
                 

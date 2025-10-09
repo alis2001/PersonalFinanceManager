@@ -65,7 +65,9 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
     const formatAllDates = async () => {
       const newFormattedDates: {[key: string]: string} = {};
       for (const expense of expenses) {
-        const date = new Date(expense.date);
+        // Use userDate if available (enterprise date system), otherwise fall back to transactionDate
+        const dateToFormat = expense.userDate || expense.transactionDate;
+        const date = new Date(dateToFormat);
         newFormattedDates[expense.id] = await formatDateForDisplay(date, false);
       }
       setFormattedDates(newFormattedDates);
@@ -73,8 +75,9 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
     formatAllDates();
   }, [expenses]);
 
-  const formatDate = (dateString: string): string => {
-    // For now, return a simple fallback while async formatting loads
+  const formatDate = (userDateString?: string, transactionDateFallback?: string): string => {
+    // Use userDate (timezone-independent) if available, otherwise fall back to transactionDate
+    const dateString = userDateString || transactionDateFallback || '';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       month: 'short',
@@ -83,8 +86,20 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
     });
   };
 
-  const formatTime = (dateString: string): string => {
-    const date = new Date(dateString);
+  const formatTime = (userTimeString?: string, transactionDateFallback?: string): string => {
+    // Use userTime (timezone-independent) if available, otherwise extract from transactionDate
+    if (userTimeString) {
+      // userTime is in HH:MM:SS format, convert to display format
+      const [hours, minutes] = userTimeString.split(':');
+      const hour = parseInt(hours, 10);
+      const isPM = hour >= 12;
+      const displayHour = hour % 12 || 12;
+      const ampm = isPM ? 'PM' : 'AM';
+      return `${displayHour.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    }
+    
+    // Fallback to transactionDate
+    const date = new Date(transactionDateFallback || '');
     return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
@@ -123,10 +138,10 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
             {formatCurrency(item.amount)}
           </Text>
           <Text style={styles.expenseDate}>
-            {formattedDates[item.id] || formatDate(item.transactionDate)}
+            {formattedDates[item.id] || formatDate(item.userDate, item.transactionDate)}
           </Text>
           <Text style={styles.expenseTime}>
-            {formatTime(item.transactionDate)}
+            {formatTime(item.userTime, item.transactionDate)}
           </Text>
         </View>
       </View>

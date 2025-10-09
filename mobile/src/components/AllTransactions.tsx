@@ -11,6 +11,7 @@ import { Category } from '../services/categoryService';
 import expenseService from '../services/expenseService';
 import categoryService from '../services/categoryService';
 import { useTranslation } from '../hooks/useTranslation';
+import { useAuth } from '../services/AuthContext';
 
 interface AllTransactionsProps {
   navigation?: any;
@@ -28,6 +29,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
   onSettings
 }) => {
   const { t } = useTranslation();
+  const { user } = useAuth();
   
   // Function to translate category names
   const getTranslatedCategoryName = (categoryName: string): string => {
@@ -451,6 +453,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
               loading={loading}
               onExpenseClick={handleExpenseClick}
               onRetry={handleRetry}
+              userCurrency={user?.defaultCurrency || 'USD'}
               refreshing={refreshing}
               onRefresh={handleRefresh}
             />
@@ -473,6 +476,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
             setSelectedExpense(null);
           }}
           onExpenseUpdated={handleEditExpenseSuccess}
+          userCurrency={user?.defaultCurrency || 'USD'}
         />
       )}
 

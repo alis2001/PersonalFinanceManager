@@ -101,7 +101,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
     categoryId: '',
     amount: '',
     description: '',
-    transactionDate: formatDateTimeForInput(new Date()),
+    transactionDate: '',
     location: '',
     notes: ''
   });
@@ -129,26 +129,28 @@ const EditExpense: React.FC<EditExpenseProps> = ({
     setCategoriesLoading(false);
   };
 
-  const populateForm = () => {
+  const populateForm = async () => {
     // Convert expense data to form format
     const transactionDate = new Date(expense.transactionDate);
     setSelectedDate(transactionDate);
 
+    const formattedDateTime = await formatDateTimeForInput(transactionDate);
     setFormData({
       categoryId: expense.categoryId,
       amount: expense.amount.toString(),
       description: expense.description || '',
-      transactionDate: formatDateTimeForInput(transactionDate),
+      transactionDate: formattedDateTime,
       location: expense.location || '',
       notes: expense.notes || ''
     });
   };
 
-  const handleDateConfirm = (date: Date) => {
+  const handleDateConfirm = async (date: Date) => {
     setSelectedDate(date);
+    const formattedDateTime = await formatDateTimeForInput(date);
     setFormData(prev => ({
       ...prev,
-      transactionDate: formatDateTimeForInput(date)
+      transactionDate: formattedDateTime
     }));
     setShowDatePicker(false);
   };

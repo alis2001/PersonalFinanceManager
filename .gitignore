@@ -1,6 +1,7 @@
 # Build directories
 build/
 cmake-build-*/
+dist/
 *.o
 *.so
 *.a
@@ -10,16 +11,21 @@ cmake-build-*/
 .idea/
 *.swp
 *.swo
+*.sublime-*
 
 # OS files
 .DS_Store
 Thumbs.db
+*.cache
 
 # Environment files
 .env
+.env.local
+.env.*.local
 *.log
+*.pid
 
-# Docker volumes
+# Docker volumes and data
 postgres_data/
 redis_data/
 rabbitmq_data/
@@ -27,3 +33,49 @@ rabbitmq_data/
 # Dependencies
 node_modules/
 vendor/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.Python
+
+# CDK Output
+infrastructure/aws/cdk.out/
+infrastructure/aws/outputs.json
+infrastructure/aws/cdk.context.json
+infrastructure/aws/node_modules/
+
+# AWS/Infrastructure artifacts
+infrastructure/aws/=18.0.0
+infrastructure/aws/nano.*.save
+infrastructure/aws/e creation
+
+# Mobile builds
+mobile/android/build/
+mobile/android/.gradle/
+mobile/ios/build/
+mobile/ios/Pods/
+mobile/.expo/
+mobile/.expo-shared/
+
+# Backup directories
+mobile_backup/
+*_backup/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Lock files (keep package-lock.json but ignore others)
+yarn.lock
+pnpm-lock.yaml
+
+# Compiled TypeScript
+*.tsbuildinfo
+*.d.ts.map
+*.js.map

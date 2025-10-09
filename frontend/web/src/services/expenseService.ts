@@ -9,6 +9,8 @@ interface Expense {
   amount: number;
   description?: string;
   transactionDate: string;
+  userDate?: string;  // User's local date (YYYY-MM-DD)
+  userTime?: string;  // User's local time (HH:MM:SS)
   location?: string;
   tags?: string[];
   notes?: string;
@@ -33,6 +35,8 @@ interface CreateExpenseData {
   amount: number;
   description?: string;
   transactionDate: string;
+  userDate?: string;  // User's local date (YYYY-MM-DD)
+  userTime?: string;  // User's local time (HH:MM:SS)
   location?: string;
   tags?: string[];
   notes?: string;
