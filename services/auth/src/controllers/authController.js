@@ -94,9 +94,13 @@ class AuthController {
       
       // Generate tokens
       const tokens = generateTokens(user);
+      
+      // BANKING APP PATTERN: Long session for mobile users
+      // 180 days (6 months) - matches refresh token expiry
+      // Mobile users stay logged in like Revolut/Poste Italiane
       const sessionExpiry = rememberMe 
-        ? new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)) // 7 days
-        : new Date(Date.now() + (24 * 60 * 60 * 1000)); // 24 hours
+        ? new Date(Date.now() + (180 * 24 * 60 * 60 * 1000)) // 180 days
+        : new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)); // 7 days (web default)
 
       // Store refresh token
       await authService.storeRefreshToken(user.id, tokens.refreshToken, sessionExpiry);
@@ -263,7 +267,10 @@ class AuthController {
       
       // Generate new tokens
       const tokens = generateTokens(user);
-      const sessionExpiry = new Date(Date.now() + (24 * 60 * 60 * 1000)); // 24 hours
+      
+      // BANKING APP PATTERN: Maintain long session on token refresh
+      // New refresh token also gets 180 days - keeps user logged in continuously
+      const sessionExpiry = new Date(Date.now() + (180 * 24 * 60 * 60 * 1000)); // 180 days
       
       // Store new refresh token
       await authService.storeRefreshToken(user.id, tokens.refreshToken, sessionExpiry);

@@ -274,7 +274,7 @@ interface SpendingTrends {
   const formatCurrency = (amount: number) => {
     try {
       const currency = user?.defaultCurrency || 'USD';
-      return currencyService.formatCurrency(amount, currency);
+      return currencyService.formatCurrency(amount, currency, currentLanguage);
     } catch (error) {
       console.error('Currency formatting error:', error);
       // Fallback to simple formatting
@@ -283,7 +283,18 @@ interface SpendingTrends {
   };
 
   const formatPercentage = (value: number) => {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+    const formatted = `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+    // Convert to Persian digits if language is Persian
+    if (currentLanguage === 'fa') {
+      return toPersianDigits(formatted);
+    }
+    return formatted;
+  };
+  
+  // Helper function to convert to Persian digits
+  const toPersianDigits = (text: string): string => {
+    const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    return text.replace(/[0-9]/g, (digit) => persianDigits[parseInt(digit)]);
   };
 
   const getSeverityColor = (severity: string) => {

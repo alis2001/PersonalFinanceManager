@@ -96,11 +96,12 @@ CREATE TABLE categories (
 );
 
 -- Expenses table
+-- DECIMAL(15,2) supports all currencies: USD ($10M), EUR (€10M), IRR (100B Rials), VND, IDR
 CREATE TABLE expenses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     category_id UUID NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
-    amount DECIMAL(12,2) NOT NULL CHECK (amount > 0),
+    amount DECIMAL(15,2) NOT NULL CHECK (amount > 0),
     description TEXT,
     transaction_date TIMESTAMP WITH TIME ZONE NOT NULL,
     user_date DATE NOT NULL,
@@ -114,11 +115,12 @@ CREATE TABLE expenses (
 );
 
 -- Income table
+-- DECIMAL(15,2) supports all currencies
 CREATE TABLE income (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     category_id UUID NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
-    amount DECIMAL(12,2) NOT NULL CHECK (amount > 0),
+    amount DECIMAL(15,2) NOT NULL CHECK (amount > 0),
     description TEXT NOT NULL,
     frequency income_frequency NOT NULL DEFAULT 'monthly',
     transaction_date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -147,11 +149,12 @@ CREATE TABLE user_sessions (
 );
 
 -- Budget table
+-- DECIMAL(15,2) supports all currencies
 CREATE TABLE budgets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     category_id UUID NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
-    amount DECIMAL(12,2) NOT NULL CHECK (amount > 0),
+    amount DECIMAL(15,2) NOT NULL CHECK (amount > 0),
     period VARCHAR(20) NOT NULL DEFAULT 'monthly',
     start_date DATE NOT NULL,
     end_date DATE,

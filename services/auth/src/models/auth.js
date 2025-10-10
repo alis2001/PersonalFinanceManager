@@ -346,12 +346,13 @@ const RATE_LIMITS = {
 };
 
 // Security constants
+// BANKING APP PATTERN: Long-lived sessions for mobile users
 const SECURITY_SETTINGS = {
   MAX_LOGIN_ATTEMPTS: 5,
   ACCOUNT_LOCK_DURATION: 30 * 60 * 1000, // 30 minutes
   PASSWORD_HISTORY_COUNT: 5,
-  SESSION_TIMEOUT: 24 * 60 * 60 * 1000, // 24 hours
-  REFRESH_TOKEN_EXPIRY: 7 * 24 * 60 * 60 * 1000, // 7 days
+  SESSION_TIMEOUT: 180 * 24 * 60 * 60 * 1000, // 180 days (6 months) - mobile banking pattern
+  REFRESH_TOKEN_EXPIRY: 180 * 24 * 60 * 60 * 1000, // 180 days (like Revolut/Poste Italiane)
   EMAIL_VERIFICATION_EXPIRY: 24 * 60 * 60 * 1000, // 24 hours
   LOGIN_VERIFICATION_EXPIRY: 10 * 60 * 1000, // 10 minutes
   PASSWORD_RESET_EXPIRY: 2 * 60 * 60 * 1000 // 2 hours

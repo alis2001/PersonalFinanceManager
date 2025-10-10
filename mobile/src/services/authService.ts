@@ -88,7 +88,11 @@ class AuthService {
     try {
       const response = await this.makeRequest('/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ 
+          email, 
+          password,
+          rememberMe: true  // BANKING APP PATTERN: Always remember mobile users (180 days)
+        }),
       });
 
       const data = await this.handleResponse(response);

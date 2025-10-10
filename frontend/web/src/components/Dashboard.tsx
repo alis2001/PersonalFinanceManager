@@ -8,7 +8,7 @@ import AddExpense from './AddExpense';
 import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
 import ManageCategories from './ManageCategories';
-import ReceiptUpload from './ReceiptUpload'; // NEW IMPORT
+// import ReceiptUpload from './ReceiptUpload'; // COMMENTED OUT - Not fully implemented
 import LanguageSwitcher from './LanguageSwitcher';
 import { useTranslation } from '../hooks/useTranslation';
 import '../styles/Dashboard.css';
@@ -35,7 +35,7 @@ interface ExpenseStats {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, currentLanguage } = useTranslation();
 
   // Function to translate category names
   const getTranslatedCategoryName = (categoryName: string): string => {
@@ -77,7 +77,7 @@ const Dashboard: React.FC = () => {
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showEditExpense, setShowEditExpense] = useState(false);
   const [showManageCategories, setShowManageCategories] = useState(false);
-  const [showReceiptUpload, setShowReceiptUpload] = useState(false); // NEW STATE
+  // const [showReceiptUpload, setShowReceiptUpload] = useState(false); // COMMENTED OUT - Not fully implemented
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
   useEffect(() => {
@@ -169,16 +169,15 @@ const Dashboard: React.FC = () => {
     loadRecentExpenses();
   };
 
-  // NEW HANDLER FOR RECEIPT UPLOAD
-  const handleReceiptUpload = () => {
-    setShowReceiptUpload(true);
-  };
+  // COMMENTED OUT - Receipt processing not fully implemented
+  // const handleReceiptUpload = () => {
+  //   setShowReceiptUpload(true);
+  // };
 
-  // NEW HANDLER FOR RECEIPT SUCCESS
-  const handleReceiptUploadSuccess = () => {
-    loadExpenseStats();
-    loadRecentExpenses();
-  };
+  // const handleReceiptUploadSuccess = () => {
+  //   loadExpenseStats();
+  //   loadRecentExpenses();
+  // };
 
   const handleEditExpense = (expense: Expense) => {
     setSelectedExpense(expense);
@@ -210,7 +209,7 @@ const Dashboard: React.FC = () => {
 
   const formatCurrency = (amount: number): string => {
     const currency = user?.defaultCurrency || 'USD';
-    return currencyService.formatCurrency(amount, currency);
+    return currencyService.formatCurrency(amount, currency, currentLanguage);
   };
 
   const getStatCardClass = (isLoading: boolean) => {
@@ -295,17 +294,17 @@ const Dashboard: React.FC = () => {
             </div>
           )}
 
-          {/* UPDATED: Added Receipt Upload Button */}
           <div className="quick-actions">
             <h2>{t('dashboard.quickActions')}</h2>
             <div className="action-buttons">
                 <button className="btn-action primary" onClick={handleAddExpense}>
                 {t('dashboard.addExpense')}
                 </button>
-                <button className="btn-action purple" onClick={handleReceiptUpload}>
+                {/* COMMENTED OUT - Receipt processing not fully implemented */}
+                {/* <button className="btn-action purple" onClick={handleReceiptUpload}>
                 <span>📸</span>
                 {t('dashboard.uploadReceipt')}
-                </button>
+                </button> */}
                 <button className="btn-action" onClick={handleViewAnalytics}>
                 <span>📊</span>
                 {t('dashboard.viewAnalytics')}
@@ -341,12 +340,12 @@ const Dashboard: React.FC = () => {
         userCurrency={user?.defaultCurrency}
       />
 
-      {/* NEW RECEIPT UPLOAD MODAL */}
-      <ReceiptUpload 
+      {/* COMMENTED OUT - Receipt processing not fully implemented */}
+      {/* <ReceiptUpload 
         isOpen={showReceiptUpload}
         onClose={() => setShowReceiptUpload(false)}
         onReceiptProcessed={handleReceiptUploadSuccess}
-      />
+      /> */}
 
       {selectedExpense && (
         <EditExpense 

@@ -8,6 +8,7 @@ import categoryService, { Category } from '../services/categoryService';
 import currencyService from '../services/currencyService';
 import { useTranslation } from '../hooks/useTranslation';
 import { formatDateForDisplay, formatDateForInput, parseDateFromInput } from '../utils/dateFormatter';
+import { formatNumberInput, getNumericValue, isValidNumericInput } from '../utils/persianNumbers';
 
 interface AddExpenseProps {
   isOpen: boolean;
@@ -44,7 +45,10 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   fromReceipt = false,
   userCurrency = 'USD'
 }) => {
-  const { t } = useTranslation();
+  const { t, currentLanguage } = useTranslation();
+  
+  // Check if Persian formatting should be used
+  const usePersianDigits = currentLanguage === 'fa' || userCurrency === 'IRR';
   
   // Function to translate category names
   const getTranslatedCategoryName = (categoryName: string): string => {
@@ -134,8 +138,11 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
   // Initialize date formatting and check date system
   useEffect(() => {
-    const formattedDate = formatDateTimeForInput(new Date());
-    setFormData(prev => ({ ...prev, transactionDate: formattedDate }));
+    const initDate = async () => {
+      const formattedDate = await formatDateTimeForInput(new Date());
+      setFormData(prev => ({ ...prev, transactionDate: formattedDate }));
+    };
+    initDate();
   }, []);
 
   // Initialize form with prefilled data from receipt
@@ -143,12 +150,18 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     const initializeFormData = async () => {
       if (isOpen && prefilledData) {
         const prefilledDate = prefilledData.transactionDate ? 
-          parseDateTimeFromInput(prefilledData.transactionDate) : new Date();
+          await parseDateTimeFromInput(prefilledData.transactionDate) : new Date();
         setSelectedDate(prefilledDate);
         const formattedDate = await formatDateTimeForInput(prefilledDate);
+        
+        // Format amount with Persian digits and commas if needed
+        const formattedAmount = prefilledData.amount 
+          ? formatNumberInput(prefilledData.amount.toString(), usePersianDigits)
+          : '';
+        
         setFormData({
           categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
-          amount: prefilledData.amount ? prefilledData.amount.toString() : '',
+          amount: formattedAmount,
           description: prefilledData.description || '',
           transactionDate: formattedDate,
           location: prefilledData.location || '',
@@ -200,11 +213,24 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   };
 
   const handleAmountChange = (value: string) => {
-    // Allow only numbers and decimal point
-    if (value === '' || /^\d*\.?\d*$/.test(value)) {
-      setFormData(prev => ({ ...prev, amount: value }));
-      if (error) setError('');
+    // Validate input (allows Persian/Arabic/Latin digits, decimal, comma)
+    if (!isValidNumericInput(value) && value !== '') {
+      return; // Reject invalid characters
     }
+    
+    // Get clean numeric value (Latin digits, no commas)
+    const numericValue = getNumericValue(value);
+    
+    // Validate it's a valid number format
+    if (numericValue !== '' && !/^\d*\.?\d*$/.test(numericValue)) {
+      return; // Reject if not valid after cleanup
+    }
+    
+    // Format for display with commas and Persian digits if needed
+    const formattedValue = formatNumberInput(numericValue, usePersianDigits);
+    
+    setFormData(prev => ({ ...prev, amount: formattedValue }));
+    if (error) setError('');
   };
 
   const validateForm = (): string | null => {
@@ -212,12 +238,20 @@ const AddExpense: React.FC<AddExpenseProps> = ({
       return t('expenses.pleaseSelectCategory');
     }
     
-    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+    // Get clean numeric value for validation
+    const cleanAmount = getNumericValue(formData.amount);
+    const numericAmount = parseFloat(cleanAmount);
+    
+    if (!cleanAmount || isNaN(numericAmount) || numericAmount <= 0) {
       return t('expenses.pleaseEnterValidAmount');
     }
     
-    if (parseFloat(formData.amount) > 999999.99) {
-      return t('expenses.amountCannotExceed');
+    // Dynamic limit based on currency
+    const maxLimit = currencyService.getMaxAmountLimit(userCurrency);
+    if (numericAmount > maxLimit) {
+      // Format limit for display
+      const formattedLimit = formatNumberInput(maxLimit.toString(), usePersianDigits);
+      return t('expenses.amountCannotExceed') + ` ${formattedLimit}`;
     }
     
     if (!formData.transactionDate) {
@@ -255,9 +289,12 @@ const AddExpense: React.FC<AddExpenseProps> = ({
       const userDate = `${year}-${month}-${day}`;  // User's local date
       const userTime = `${hours}:${minutes}:${seconds}`;  // User's local time
       
+      // Convert formatted amount to clean numeric value for database
+      const cleanAmount = getNumericValue(formData.amount);
+      
       const expenseData = {
         categoryId: formData.categoryId,
-        amount: parseFloat(formData.amount),
+        amount: parseFloat(cleanAmount), // Store as Latin digits in database
         description: formData.description.trim() || undefined,
         transactionDate: parsedDate.toISOString(),
         userDate: userDate,
@@ -472,7 +509,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
                 placeholderTextColor="#999"
                 editable={!loading}
                 keyboardType="decimal-pad"
-                maxLength={10}
+                maxLength={20}
               />
             </View>
           </View>

@@ -6,8 +6,10 @@ import AllTransactions from './AllTransactions';
 import Categories from './Categories';
 import AddExpense from './AddExpense';
 import Settings from './Settings';
+import { useAuth } from '../services/AuthContext';
 
 const MainApp: React.FC = () => {
+  const { user } = useAuth();
   const [activeRoute, setActiveRoute] = useState('Dashboard');
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -92,7 +94,7 @@ const MainApp: React.FC = () => {
         isOpen={showAddExpense}
         onClose={() => setShowAddExpense(false)}
         onExpenseAdded={handleExpenseAdded}
-        userCurrency="USD"
+        userCurrency={user?.defaultCurrency || 'USD'}
       />
     </View>
   );

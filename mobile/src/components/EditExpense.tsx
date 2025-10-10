@@ -5,9 +5,11 @@ import { Picker } from '@react-native-picker/picker';
 import ConditionalDatePicker from './ConditionalDatePicker';
 import expenseService from '../services/expenseService';
 import categoryService, { Category } from '../services/categoryService';
+import currencyService from '../services/currencyService';
 import { Expense } from '../services/expenseService';
 import { useTranslation } from '../hooks/useTranslation';
 import { formatDateForDisplay, formatDateForInput, parseDateFromInput } from '../utils/dateFormatter';
+import { formatNumberInput, getNumericValue, isValidNumericInput } from '../utils/persianNumbers';
 
 interface EditExpenseProps {
   isOpen: boolean;
@@ -24,7 +26,15 @@ const EditExpense: React.FC<EditExpenseProps> = ({
   onExpenseUpdated, 
   userCurrency = 'USD' 
 }) => {
-  const { t } = useTranslation();
+  const { t, currentLanguage } = useTranslation();
+  
+  // Check if Persian formatting should be used
+  const usePersianDigits = currentLanguage === 'fa' || userCurrency === 'IRR';
+  
+  // Helper function to format currency with Persian number support
+  const formatCurrencyDisplay = (amount: number): string => {
+    return currencyService.formatCurrency(amount, userCurrency, currentLanguage);
+  };
   
   // Function to translate category names
   const getTranslatedCategoryName = (categoryName: string): string => {
@@ -135,9 +145,13 @@ const EditExpense: React.FC<EditExpenseProps> = ({
     setSelectedDate(transactionDate);
 
     const formattedDateTime = await formatDateTimeForInput(transactionDate);
+    
+    // Format amount with Persian digits and commas if needed
+    const formattedAmount = formatNumberInput(expense.amount.toString(), usePersianDigits);
+    
     setFormData({
       categoryId: expense.categoryId,
-      amount: expense.amount.toString(),
+      amount: formattedAmount,
       description: expense.description || '',
       transactionDate: formattedDateTime,
       location: expense.location || '',
@@ -168,20 +182,47 @@ const EditExpense: React.FC<EditExpenseProps> = ({
   };
 
   const handleAmountChange = (value: string) => {
-    // Allow only numbers and decimal point
-    if (value === '' || /^\d*\.?\d*$/.test(value)) {
-      setFormData(prev => ({ ...prev, amount: value }));
-      if (error) setError('');
+    // Validate input (allows Persian/Arabic/Latin digits, decimal, comma)
+    if (!isValidNumericInput(value) && value !== '') {
+      return; // Reject invalid characters
     }
+    
+    // Get clean numeric value (Latin digits, no commas)
+    const numericValue = getNumericValue(value);
+    
+    // Validate it's a valid number format
+    if (numericValue !== '' && !/^\d*\.?\d*$/.test(numericValue)) {
+      return; // Reject if not valid after cleanup
+    }
+    
+    // Format for display with commas and Persian digits if needed
+    const formattedValue = formatNumberInput(numericValue, usePersianDigits);
+    
+    setFormData(prev => ({ ...prev, amount: formattedValue }));
+    if (error) setError('');
   };
 
   const validateForm = (): string | null => {
     if (!formData.categoryId.trim()) {
       return t('expenses.pleaseSelectCategory');
     }
-    if (!formData.amount.trim() || parseFloat(formData.amount) <= 0) {
+    
+    // Get clean numeric value for validation
+    const cleanAmount = getNumericValue(formData.amount);
+    const numericAmount = parseFloat(cleanAmount);
+    
+    if (!cleanAmount || isNaN(numericAmount) || numericAmount <= 0) {
       return t('expenses.pleaseEnterValidAmount');
     }
+    
+    // Dynamic limit based on currency
+    const maxLimit = currencyService.getMaxAmountLimit(userCurrency);
+    if (numericAmount > maxLimit) {
+      // Format limit for display
+      const formattedLimit = formatNumberInput(maxLimit.toString(), usePersianDigits);
+      return t('expenses.amountCannotExceed') + ` ${formattedLimit}`;
+    }
+    
     if (!formData.transactionDate.trim()) {
       return t('expenses.pleaseSelectDateTime');
     }
@@ -215,9 +256,12 @@ const EditExpense: React.FC<EditExpenseProps> = ({
       const userDate = `${year}-${month}-${day}`;  // User's local date
       const userTime = `${hours}:${minutes}:${seconds}`;  // User's local time
       
+      // Convert formatted amount to clean numeric value for database
+      const cleanAmount = getNumericValue(formData.amount);
+      
       const updateData = {
         categoryId: formData.categoryId,
-        amount: parseFloat(formData.amount),
+        amount: parseFloat(cleanAmount), // Store as Latin digits in database
         description: formData.description.trim() || undefined,
         transactionDate: parsedDate.toISOString(),
         userDate: userDate,
@@ -317,15 +361,21 @@ const EditExpense: React.FC<EditExpenseProps> = ({
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>{t('expenses.amount')} *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.amount}
-              onChangeText={handleAmountChange}
-              placeholder="0.00"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-              editable={!loading}
-            />
+            <View style={styles.amountInputContainer}>
+              <Text style={styles.currencySymbol}>
+                {currencyService.getCurrencyByCode(userCurrency)?.symbol || '$'}
+              </Text>
+              <TextInput
+                style={styles.amountInput}
+                value={formData.amount}
+                onChangeText={handleAmountChange}
+                placeholder="0.00"
+                placeholderTextColor="#999"
+                keyboardType="decimal-pad"
+                editable={!loading}
+                maxLength={20}
+              />
+            </View>
           </View>
 
           <View style={styles.formGroup}>
@@ -461,7 +511,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
                   <View style={styles.expensePreviewItem}>
                     <Text style={styles.expensePreviewLabel}>{t('expenses.amount')}:</Text>
                     <Text style={styles.expensePreviewValue}>
-                      {expense.amount.toFixed(2)} {userCurrency}
+                      {formatCurrencyDisplay(expense.amount)}
                     </Text>
                   </View>
                   <View style={styles.expensePreviewItem}>
@@ -618,6 +668,35 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 14,
     fontSize: 16,
+    color: '#1a1a1a',
+    backgroundColor: '#ffffff',
+  },
+  amountInputContainer: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  currencySymbol: {
+    position: 'absolute',
+    right: 18,
+    top: '50%',
+    transform: [{ translateY: -10 }],
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#718096',
+    zIndex: 1,
+    backgroundColor: 'transparent',
+    paddingLeft: 4,
+  },
+  amountInput: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 16,
+    paddingRight: 45,
+    fontSize: 18,
+    fontWeight: '600',
     color: '#1a1a1a',
     backgroundColor: '#ffffff',
   },

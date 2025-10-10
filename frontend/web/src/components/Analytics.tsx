@@ -83,7 +83,7 @@ interface User {
 
 const Analytics: React.FC = () => {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, currentLanguage } = useTranslation();
 
   // Function to translate category names
   const getTranslatedCategoryName = (categoryName: string): string => {
@@ -182,7 +182,7 @@ const Analytics: React.FC = () => {
 
   const formatCurrency = (amount: number) => {
     const currency = user?.defaultCurrency || 'USD';
-    return currencyService.formatCurrency(amount, currency);
+    return currencyService.formatCurrency(amount, currency, currentLanguage);
   };
 
   // Format dates based on user's currency (IRR = Persian, others = Gregorian)

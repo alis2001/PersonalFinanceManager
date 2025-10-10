@@ -24,7 +24,7 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
   refreshing = false,
   onRefresh
 }) => {
-  const { t } = useTranslation();
+  const { t, currentLanguage } = useTranslation();
   const [formattedDates, setFormattedDates] = useState<{[key: string]: string}>({});
   
   // Function to translate category names
@@ -57,7 +57,7 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
     return categoryMap[categoryName] || categoryName;
   };
   const formatCurrency = (amount: number): string => {
-    return currencyService.formatCurrency(amount, userCurrency);
+    return currencyService.formatCurrency(amount, userCurrency, currentLanguage);
   };
 
   // Format dates when expenses change

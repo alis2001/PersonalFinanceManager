@@ -98,17 +98,30 @@ class CurrencyService {
     return this.supportedCurrencies.some(currency => currency.code === code);
   }
 
-  // Format currency amount
-  formatCurrency(amount: number, currencyCode: string = 'USD'): string {
+  // Format currency amount with Persian number support
+  formatCurrency(amount: number, currencyCode: string = 'USD', language?: string): string {
     const currency = this.getCurrencyByCode(currencyCode);
     if (!currency) {
       // Fallback to USD if currency not found
       return `${amount.toFixed(2)}`;
     }
 
-    // For React Native, we'll use a simple format since Intl.NumberFormat might not be fully supported
+    // Format the amount with proper decimal places
     const formattedAmount = amount.toFixed(currency.decimalPlaces);
-    return `${currency.symbol}${formattedAmount}`;
+    const formattedString = `${currency.symbol}${formattedAmount}`;
+    
+    // Convert to Persian digits if language is Persian
+    if (language === 'fa' || currencyCode === 'IRR') {
+      return this.toPersianDigits(formattedString);
+    }
+    
+    return formattedString;
+  }
+  
+  // Convert Latin digits to Persian digits
+  private toPersianDigits(text: string): string {
+    const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    return text.replace(/[0-9]/g, (digit) => persianDigits[parseInt(digit)]);
   }
 
   // Get currency symbol
@@ -153,6 +166,91 @@ class CurrencyService {
   getSuggestedCurrency(): string {
     // For mobile, default to USD
     return 'USD';
+  }
+
+  /**
+   * Get maximum amount limit for a currency based on typical transaction values
+   * Limits are generous to support all legitimate use cases
+   * 
+   * Per user requirements:
+   * - USD/EUR/GBP: 100 million (property, business transactions)
+   * - IRR: 10 billion Rials (reasonable for Iranian property/business)
+   * - Other currencies: Proportional to their value
+   */
+  getMaxAmountLimit(currencyCode: string): number {
+    const limits: { [key: string]: number } = {
+      // Very low value currencies (highest limits)
+      'IRR': 10000000000,   // 10 billion Rials (per user requirement)
+      'VND': 10000000000,   // 10 billion Dong
+      'IDR': 10000000000,   // 10 billion Rupiah
+      'LBP': 10000000000,   // 10 billion Lebanese Pound
+      'SLL': 10000000000,   // 10 billion Leone
+      'UZS': 10000000000,   // 10 billion Som
+      'LAK': 10000000000,   // 10 billion Kip
+      'KHR': 10000000000,   // 10 billion Riel
+      'MMK': 10000000000,   // 10 billion Kyat
+      'GNF': 10000000000,   // 10 billion Franc
+      'PYG': 10000000000,   // 10 billion Guarani
+      
+      // Low value currencies (high limits)
+      'KRW': 1000000000,    // 1 billion Won
+      'COP': 1000000000,    // 1 billion Pesos
+      'CLP': 1000000000,    // 1 billion Pesos
+      'JPY': 1000000000,    // 1 billion Yen
+      'HUF': 1000000000,    // 1 billion Forint
+      'ISK': 1000000000,    // 1 billion Krona
+      'RUB': 1000000000,    // 1 billion Ruble
+      'INR': 1000000000,    // 1 billion Rupee
+      'PKR': 1000000000,    // 1 billion Rupee
+      'BDT': 1000000000,    // 1 billion Taka
+      'PHP': 1000000000,    // 1 billion Peso
+      'THB': 1000000000,    // 1 billion Baht
+      'CZK': 1000000000,    // 1 billion Koruna
+      'TRY': 1000000000,    // 1 billion Lira
+      
+      // Standard currencies (100 million - per user requirement)
+      'USD': 100000000,     // 100 million dollars
+      'EUR': 100000000,     // 100 million euros
+      'GBP': 100000000,     // 100 million pounds
+      'CAD': 100000000,     // 100 million
+      'AUD': 100000000,     // 100 million
+      'NZD': 100000000,     // 100 million
+      'CHF': 100000000,     // 100 million Swiss Franc
+      'SGD': 100000000,     // 100 million
+      'HKD': 100000000,     // 100 million
+      'CNY': 100000000,     // 100 million Yuan
+      'SEK': 100000000,     // 100 million Krona
+      'NOK': 100000000,     // 100 million Krone
+      'DKK': 100000000,     // 100 million Krone
+      'PLN': 100000000,     // 100 million Zloty
+      'ZAR': 100000000,     // 100 million Rand
+      'BRL': 100000000,     // 100 million Real
+      'MXN': 100000000,     // 100 million Peso
+      'AED': 100000000,     // 100 million Dirham
+      'SAR': 100000000,     // 100 million Riyal
+      'ILS': 100000000,     // 100 million Shekel
+      'MYR': 100000000,     // 100 million Ringgit
+      'BYN': 100000000,     // 100 million Ruble
+      
+      // High value currencies (lower but still generous)
+      'KWD': 10000000,      // 10 million Dinar
+      'BHD': 10000000,      // 10 million Dinar
+      'OMR': 10000000,      // 10 million Rial
+      'JOD': 10000000,      // 10 million Dinar
+    };
+    
+    return limits[currencyCode] || 100000000; // Default: 100 million
+  }
+
+  /**
+   * Format amount with proper decimal places based on currency
+   * @param amount - Numeric amount
+   * @param currencyCode - Currency code
+   * @returns Number of decimal places
+   */
+  getDecimalPlaces(currencyCode: string): number {
+    const currency = this.getCurrencyByCode(currencyCode);
+    return currency ? currency.decimalPlaces : 2;
   }
 }
 

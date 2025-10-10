@@ -154,12 +154,17 @@ const AddExpense: React.FC<AddExpenseProps> = ({
       return t('expenses.pleaseSelectCategory');
     }
     
-    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+    const numericAmount = parseFloat(formData.amount);
+    
+    if (!formData.amount || isNaN(numericAmount) || numericAmount <= 0) {
       return t('expenses.pleaseEnterValidAmount');
     }
     
-    if (parseFloat(formData.amount) > 999999.99) {
-      return t('expenses.amountCannotExceed');
+    // Dynamic limit based on currency
+    const maxLimit = currencyService.getMaxAmountLimit(userCurrency);
+    if (numericAmount > maxLimit) {
+      const formattedLimit = currencyService.formatCurrency(maxLimit, userCurrency);
+      return `${t('expenses.amountCannotExceed')} ${formattedLimit}`;
     }
     
     if (!formData.transactionDate) {

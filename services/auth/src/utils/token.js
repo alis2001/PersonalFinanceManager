@@ -12,10 +12,14 @@ const generateTokens = (user) => {
     { expiresIn: process.env.JWT_EXPIRY || '1h' }
   );
   
+  // BANKING APP PATTERN: Long-lived refresh token for mobile
+  // 180 days = ~6 months (like Revolut, Poste Italiane)
+  // Access token stays short (1h) for security
+  // User only needs PIN after that, no re-login needed
   const refreshToken = jwt.sign(
     { userId: user.id, type: 'refresh' },
     process.env.JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || '180d' }
   );
   
   return { accessToken, refreshToken };

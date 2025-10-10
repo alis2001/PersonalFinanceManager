@@ -26,7 +26,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashboard', onNavigate, onAddExpense, onSettings }) => {
   const { user, logout } = useAuth();
-  const { t } = useTranslation();
+  const { t, currentLanguage } = useTranslation();
   
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -87,10 +87,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashbo
 
 
   const formatCurrency = (amount: number): string => {
-    const currency = currencyService.getCurrencyByCode(user?.defaultCurrency || 'USD');
-    const symbol = currency ? currency.symbol : '$';
-    const formattedAmount = amount.toFixed(2);
-    return `${symbol}${formattedAmount}`;
+    return currencyService.formatCurrency(amount, user?.defaultCurrency || 'USD', currentLanguage);
   };
 
   const getStatCardClass = (loading: boolean) => {

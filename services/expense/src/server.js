@@ -46,9 +46,12 @@ app.use((req, res, next) => {
 });
 
 // Validation schemas
+// DYNAMIC CURRENCY LIMITS: Support all currencies
+// Per user requirements: IRR (10B), USD/EUR (100M), other currencies proportional
+// Backend max: 10 billion to cover IRR and all other currencies
 const expenseSchema = Joi.object({
   categoryId: Joi.string().uuid().required(),
-  amount: Joi.number().positive().max(999999.99).required(),
+  amount: Joi.number().positive().max(10000000000).required(), // 10 billion - supports IRR (10B), USD (100M), etc
   description: Joi.string().max(500).optional().allow(''),
   transactionDate: Joi.date().required(),
   userDate: Joi.date().optional(),  // User's local date (timezone-independent)
@@ -60,7 +63,7 @@ const expenseSchema = Joi.object({
 
 const expenseUpdateSchema = expenseSchema.keys({
   categoryId: Joi.string().uuid().optional(),
-  amount: Joi.number().positive().max(999999.99).optional(),
+  amount: Joi.number().positive().max(10000000000).optional(), // 10 billion - supports all currencies
   transactionDate: Joi.date().optional(),
   userDate: Joi.date().optional(),
   userTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/).optional()

@@ -64,7 +64,7 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
   };
 
   const formatCurrency = (amount: number): string => {
-    return currencyService.formatCurrency(amount, userCurrency);
+    return currencyService.formatCurrency(amount, userCurrency, currentLanguage);
   };
 
   const truncateText = (text: string | undefined, maxLength: number): string => {

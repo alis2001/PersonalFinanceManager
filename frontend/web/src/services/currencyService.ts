@@ -113,8 +113,8 @@ class CurrencyService {
     return this.supportedCurrencies.some(currency => currency.code === code);
   }
 
-  // Format currency amount
-  formatCurrency(amount: number, currencyCode: string = 'USD'): string {
+  // Format currency amount with Persian number support
+  formatCurrency(amount: number, currencyCode: string = 'USD', language?: string): string {
     const currency = this.getCurrencyByCode(currencyCode);
     if (!currency) {
       // Fallback to USD if currency not found
@@ -126,12 +126,25 @@ class CurrencyService {
       }).format(amount);
     }
 
-    return new Intl.NumberFormat(currency.locale, {
+    const formatted = new Intl.NumberFormat(currency.locale, {
       style: 'currency',
       currency: currency.code,
       minimumFractionDigits: currency.decimalPlaces,
       maximumFractionDigits: currency.decimalPlaces
     }).format(amount);
+    
+    // Explicitly convert to Persian digits for Persian language or IRR currency
+    if (language === 'fa' || currencyCode === 'IRR') {
+      return this.toPersianDigits(formatted);
+    }
+    
+    return formatted;
+  }
+  
+  // Convert Latin digits to Persian digits
+  private toPersianDigits(text: string): string {
+    const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    return text.replace(/[0-9]/g, (digit) => persianDigits[parseInt(digit)]);
   }
 
   // Get currency symbol
@@ -253,6 +266,78 @@ class CurrencyService {
   getSuggestedCurrency(): string {
     const userLocale = this.getUserLocale();
     return this.getDefaultCurrencyByLocale(userLocale);
+  }
+
+  /**
+   * Get maximum amount limit for a currency
+   * Per user requirements:
+   * - USD/EUR/GBP: 100 million
+   * - IRR: 10 billion Rials
+   * - Other currencies: Proportional limits
+   */
+  getMaxAmountLimit(currencyCode: string): number {
+    const limits: { [key: string]: number } = {
+      // Very low value currencies
+      'IRR': 10000000000,   // 10 billion Rials
+      'VND': 10000000000,   // 10 billion Dong
+      'IDR': 10000000000,   // 10 billion Rupiah
+      'LBP': 10000000000,   // 10 billion Lebanese Pound
+      'SLL': 10000000000,   // 10 billion Leone
+      'UZS': 10000000000,   // 10 billion Som
+      'LAK': 10000000000,   // 10 billion Kip
+      'KHR': 10000000000,   // 10 billion Riel
+      'MMK': 10000000000,   // 10 billion Kyat
+      'GNF': 10000000000,   // 10 billion Franc
+      'PYG': 10000000000,   // 10 billion Guarani
+      
+      // Low value currencies
+      'KRW': 1000000000,    // 1 billion Won
+      'COP': 1000000000,    // 1 billion Pesos
+      'CLP': 1000000000,    // 1 billion Pesos
+      'JPY': 1000000000,    // 1 billion Yen
+      'HUF': 1000000000,    // 1 billion Forint
+      'ISK': 1000000000,    // 1 billion Krona
+      'RUB': 1000000000,    // 1 billion Ruble
+      'INR': 1000000000,    // 1 billion Rupee
+      'PKR': 1000000000,    // 1 billion Rupee
+      'BDT': 1000000000,    // 1 billion Taka
+      'PHP': 1000000000,    // 1 billion Peso
+      'THB': 1000000000,    // 1 billion Baht
+      'CZK': 1000000000,    // 1 billion Koruna
+      'TRY': 1000000000,    // 1 billion Lira
+      
+      // Standard currencies (100 million)
+      'USD': 100000000,     // 100 million dollars
+      'EUR': 100000000,     // 100 million euros
+      'GBP': 100000000,     // 100 million pounds
+      'CAD': 100000000,
+      'AUD': 100000000,
+      'NZD': 100000000,
+      'CHF': 100000000,
+      'SGD': 100000000,
+      'HKD': 100000000,
+      'CNY': 100000000,
+      'SEK': 100000000,
+      'NOK': 100000000,
+      'DKK': 100000000,
+      'PLN': 100000000,
+      'ZAR': 100000000,
+      'BRL': 100000000,
+      'MXN': 100000000,
+      'AED': 100000000,
+      'SAR': 100000000,
+      'ILS': 100000000,
+      'MYR': 100000000,
+      'BYN': 100000000,
+      
+      // High value currencies
+      'KWD': 10000000,      // 10 million Dinar
+      'BHD': 10000000,
+      'OMR': 10000000,
+      'JOD': 10000000,
+    };
+    
+    return limits[currencyCode] || 100000000; // Default: 100 million
   }
 }
 

@@ -17,7 +17,7 @@ interface EditExpenseProps {
 }
 
 const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onExpenseUpdated, userCurrency = 'USD' }) => {
-  const { t } = useTranslation();
+  const { t, currentLanguage } = useTranslation();
 
   // Function to translate category names
   const getTranslatedCategoryName = (categoryName: string): string => {
@@ -124,12 +124,17 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
       return t('expenses.pleaseSelectCategory');
     }
     
-    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+    const numericAmount = parseFloat(formData.amount);
+    
+    if (!formData.amount || isNaN(numericAmount) || numericAmount <= 0) {
       return t('expenses.pleaseEnterValidAmount');
     }
     
-    if (parseFloat(formData.amount) > 999999.99) {
-      return t('expenses.amountCannotExceed');
+    // Dynamic limit based on currency
+    const maxLimit = currencyService.getMaxAmountLimit(userCurrency);
+    if (numericAmount > maxLimit) {
+      const formattedLimit = currencyService.formatCurrency(maxLimit, userCurrency);
+      return `${t('expenses.amountCannotExceed')} ${formattedLimit}`;
     }
     
     if (!formData.transactionDate) {
@@ -393,7 +398,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
                 <div className="expense-preview">
                   <div className="expense-preview-item">
                     <span className="expense-preview-label">{t('expenses.amount')}:</span>
-                    <span className="expense-preview-value">{currencyService.formatCurrency(expense.amount, userCurrency)}</span>
+                    <span className="expense-preview-value">{currencyService.formatCurrency(expense.amount, userCurrency, currentLanguage)}</span>
                   </div>
                   <div className="expense-preview-item">
                     <span className="expense-preview-label">{t('expenses.category')}:</span>

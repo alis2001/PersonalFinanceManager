@@ -329,7 +329,8 @@ export class RapilotInfrastructureStack extends cdk.Stack {
         JWT_SECRET: 'your-jwt-secret-change-in-production',
         JWT_EXPIRY: '1h',
         BCRYPT_ROUNDS: '12',
-        SESSION_TIMEOUT: '86400000',
+        SESSION_TIMEOUT: '15552000000', // 180 days - BANKING APP PATTERN for mobile
+        REFRESH_TOKEN_EXPIRY: '180d', // Matches SESSION_TIMEOUT
         LOG_LEVEL: 'info',
       },
       secrets: {
