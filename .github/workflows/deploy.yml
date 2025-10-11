@@ -1080,6 +1080,58 @@ jobs:
             echo ""
             echo "🎉 ${{ steps.env.outputs.environment }} deployment completed!"
 
+      # FRESH DATABASE ON EACH DEPLOYMENT - Recreate from scratch
+      - name: Recreate database with latest schema
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "🔄 Recreating database with fresh schema..."
+            
+            cd /home/ubuntu/finance-tracker
+            
+            # Detect Docker Compose command
+            if command -v docker-compose &> /dev/null; then
+                DOCKER_COMPOSE="docker-compose"
+            elif docker compose version &> /dev/null; then
+                DOCKER_COMPOSE="docker compose"
+            else
+                DOCKER_COMPOSE="docker compose"
+            fi
+            
+            echo "🗑️ Dropping existing database (fresh start)..."
+            
+            # Drop and recreate database
+            $DOCKER_COMPOSE exec -T postgres psql -U postgres << 'SQLEOF'
+            -- Terminate all connections to the database
+            SELECT pg_terminate_backend(pg_stat_activity.pid)
+            FROM pg_stat_activity
+            WHERE pg_stat_activity.datname = 'finance_tracker'
+              AND pid <> pg_backend_pid();
+            
+            -- Drop and recreate database
+            DROP DATABASE IF EXISTS finance_tracker;
+            CREATE DATABASE finance_tracker OWNER finance_user;
+            SQLEOF
+            
+            echo "✅ Database dropped and recreated"
+            
+            # Run init scripts (they will automatically run because database is new)
+            echo "📊 Running schema initialization scripts..."
+            
+            $DOCKER_COMPOSE exec -T postgres psql -U finance_user -d finance_tracker < infrastructure/database/init/01-init.sql
+            $DOCKER_COMPOSE exec -T postgres psql -U finance_user -d finance_tracker < infrastructure/database/init/02-seed.sql
+            $DOCKER_COMPOSE exec -T postgres psql -U finance_user -d finance_tracker < infrastructure/database/init/05-receipt-schema.sql
+            
+            if [ $? -eq 0 ]; then
+                echo "✅ Fresh database created successfully with latest schema"
+            else
+                echo "❌ Database initialization failed - check logs above"
+                exit 1
+            fi
+
       # FIXED: Enhanced post-deployment verification
       - name: Post-deployment verification
         uses: appleboy/ssh-action@v1.0.3
