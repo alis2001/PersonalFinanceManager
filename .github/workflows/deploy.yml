@@ -3,8 +3,14 @@ name: Deploy Finance Tracker
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      - 'mobile/**'
+      - 'mobile_backup/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'mobile/**'
+      - 'mobile_backup/**'
   workflow_dispatch:
     inputs:
       environment:
