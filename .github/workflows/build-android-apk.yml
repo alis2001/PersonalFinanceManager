@@ -1,0 +1,64 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch: # Manual trigger
+  push:
+    branches:
+      - main
+    paths:
+      - 'mobile/**'
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        working-directory: ./mobile
+        run: npm ci
+
+      - name: Generate Android project
+        working-directory: ./mobile
+        run: npx expo prebuild --clean --platform android
+
+      - name: Grant execute permission for gradlew
+        working-directory: ./mobile/android
+        run: chmod +x ./gradlew
+
+      - name: Build Debug APK
+        working-directory: ./mobile/android
+        run: ./gradlew assembleDebug --no-daemon --max-workers=2
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapilot-finance-debug.apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+
+      - name: Comment on commit with APK link
+        if: github.event_name == 'push'
+        run: |
+          echo "✅ APK built successfully!"
+          echo "📱 Download: Go to Actions tab → Build Android APK → Artifacts"
+
