@@ -73,7 +73,7 @@ interface SpendingTrends {
 }
 
 class AnalyticsService {
-  private baseURL = 'http://192.168.1.123:8080';
+  private baseURL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || 'http://192.168.1.123:8080';
   private analyticsURL = `${this.baseURL}/api/analytics`;
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
