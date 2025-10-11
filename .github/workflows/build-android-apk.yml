@@ -49,11 +49,17 @@ jobs:
         working-directory: ./mobile/android
         run: ./gradlew assembleRelease --no-daemon --max-workers=2
 
+      - name: List APK files
+        run: |
+          echo "📦 Checking APK output directory..."
+          ls -lah mobile/android/app/build/outputs/apk/release/ || echo "Directory not found"
+          find mobile/android/app/build/outputs/apk -name "*.apk" -type f || echo "No APK files found"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: rapilot-finance-release.apk
-          path: mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          path: mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 7
 
       - name: Comment on commit with APK link
