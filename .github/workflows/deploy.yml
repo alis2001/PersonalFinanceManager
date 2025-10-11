@@ -1122,7 +1122,7 @@ jobs:
             CREATE DATABASE finance_tracker OWNER finance_user;
             SQLEOF
             
-            echo "✅ Database dropped and recreated"
+            echo "✅ Database dropped and recreated with latest schema"
             
             # Run init scripts (they will automatically run because database is new)
             echo "📊 Running schema initialization scripts..."
