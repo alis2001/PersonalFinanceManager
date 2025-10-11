@@ -45,15 +45,15 @@ jobs:
         working-directory: ./mobile/android
         run: chmod +x ./gradlew
 
-      - name: Build Debug APK
+      - name: Build Release APK
         working-directory: ./mobile/android
-        run: ./gradlew assembleDebug --no-daemon --max-workers=2
+        run: ./gradlew assembleRelease --no-daemon --max-workers=2
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: rapilot-finance-debug.apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          name: rapilot-finance-release.apk
+          path: mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
           retention-days: 7
 
       - name: Comment on commit with APK link
