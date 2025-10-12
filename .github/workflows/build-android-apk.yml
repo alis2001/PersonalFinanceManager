@@ -41,11 +41,12 @@ jobs:
         working-directory: ./mobile
         run: |
           echo "📝 Updating app.json with production API URL..."
-          # Use jq to add apiUrl to extra config
-          cat app.json | jq '.expo.extra.apiUrl = "http://35.152.72.82:8080/api"' > app.json.tmp
+          # Use jq to add apiUrl to extra config (merge with existing extra object)
+          jq '.expo.extra.apiUrl = "http://35.152.72.82:8080/api"' app.json > app.json.tmp
           mv app.json.tmp app.json
           echo "✅ Updated app.json with EC2 backend URL"
-          cat app.json | grep -A 3 "extra"
+          echo "Verification:"
+          jq '.expo.extra' app.json
 
       - name: Generate Android project
         working-directory: ./mobile
