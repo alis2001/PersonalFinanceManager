@@ -1,8 +1,6 @@
 // Expense Service for Mobile
 // Handles expense-related API calls
 
-import Constants from 'expo-constants';
-
 export interface Expense {
   id: string;
   categoryId: string;
@@ -65,7 +63,7 @@ export interface ExpenseResponse {
 }
 
 class ExpenseService {
-  private baseURL = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.1.123:8080/api';
+  private baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.123:8080/api';
   private expenseURL = `${this.baseURL}/expenses`;
 
   private async getAuthHeaders(): Promise<HeadersInit> {

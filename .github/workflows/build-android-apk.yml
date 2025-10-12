@@ -33,11 +33,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install dependencies
-        working-directory: ./mobile
-        run: npm ci
-
-      - name: Configure API URL in app.json
+      - name: Configure API URL in app.json (BEFORE install)
         working-directory: ./mobile
         run: |
           echo "📝 Updating app.json with production API URL..."
@@ -48,17 +44,25 @@ jobs:
           echo "Verification:"
           jq '.expo.extra' app.json
 
+      - name: Install dependencies
+        working-directory: ./mobile
+        run: npm ci
+
       - name: Generate Android project
         working-directory: ./mobile
         run: npx expo prebuild --clean --platform android
+        env:
+          EXPO_PUBLIC_API_URL: http://35.152.72.82:8080/api
 
       - name: Grant execute permission for gradlew
         working-directory: ./mobile/android
         run: chmod +x ./gradlew
 
-      - name: Build Release APK
+      - name: Build Release APK (with production API URL)
         working-directory: ./mobile/android
         run: ./gradlew assembleRelease --no-daemon --max-workers=2
+        env:
+          EXPO_PUBLIC_API_URL: http://35.152.72.82:8080/api
 
       - name: List APK files
         run: |

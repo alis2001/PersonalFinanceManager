@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
 
 interface RegisterData {
   firstName: string;
@@ -25,10 +24,9 @@ interface AuthResponse {
 }
 
 class AuthService {
-  // Use API URL from app.json extra config (for production) or fallback to local
-  // For release builds, this is set via Constants.expoConfig.extra.apiUrl
-  // For development, falls back to local IP
-  private baseURL = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.1.123:8080/api';
+  // Use API URL from environment variable (works in both dev and production)
+  // EXPO_PUBLIC_API_URL is set during build for production, uses local IP in dev
+  private baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.123:8080/api';
 
   private async makeRequest(endpoint: string, options: RequestInit): Promise<Response> {
     const url = `${this.baseURL}/auth${endpoint}`;
