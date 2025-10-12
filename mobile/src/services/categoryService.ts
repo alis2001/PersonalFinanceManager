@@ -1,6 +1,8 @@
 // Category Service for Mobile
 // Handles category-related API calls
 
+import Constants from 'expo-constants';
+
 export interface Category {
   id: string;
   name: string;
@@ -37,7 +39,7 @@ export interface UpdateCategoryData extends Partial<CreateCategoryData> {
 }
 
 class CategoryService {
-  private baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.123:8080/api';
+  private baseURL = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.1.123:8080/api';
   private categoryURL = `${this.baseURL}/categories`;
 
   private async getAuthHeaders(): Promise<HeadersInit> {

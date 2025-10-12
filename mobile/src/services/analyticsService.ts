@@ -1,6 +1,7 @@
 // Mobile Analytics Service - API Client for Finance Analytics
 // Location: mobile/src/services/analyticsService.ts
 
+import Constants from 'expo-constants';
 import authService from './authService';
 
 interface AnalyticsOverviewRequest {
@@ -73,7 +74,7 @@ interface SpendingTrends {
 }
 
 class AnalyticsService {
-  private baseURL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || 'http://192.168.1.123:8080';
+  private baseURL = (Constants.expoConfig?.extra?.apiUrl || 'http://192.168.1.123:8080/api').replace('/api', '');
   private analyticsURL = `${this.baseURL}/api/analytics`;
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
