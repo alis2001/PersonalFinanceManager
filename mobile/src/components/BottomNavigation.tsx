@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'transparent',
-    paddingBottom: 20,
+    paddingBottom: 45,
     paddingHorizontal: 20,
   },
   navigationBar: {

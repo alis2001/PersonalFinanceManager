@@ -102,9 +102,15 @@ const Register: React.FC<RegisterProps> = ({ navigation }) => {
     const result = await register(registrationData);
     
     if (result.success) {
-      Alert.alert('Registration Successful', 'Please check your email for verification instructions.');
+      // Fully successful registration (auto-login)
+      Alert.alert('Registration Successful', 'Welcome to Rapilot Finance!');
+      // User is already logged in, no need to navigate
+    } else if (result.requiresVerification) {
+      // Registration created but needs email verification
+      Alert.alert('Registration Successful', result.message || 'Please check your email for verification code.');
       navigation.navigate('VerifyEmail', { email: formData.email });
     } else {
+      // Registration failed
       setError(result.error || 'Registration failed');
     }
     
