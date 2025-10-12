@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20, // Minimal space for bottom navigation
   },
   statsContainer: {
-    gap: 20,
+    gap: 8,
   },
   statCard: {
     backgroundColor: '#ffffff',
