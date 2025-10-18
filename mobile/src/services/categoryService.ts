@@ -1,6 +1,9 @@
 // Category Service for Mobile
 // Handles category-related API calls
 
+import { fetchWithTimeout } from '../utils/NetworkUtils';
+import secureStorage from './SecureStorage';
+
 export interface Category {
   id: string;
   name: string;
@@ -41,8 +44,7 @@ class CategoryService {
   private categoryURL = `${this.baseURL}/categories`;
 
   private async getAuthHeaders(): Promise<HeadersInit> {
-    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-    const token = await AsyncStorage.getItem('accessToken');
+    const token = await secureStorage.getItem('accessToken');
     
     console.log('Category service token:', token ? 'Token exists' : 'No token');
     
@@ -72,9 +74,10 @@ class CategoryService {
       const headers = await this.getAuthHeaders();
       console.log('Category service headers:', headers);
       
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         ...options,
         headers,
+        timeout: 30000,
       });
 
       console.log('Category service response status:', response.status);
@@ -116,23 +119,24 @@ class CategoryService {
   private async refreshToken(): Promise<boolean> {
     try {
       const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      const refreshToken = await AsyncStorage.getItem('refreshToken');
+      const refreshToken = await secureStorage.getItem('refreshToken');
       
       if (!refreshToken) {
         return false;
       }
 
-      const response = await fetch(`${this.baseURL}/auth/refresh`, {
+      const response = await fetchWithTimeout(`${this.baseURL}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        timeout: 30000,
         body: JSON.stringify({ refreshToken }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        await AsyncStorage.setItem('accessToken', data.accessToken);
+        await secureStorage.setItem('accessToken', data.accessToken);
         if (data.refreshToken) {
-          await AsyncStorage.setItem('refreshToken', data.refreshToken);
+          await secureStorage.setItem('refreshToken', data.refreshToken);
         }
         return true;
       }

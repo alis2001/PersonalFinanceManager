@@ -12,6 +12,7 @@ import expenseService from '../services/expenseService';
 import categoryService from '../services/categoryService';
 import { useTranslation } from '../hooks/useTranslation';
 import { useAuth } from '../services/AuthContext';
+import { useAppRefresh } from '../services/AppRefreshContext';
 
 interface AllTransactionsProps {
   navigation?: any;
@@ -30,6 +31,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
 }) => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { refreshTrigger } = useAppRefresh();
   
   // Function to translate category names
   const getTranslatedCategoryName = (categoryName: string): string => {
@@ -116,6 +118,17 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
       loadTransactions();
     }
   }, [filters]);
+
+  // Listen for refresh triggers
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      console.log('🔄 AllTransactions: Refresh triggered, reloading transactions');
+      // Reset pagination and reload transactions
+      setPagination(prev => ({ ...prev, page: 1 }));
+      setHasMoreExpenses(true);
+      loadTransactions();
+    }
+  }, [refreshTrigger]);
 
   const formatDateForInput = (date: Date): string => {
     return date.toISOString().split('T')[0];
@@ -340,7 +353,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
           </View>
 
           <View style={styles.filterGroup}>
-            <Text style={styles.label}>Category</Text>
+            <Text style={styles.label}>{t('expenses.category')}</Text>
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={filters.categoryId}
@@ -411,7 +424,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
           </Text>
         </TouchableOpacity>
         <Text style={styles.loadMoreInfo}>
-          Showing {expenses.length} of {pagination.total} transactions
+          {t('transactions.showingResults', { showing: expenses.length, total: pagination.total })}
         </Text>
       </View>
     );
@@ -431,7 +444,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
           </TouchableOpacity>
         </View>
         <Text style={styles.subtitle}>
-          Showing {expenses.length} of {pagination.total} transactions
+          {t('transactions.showingResults', { showing: expenses.length, total: pagination.total })}
         </Text>
       </View>
 
@@ -440,10 +453,10 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
         {error ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorIcon}>⚠️</Text>
-            <Text style={styles.errorTitle}>Error Loading Transactions</Text>
+            <Text style={styles.errorTitle}>{t('transactions.errorLoadingTransactions')}</Text>
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-              <Text style={styles.retryButtonText}>Retry</Text>
+              <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : (

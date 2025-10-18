@@ -18,6 +18,7 @@ import analyticsService from '../services/analyticsService';
 import authService from '../services/authService';
 import currencyService from '../services/currencyService';
 import { useTranslation } from '../hooks/useTranslation';
+import { useAppRefresh } from '../services/AppRefreshContext';
 import { formatDateForDisplay } from '../utils/dateFormatter';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -70,6 +71,7 @@ interface SpendingTrends {
 
   const Analytics: React.FC<AnalyticsProps> = ({ navigation, activeRoute = 'Analytics', onNavigate, onAddExpense, onSettings }) => {
   const { t, currentLanguage } = useTranslation();
+  const { refreshTrigger } = useAppRefresh();
   
   // Function to translate category names
   const getTranslatedCategoryName = (categoryName: string): string => {
@@ -211,6 +213,14 @@ interface SpendingTrends {
       loadAnalyticsData();
     }
   }, [selectedPeriod, user]);
+
+  // Listen for refresh triggers
+  useEffect(() => {
+    if (refreshTrigger > 0 && user) {
+      console.log('🔄 Analytics: Refresh triggered, reloading analytics data');
+      loadAnalyticsData();
+    }
+  }, [refreshTrigger, user]);
 
   const loadUserProfile = async () => {
     try {

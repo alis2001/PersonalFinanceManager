@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PINDots from './PINDots';
-import pinService from '../services/pinService';
+import securePinService from '../services/SecurePINService';
 import { useTranslation } from '../hooks/useTranslation';
 
 interface PINEntryProps {
@@ -59,7 +59,7 @@ const PINEntry: React.FC<PINEntryProps> = ({ onSuccess, onForgotPIN }) => {
   }, [isLocked, lockDuration]);
 
   const checkLockStatus = async () => {
-    const lockStatus = await pinService.isPINLocked();
+    const lockStatus = await securePinService.isPINLocked();
     if (lockStatus.locked && lockStatus.remainingTime) {
       setIsLocked(true);
       setLockDuration(lockStatus.remainingTime);
@@ -95,7 +95,7 @@ const PINEntry: React.FC<PINEntryProps> = ({ onSuccess, onForgotPIN }) => {
   };
 
   const verifyPIN = async (enteredPIN: string) => {
-    const result = await pinService.verifyPIN(enteredPIN);
+    const result = await securePinService.verifyPIN(enteredPIN);
 
     if (result.success) {
       // Correct PIN

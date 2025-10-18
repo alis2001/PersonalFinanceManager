@@ -98,16 +98,61 @@ class CurrencyService {
     return this.supportedCurrencies.some(currency => currency.code === code);
   }
 
-  // Format currency amount with Persian number support
+  // Format currency amount with Persian number support and commas
   formatCurrency(amount: number, currencyCode: string = 'USD', language?: string): string {
     const currency = this.getCurrencyByCode(currencyCode);
     if (!currency) {
       // Fallback to USD if currency not found
-      return `${amount.toFixed(2)}`;
+      return this.formatCurrencyWithCommas(amount, 'USD', language);
     }
 
-    // Format the amount with proper decimal places
-    const formattedAmount = amount.toFixed(currency.decimalPlaces);
+    // Format the amount with proper decimal places and commas
+    const formattedAmount = this.formatNumberWithCommas(amount, currency.decimalPlaces);
+    const formattedString = `${currency.symbol}${formattedAmount}`;
+    
+    // Convert to Persian digits if language is Persian
+    if (language === 'fa' || currencyCode === 'IRR') {
+      return this.toPersianDigits(formattedString);
+    }
+    
+    return formattedString;
+  }
+
+  // Format number with commas for display
+  private formatNumberWithCommas(amount: number, decimalPlaces: number): string {
+    if (isNaN(amount)) return '0';
+    
+    // Format with proper decimal places
+    const formatted = amount.toFixed(decimalPlaces);
+    
+    // Split into integer and decimal parts
+    const parts = formatted.split('.');
+    let integerPart = parts[0];
+    const decimalPart = parts[1];
+    
+    // Add commas to integer part
+    integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    
+    // Combine parts
+    let result = integerPart;
+    if (decimalPart && decimalPlaces > 0) {
+      result += '.' + decimalPart;
+    }
+    
+    return result;
+  }
+
+  // Format currency with commas (alternative method)
+  formatCurrencyWithCommas(amount: number, currencyCode: string = 'USD', language?: string): string {
+    const currency = this.getCurrencyByCode(currencyCode);
+    if (!currency) {
+      // Fallback to USD if currency not found
+      const formattedAmount = this.formatNumberWithCommas(amount, 2);
+      return `$${formattedAmount}`;
+    }
+
+    // Format the amount with proper decimal places and commas
+    const formattedAmount = this.formatNumberWithCommas(amount, currency.decimalPlaces);
     const formattedString = `${currency.symbol}${formattedAmount}`;
     
     // Convert to Persian digits if language is Persian

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import authService from './authService';
 import dateSystemService from './dateSystemService';
+import tokenManager from './TokenManager';
 
 interface User {
   id: string;
@@ -58,13 +59,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
-      const isAuth = await authService.isAuthenticated();
+      // Use TokenManager for better authentication checking
+      const isAuth = await tokenManager.isAuthenticated();
       if (isAuth) {
         const userProfile = await authService.getProfile();
         if (userProfile) {
           dateSystemService.setUserCurrency(userProfile.defaultCurrency); // Initialize date system service
           setUser(userProfile);
+          
+          // Start automatic token refresh to keep user logged in
+          tokenManager.startAutoRefresh();
         }
+      } else {
+        // Stop auto-refresh if not authenticated
+        tokenManager.stopAutoRefresh();
       }
     } catch (error) {
       console.error('Auth check error:', error);
@@ -82,6 +90,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         await authService.setUser(result.user); // Store user data for date system service
         dateSystemService.setUserCurrency(result.user.defaultCurrency); // Initialize date system service
         setUser(result.user);
+        
+        // Start automatic token refresh to keep user logged in
+        tokenManager.startAutoRefresh();
+        
         return { success: true };
       } else {
         return {
@@ -109,6 +121,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         await authService.setUser(result.user); // Store user data for date system service
         dateSystemService.setUserCurrency(result.user.defaultCurrency); // Initialize date system service
         setUser(result.user);
+        
+        // Start automatic token refresh to keep user logged in
+        tokenManager.startAutoRefresh();
+        
         return { success: true };
       } else {
         return {
@@ -129,12 +145,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     try {
+      // Stop automatic token refresh
+      tokenManager.stopAutoRefresh();
+      
       await authService.logout();
       await authService.clearUser(); // Clear user data from AsyncStorage
       setUser(null);
     } catch (error) {
       console.error('Logout error:', error);
       // Even if logout fails on server, clear local state
+      tokenManager.stopAutoRefresh();
       await authService.clearUser(); // Clear user data from AsyncStorage
       setUser(null);
     }

@@ -2,6 +2,8 @@
 // Location: mobile/src/services/analyticsService.ts
 
 import authService from './authService';
+import { fetchWithTimeout } from '../utils/NetworkUtils';
+import secureStorage from './SecureStorage';
 
 interface AnalyticsOverviewRequest {
   period?: string;
@@ -118,9 +120,10 @@ class AnalyticsService {
       console.log('Analytics service making request to:', url);
       console.log('Analytics service headers:', headers);
       
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'GET',
-        headers: headers
+        headers: headers,
+        timeout: 30000
       });
 
       const data = await this.handleResponse(response);
@@ -149,9 +152,10 @@ class AnalyticsService {
       console.log('Analytics service making request to:', url);
       console.log('Analytics service headers:', headers);
       
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'GET',
-        headers: headers
+        headers: headers,
+        timeout: 30000
       });
 
       const data = await this.handleResponse(response);
@@ -180,9 +184,10 @@ class AnalyticsService {
       console.log('Analytics service making request to:', url);
       console.log('Analytics service headers:', headers);
       
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'GET',
-        headers: headers
+        headers: headers,
+        timeout: 30000
       });
 
       const data = await this.handleResponse(response);
@@ -215,9 +220,10 @@ class AnalyticsService {
       console.log('Analytics service making request to:', url);
       console.log('Analytics service headers:', headers);
       
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'GET',
-        headers: headers
+        headers: headers,
+        timeout: 30000
       });
 
       const data = await this.handleResponse(response);

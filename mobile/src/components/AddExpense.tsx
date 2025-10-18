@@ -6,6 +6,9 @@ import ConditionalDatePicker from './ConditionalDatePicker';
 import expenseService from '../services/expenseService';
 import categoryService, { Category } from '../services/categoryService';
 import currencyService from '../services/currencyService';
+import { useAppRefresh } from '../services/AppRefreshContext';
+import { logger } from '../services/Logger';
+import { errorHandler } from '../services/ErrorHandler';
 import { useTranslation } from '../hooks/useTranslation';
 import { formatDateForDisplay, formatDateForInput, parseDateFromInput } from '../utils/dateFormatter';
 import { formatNumberInput, getNumericValue, isValidNumericInput } from '../utils/persianNumbers';
@@ -46,6 +49,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   userCurrency = 'USD'
 }) => {
   const { t, currentLanguage } = useTranslation();
+  const { triggerRefresh } = useAppRefresh();
   
   // Check if Persian formatting should be used
   const usePersianDigits = currentLanguage === 'fa' || userCurrency === 'IRR';
@@ -273,10 +277,18 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     setLoading(true);
 
     try {
-      const parsedDate = await parseDateTimeFromInput(formData.transactionDate);
-      console.log('Form transactionDate string:', formData.transactionDate);
-      console.log('Parsed date:', parsedDate);
-      console.log('ISO string being sent:', parsedDate.toISOString());
+      const parsedDate = await errorHandler.safeAsync(
+        () => parseDateTimeFromInput(formData.transactionDate)
+      );
+      
+      if (!parsedDate) {
+        setError(t('expenses.pleaseSelectDateTime'));
+        return;
+      }
+      
+      logger.log('Form transactionDate string:', formData.transactionDate);
+      logger.log('Parsed date:', parsedDate);
+      logger.log('ISO string being sent:', parsedDate.toISOString());
       
       // Extract user's LOCAL date and time (before converting to UTC)
       const year = parsedDate.getFullYear();
@@ -332,6 +344,8 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           });
         }
         
+        logger.log('✅ Expense added, triggering global refresh');
+        triggerRefresh();
         onExpenseAdded();
         if (!fromReceipt) {
           onClose();
@@ -340,10 +354,11 @@ const AddExpense: React.FC<AddExpenseProps> = ({
         setError(result.error || t('expenses.failedToCreateExpenseTryAgain'));
       }
     } catch (err) {
+      logger.error('Error creating expense:', err);
       setError(t('expenses.failedToCreateExpenseTryAgain'));
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleCancel = async () => {

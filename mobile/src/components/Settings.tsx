@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useTranslation } from '../hooks/useTranslation';
 import { useAuth } from '../services/AuthContext';
-import pinService from '../services/pinService';
+import securePinService from '../services/SecurePINService';
 import PINSetup from './PINSetup';
 
 interface SettingsProps {
@@ -32,7 +32,7 @@ const Settings: React.FC<SettingsProps> = ({ onBack }) => {
   }, []);
 
   const checkPINStatus = async () => {
-    const enabled = await pinService.isPINEnabled();
+    const enabled = await securePinService.isPINEnabled();
     setPinEnabled(enabled);
   };
 
@@ -80,7 +80,7 @@ const Settings: React.FC<SettingsProps> = ({ onBack }) => {
             try {
               await logout();
               // Clear PIN data on logout
-              await pinService.clearPINData();
+              await securePinService.clearPINData();
             } catch (error) {
               console.error('Logout error:', error);
               Alert.alert(t('common.error'), t('auth.logoutError'));

@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchWithTimeout } from '../utils/NetworkUtils';
+import secureStorage from './SecureStorage';
 
 interface RegisterData {
   firstName: string;
@@ -32,12 +34,13 @@ class AuthService {
     const url = `${this.baseURL}/auth${endpoint}`;
     
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
           ...options.headers,
         },
+        timeout: 30000, // 30 second timeout
       });
 
       return response;
@@ -152,6 +155,28 @@ class AuthService {
       return data.user;
     } catch (error) {
       console.error('Get profile error:', error);
+      
+      // If 401 error, try to refresh token and retry
+      if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+        const refreshed = await this.refreshAccessToken();
+        if (refreshed) {
+          // Retry the request with new token
+          try {
+            const retryResponse = await this.makeRequest('/profile', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${await this.getAccessToken()}`,
+              },
+            });
+            const retryData = await this.handleResponse(retryResponse);
+            return retryData.user;
+          } catch (retryError) {
+            console.error('Get profile retry error:', retryError);
+            return null;
+          }
+        }
+      }
+      
       return null;
     }
   }
@@ -159,9 +184,13 @@ class AuthService {
   async isAuthenticated(): Promise<boolean> {
     try {
       const token = await this.getAccessToken();
-      if (!token) return false;
+      if (!token) {
+        console.log('No access token found');
+        return false;
+      }
 
       // Verify token is still valid by making a request
+      // This will automatically refresh the token if it's expired
       const profile = await this.getProfile();
       return profile !== null;
     } catch (error) {
@@ -172,7 +201,7 @@ class AuthService {
 
   async getAccessToken(): Promise<string | null> {
     try {
-      return await AsyncStorage.getItem('accessToken');
+      return await secureStorage.getItem('accessToken');
     } catch (error) {
       console.error('Get access token error:', error);
       return null;
@@ -181,8 +210,8 @@ class AuthService {
 
   async setTokens(accessToken: string, refreshToken: string): Promise<void> {
     try {
-      await AsyncStorage.setItem('accessToken', accessToken);
-      await AsyncStorage.setItem('refreshToken', refreshToken);
+      await secureStorage.setItem('accessToken', accessToken);
+      await secureStorage.setItem('refreshToken', refreshToken);
     } catch (error) {
       console.error('Set tokens error:', error);
     }
@@ -190,10 +219,24 @@ class AuthService {
 
   async clearTokens(): Promise<void> {
     try {
-      await AsyncStorage.removeItem('accessToken');
-      await AsyncStorage.removeItem('refreshToken');
+      await secureStorage.removeItem('accessToken');
+      await secureStorage.removeItem('refreshToken');
+      console.log('✅ All tokens cleared');
     } catch (error) {
       console.error('Clear tokens error:', error);
+    }
+  }
+
+  /**
+   * Force clear all authentication data (for debugging)
+   */
+  async forceLogout(): Promise<void> {
+    try {
+      await this.clearTokens();
+      await AsyncStorage.removeItem('userData');
+      console.log('✅ Force logout completed - all data cleared');
+    } catch (error) {
+      console.error('Force logout error:', error);
     }
   }
 
@@ -231,6 +274,61 @@ class AuthService {
       await AsyncStorage.removeItem('userData');
     } catch (error) {
       console.error('Clear user error:', error);
+    }
+  }
+
+  /**
+   * Refresh access token using refresh token
+   * This is the key method that keeps users logged in
+   */
+  async refreshAccessToken(): Promise<boolean> {
+    try {
+      const refreshToken = await secureStorage.getItem('refreshToken');
+      
+      if (!refreshToken) {
+        console.log('❌ No refresh token available');
+        return false;
+      }
+
+      console.log('🔄 Attempting to refresh access token...');
+      
+      const response = await this.makeRequest('/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Validate that we received valid tokens
+        if (!data.accessToken) {
+          console.log('❌ Token refresh failed: No access token in response');
+          return false;
+        }
+        
+        // Update stored tokens
+        await secureStorage.setItem('accessToken', data.accessToken);
+        if (data.refreshToken) {
+          await secureStorage.setItem('refreshToken', data.refreshToken);
+        }
+        
+        console.log('✅ Access token refreshed successfully');
+        return true;
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.log('❌ Token refresh failed:', response.status, errorData);
+        
+        // Only clear tokens if it's a permanent failure (not a temporary network issue)
+        if (response.status === 401 || response.status === 403) {
+          console.log('❌ Refresh token invalid/expired - clearing tokens');
+          await this.clearTokens();
+        }
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Token refresh error:', error);
+      // Don't clear tokens on network errors - might be temporary
+      return false;
     }
   }
 }

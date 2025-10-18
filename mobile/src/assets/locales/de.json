@@ -17,7 +17,8 @@
     "logout": "Abmelden",
     "retry": "Wiederholen",
     "filter": "Filtern",
-    "apply": "Anwenden"
+    "apply": "Anwenden",
+    "refresh": "Aktualisieren"
   },
   "auth": {
     "login": "Anmelden",
@@ -304,7 +305,10 @@
     "previous": "Vorherige",
     "next": "Nächste",
     "pageInfo": "Seite {{current}} von {{total}}",
-    "loadMore": "Mehr laden"
+    "loadMore": "Mehr laden",
+    "errorLoadingTransactions": "Fehler beim Laden der Transaktionen",
+    "noTransactionsFound": "Keine Transaktionen gefunden",
+    "noTransactionsMatchFilters": "Keine Transaktionen entsprechen Ihren aktuellen Filtern. Versuchen Sie, Ihre Suchkriterien anzupassen."
   },
   "receipt": {
     "title": "Beleg",

@@ -6,6 +6,9 @@ import ConditionalDatePicker from './ConditionalDatePicker';
 import expenseService from '../services/expenseService';
 import categoryService, { Category } from '../services/categoryService';
 import currencyService from '../services/currencyService';
+import { useAppRefresh } from '../services/AppRefreshContext';
+import { logger } from '../services/Logger';
+import { errorHandler } from '../services/ErrorHandler';
 import { Expense } from '../services/expenseService';
 import { useTranslation } from '../hooks/useTranslation';
 import { formatDateForDisplay, formatDateForInput, parseDateFromInput } from '../utils/dateFormatter';
@@ -27,6 +30,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({
   userCurrency = 'USD' 
 }) => {
   const { t, currentLanguage } = useTranslation();
+  const { triggerRefresh } = useAppRefresh();
   
   // Check if Persian formatting should be used
   const usePersianDigits = currentLanguage === 'fa' || userCurrency === 'IRR';
@@ -273,6 +277,8 @@ const EditExpense: React.FC<EditExpenseProps> = ({
       const result = await expenseService.updateExpense(expense.id, updateData);
       
       if (result.success) {
+        logger.log('✅ Expense updated, triggering global refresh');
+        triggerRefresh();
         onExpenseUpdated();
         onClose();
       } else {
@@ -298,6 +304,8 @@ const EditExpense: React.FC<EditExpenseProps> = ({
       const result = await expenseService.deleteExpense(expense.id);
       
       if (result.success) {
+        logger.log('✅ Expense deleted, triggering global refresh');
+        triggerRefresh();
         onExpenseUpdated();
         onClose();
       } else {

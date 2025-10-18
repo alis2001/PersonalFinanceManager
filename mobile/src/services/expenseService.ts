@@ -1,6 +1,11 @@
 // Expense Service for Mobile
 // Handles expense-related API calls
 
+import { logger } from './Logger';
+import { errorHandler } from './ErrorHandler';
+import { fetchWithTimeout, NetworkError } from '../utils/NetworkUtils';
+import secureStorage from './SecureStorage';
+
 export interface Expense {
   id: string;
   categoryId: string;
@@ -67,8 +72,7 @@ class ExpenseService {
   private expenseURL = `${this.baseURL}/expenses`;
 
   private async getAuthHeaders(): Promise<HeadersInit> {
-    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-    const token = await AsyncStorage.getItem('accessToken');
+    const token = await secureStorage.getItem('accessToken');
     
     return {
       'Content-Type': 'application/json',
@@ -79,21 +83,26 @@ class ExpenseService {
   private async makeRequest(endpoint: string, options: RequestInit): Promise<Response> {
     const url = `${this.expenseURL}${endpoint}`;
     
-    console.log('Expense service making request to:', url);
+    logger.log('Expense service making request to:', url);
     
     try {
       const headers = await this.getAuthHeaders();
-      console.log('Expense service headers:', headers);
+      logger.log('Expense service headers:', headers);
       
-      const response = await fetch(url, {
+      // Use the network utility with timeout support
+      const response = await fetchWithTimeout(url, {
         ...options,
         headers,
+        timeout: 30000, // 30 second timeout
       });
 
-      console.log('Expense service response status:', response.status);
+      logger.log('Expense service response status:', response.status);
       return response;
     } catch (error) {
-      console.error('Expense service network error:', error);
+      logger.error('Expense service network error:', error);
+      if (error instanceof NetworkError) {
+        throw error;
+      }
       throw new Error('Network error occurred');
     }
   }
@@ -123,7 +132,7 @@ class ExpenseService {
   private async refreshToken(): Promise<boolean> {
     try {
       const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      const refreshToken = await AsyncStorage.getItem('refreshToken');
+      const refreshToken = await secureStorage.getItem('refreshToken');
       
       if (!refreshToken) {
         return false;
@@ -137,9 +146,9 @@ class ExpenseService {
 
       if (response.ok) {
         const data = await response.json();
-        await AsyncStorage.setItem('accessToken', data.accessToken);
+        await secureStorage.setItem('accessToken', data.accessToken);
         if (data.refreshToken) {
-          await AsyncStorage.setItem('refreshToken', data.refreshToken);
+          await secureStorage.setItem('refreshToken', data.refreshToken);
         }
         return true;
       }

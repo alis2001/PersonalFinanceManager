@@ -17,7 +17,8 @@
     "logout": "Déconnexion",
     "retry": "Réessayer",
     "filter": "Filtrer",
-    "apply": "Appliquer"
+    "apply": "Appliquer",
+    "refresh": "Actualiser"
   },
   "auth": {
     "login": "Connexion",
@@ -307,7 +308,10 @@
     "previous": "Précédent",
     "next": "Suivant",
     "pageInfo": "Page {{current}} sur {{total}}",
-    "loadMore": "Charger plus"
+    "loadMore": "Charger plus",
+    "errorLoadingTransactions": "Erreur lors du chargement des transactions",
+    "noTransactionsFound": "Aucune transaction trouvée",
+    "noTransactionsMatchFilters": "Aucune transaction ne correspond à vos filtres actuels. Essayez d'ajuster vos critères de recherche."
   },
   "receipt": {
     "title": "Reçu",

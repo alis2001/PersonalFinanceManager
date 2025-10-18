@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PINDots from './PINDots';
-import pinService from '../services/pinService';
+import securePinService from '../services/SecurePINService';
 import { useTranslation } from '../hooks/useTranslation';
 
 interface PINSetupProps {
@@ -104,11 +104,11 @@ const PINSetup: React.FC<PINSetupProps> = ({
   const handlePINComplete = async (completedPIN: string) => {
     if (step === 'verify') {
       // Verify current PIN
-      const result = await pinService.verifyPIN(completedPIN);
+      const result = await securePinService.verifyPIN(completedPIN);
       if (result.success) {
         if (mode === 'disable') {
           // Disable PIN
-          await pinService.disablePIN(completedPIN);
+          await securePinService.disablePIN(completedPIN);
           onSuccess();
           handleClose();
         } else {
@@ -123,7 +123,7 @@ const PINSetup: React.FC<PINSetupProps> = ({
       }
     } else if (step === 'create') {
       // Validate new PIN
-      if (pinService.isWeakPIN(completedPIN)) {
+      if (securePinService.isWeakPIN(completedPIN)) {
         Vibration.vibrate(400);
         setError(t('pin.weakPin'));
         setPin('');
@@ -135,7 +135,7 @@ const PINSetup: React.FC<PINSetupProps> = ({
       // Confirm PIN matches
       if (completedPIN === pin) {
         // Set PIN
-        const result = await pinService.setPIN(completedPIN);
+        const result = await securePinService.setPIN(completedPIN);
         if (result.success) {
           onSuccess();
           handleClose();

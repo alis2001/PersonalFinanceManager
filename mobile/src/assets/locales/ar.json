@@ -17,7 +17,8 @@
     "logout": "تسجيل الخروج",
     "retry": "إعادة المحاولة",
     "filter": "تصفية",
-    "apply": "تطبيق"
+    "apply": "تطبيق",
+    "refresh": "تحديث"
   },
   "auth": {
     "login": "تسجيل الدخول",
@@ -217,7 +218,10 @@
     "previous": "السابق",
     "next": "التالي",
     "pageInfo": "صفحة {{current}} من {{total}}",
-    "loadMore": "تحميل المزيد"
+    "loadMore": "تحميل المزيد",
+    "errorLoadingTransactions": "خطأ في تحميل المعاملات",
+    "noTransactionsFound": "لم يتم العثور على معاملات",
+    "noTransactionsMatchFilters": "لا توجد معاملات تطابق المرشحات الحالية. حاول تعديل معايير البحث."
   },
   "settings": {
     "title": "الإعدادات",

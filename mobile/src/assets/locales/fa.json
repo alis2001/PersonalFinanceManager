@@ -17,7 +17,8 @@
     "logout": "خروج",
     "retry": "تلاش مجدد",
     "filter": "فیلتر",
-    "apply": "اعمال"
+    "apply": "اعمال",
+    "refresh": "تازه‌سازی"
   },
   "auth": {
     "login": "ورود",
@@ -310,7 +311,10 @@
     "previous": "قبلی",
     "next": "بعدی",
     "pageInfo": "صفحه {{current}} از {{total}}",
-    "loadMore": "بارگذاری بیشتر"
+    "loadMore": "بارگذاری بیشتر",
+    "errorLoadingTransactions": "خطا در بارگذاری تراکنش‌ها",
+    "noTransactionsFound": "تراکنشی یافت نشد",
+    "noTransactionsMatchFilters": "هیچ تراکنشی با فیلترهای فعلی شما مطابقت ندارد. لطفاً معیارهای جستجوی خود را تنظیم کنید."
   },
   "receipt": {
     "title": "رسید",

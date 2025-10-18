@@ -7,9 +7,12 @@ import Categories from './Categories';
 import AddExpense from './AddExpense';
 import Settings from './Settings';
 import { useAuth } from '../services/AuthContext';
+import { useAppRefresh } from '../services/AppRefreshContext';
+import { logger } from '../services/Logger';
 
 const MainApp: React.FC = () => {
   const { user } = useAuth();
+  const { triggerRefresh } = useAppRefresh();
   const [activeRoute, setActiveRoute] = useState('Dashboard');
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -23,9 +26,10 @@ const MainApp: React.FC = () => {
   };
 
   const handleExpenseAdded = () => {
-    // Refresh data in all components that might need it
+    logger.log('✅ Expense added, triggering global refresh');
+    // Trigger refresh in all components
+    triggerRefresh();
     setShowAddExpense(false);
-    // The individual components will handle their own data refresh
   };
 
   const handleSettings = () => {
@@ -37,7 +41,7 @@ const MainApp: React.FC = () => {
   };
 
   const renderActiveScreen = () => {
-    console.log('Rendering screen for route:', activeRoute);
+    logger.log('Rendering screen for route:', activeRoute);
     
     switch (activeRoute) {
       case 'Analytics':
@@ -69,7 +73,7 @@ const MainApp: React.FC = () => {
         );
       case 'Dashboard':
       default:
-        console.log('Rendering Dashboard component');
+        logger.log('Rendering Dashboard component');
         return (
           <Dashboard 
             activeRoute={activeRoute}

@@ -17,7 +17,8 @@
     "logout": "Logout",
     "retry": "Retry",
     "filter": "Filter",
-    "apply": "Apply"
+    "apply": "Apply",
+    "refresh": "Refresh"
   },
   "auth": {
     "login": "Login",
@@ -310,7 +311,10 @@
     "previous": "Previous",
     "next": "Next",
     "pageInfo": "Page {{current}} of {{total}}",
-    "loadMore": "Load More"
+    "loadMore": "Load More",
+    "errorLoadingTransactions": "Error Loading Transactions",
+    "noTransactionsFound": "No transactions found",
+    "noTransactionsMatchFilters": "No transactions match your current filters. Try adjusting your search criteria."
   },
   "receipt": {
     "title": "Receipt",

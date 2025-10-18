@@ -167,16 +167,16 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <Text style={styles.emptyIcon}>📊</Text>
-      <Text style={styles.emptyTitle}>No transactions found</Text>
+      <Text style={styles.emptyTitle}>{t('transactions.noTransactionsFound')}</Text>
       <Text style={styles.emptyText}>
-        No transactions match your current filters. Try adjusting your search criteria.
+        {t('transactions.noTransactionsMatchFilters')}
       </Text>
       {onRetry && (
         <TouchableOpacity 
           style={styles.retryButton}
           onPress={onRetry}
         >
-          <Text style={styles.retryButtonText}>Refresh</Text>
+          <Text style={styles.retryButtonText}>{t('common.refresh')}</Text>
         </TouchableOpacity>
       )}
     </View>

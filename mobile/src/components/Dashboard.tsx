@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../services/AuthContext';
+import { useAppRefresh } from '../services/AppRefreshContext';
 import expenseService, { ExpenseStats } from '../services/expenseService';
 import currencyService from '../services/currencyService';
 import BottomNavigation from './BottomNavigation';
@@ -27,6 +28,7 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashboard', onNavigate, onAddExpense, onSettings }) => {
   const { user, logout } = useAuth();
   const { t, currentLanguage } = useTranslation();
+  const { refreshTrigger } = useAppRefresh();
   
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -37,6 +39,14 @@ const Dashboard: React.FC<DashboardProps> = ({ navigation, activeRoute = 'Dashbo
   useEffect(() => {
     loadUserStats();
   }, []);
+
+  // Listen for refresh triggers
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      console.log('🔄 Dashboard: Refresh triggered, reloading stats');
+      loadUserStats();
+    }
+  }, [refreshTrigger]);
 
 
   const loadUserStats = async () => {

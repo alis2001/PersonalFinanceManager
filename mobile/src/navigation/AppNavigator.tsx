@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../services/AuthContext';
-import pinService from '../services/pinService';
+import securePinService from '../services/SecurePINService';
 import authService from '../services/authService';
 
 // Import components
@@ -34,7 +34,7 @@ const AppNavigator: React.FC = () => {
 
   const checkPINRequirement = async () => {
     if (isAuthenticated) {
-      const pinEnabled = await pinService.isPINEnabled();
+      const pinEnabled = await securePinService.isPINEnabled();
       setPinRequired(pinEnabled);
     } else {
       setPinRequired(false);
@@ -48,7 +48,7 @@ const AppNavigator: React.FC = () => {
 
   const handleForgotPIN = async () => {
     // Force logout and disable PIN
-    await pinService.forceDisablePIN();
+    await securePinService.forceDisablePIN();
     await authService.clearTokens();
     setPinRequired(false);
     // This will trigger re-render and show login screen
