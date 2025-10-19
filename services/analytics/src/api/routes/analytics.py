@@ -18,6 +18,87 @@ from ...middleware.auth import get_user_id
 logger = structlog.get_logger(__name__)
 router = APIRouter()
 
+@router.get("/hierarchical", tags=["Analytics"])
+async def get_hierarchical_analytics(
+    request: Request,
+    period: str = Query("monthly", description="Period: daily, weekly, monthly, quarterly, yearly"),
+    user_id: str = Depends(get_user_id)
+):
+    """
+    Get hierarchical category analytics with spending breakdown
+    """
+    start_time = time.time()
+    
+    try:
+        # Get user's currency to determine date system
+        user_currency = await get_user_currency(user_id)
+        
+        # Calculate date range for the period based on user's currency
+        date_range = calculate_period_date_range(period, user_currency)
+        
+        # Get hierarchical categories with spending data
+        hierarchical_categories = await get_hierarchical_categories(user_id, date_range)
+        
+        # Get total expenses for percentage calculations
+        overview_data = await get_expense_overview(user_id, date_range)
+        
+        response_data = {
+            "success": True,
+            "period": period,
+            "date_range": date_range,
+            "total_expenses": float(overview_data["total_expenses"]),
+            "hierarchical_categories": hierarchical_categories,
+            "processing_time_ms": (time.time() - start_time) * 1000
+        }
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"Hierarchical analytics error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate hierarchical analytics: {str(e)}"
+        )
+
+@router.get("/category/{category_id}/breakdown", tags=["Analytics"])
+async def get_category_breakdown_analytics(
+    category_id: str,
+    request: Request,
+    period: str = Query("monthly", description="Period: daily, weekly, monthly, quarterly, yearly"),
+    user_id: str = Depends(get_user_id)
+):
+    """
+    Get detailed breakdown for a specific category and its children
+    """
+    start_time = time.time()
+    
+    try:
+        # Get user's currency to determine date system
+        user_currency = await get_user_currency(user_id)
+        
+        # Calculate date range for the period based on user's currency
+        date_range = calculate_period_date_range(period, user_currency)
+        
+        # Get category breakdown
+        breakdown_data = await get_category_breakdown(user_id, category_id, date_range)
+        
+        response_data = {
+            "success": True,
+            "period": period,
+            "date_range": date_range,
+            "breakdown": breakdown_data,
+            "processing_time_ms": (time.time() - start_time) * 1000
+        }
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"Category breakdown error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate category breakdown: {str(e)}"
+        )
+
 @router.get("/overview", tags=["Analytics"])
 async def get_analytics_overview(
     request: Request,
@@ -540,6 +621,134 @@ async def get_top_categories(user_id: str, date_range: dict) -> List[dict]:
         })
     
     return categories
+
+async def get_hierarchical_categories(user_id: str, date_range: dict) -> List[dict]:
+    """Get hierarchical category breakdown with spending data"""
+    query = """
+    SELECT 
+        c.id,
+        c.name as category_name,
+        c.description,
+        c.color as category_color,
+        c.icon as category_icon,
+        c.parent_id,
+        c.level,
+        c.path,
+        c.path_ids,
+        COALESCE(SUM(e.amount), 0) as total_amount,
+        COUNT(e.id) as transaction_count
+    FROM categories c
+    LEFT JOIN expenses e ON c.id = e.category_id 
+        AND e.user_id = $1 
+        AND e.user_date >= $2 AND e.user_date < $3
+    WHERE c.user_id = $1 AND c.type IN ('expense', 'both') AND c.is_active = true
+    GROUP BY c.id, c.name, c.description, c.color, c.icon, c.parent_id, c.level, c.path, c.path_ids
+    ORDER BY c.level ASC, c.path ASC
+    """
+    
+    results = await execute_query(query, user_id, date_range["start"], date_range["end"])
+    
+    # Calculate total for percentages
+    total_expenses = sum(Decimal(str(row["total_amount"])) for row in results)
+    
+    # Build hierarchical structure
+    category_map = {}
+    root_categories = []
+    
+    for row in results:
+        category = {
+            "id": str(row["id"]),
+            "name": row["category_name"],
+            "description": row["description"],
+            "color": row["category_color"] or "#64748b",
+            "icon": row["category_icon"] or "💰",
+            "parent_id": str(row["parent_id"]) if row["parent_id"] else None,
+            "level": row["level"],
+            "path": row["path"],
+            "path_ids": row["path_ids"] or [],
+            "total_amount": float(Decimal(str(row["total_amount"]))),
+            "percentage_of_total": float((Decimal(str(row["total_amount"])) / total_expenses * 100)) if total_expenses > 0 else 0,
+            "transaction_count": row["transaction_count"],
+            "children": []
+        }
+        
+        category_map[str(row["id"])] = category
+        
+        if row["parent_id"]:
+            parent_id = str(row["parent_id"])
+            if parent_id in category_map:
+                category_map[parent_id]["children"].append(category)
+        else:
+            root_categories.append(category)
+    
+    # Add children to parents
+    for category in category_map.values():
+        if category["parent_id"] and category["parent_id"] in category_map:
+            parent = category_map[category["parent_id"]]
+            if category not in parent["children"]:
+                parent["children"].append(category)
+    
+    return root_categories
+
+async def get_category_breakdown(user_id: str, category_id: str, date_range: dict) -> dict:
+    """Get detailed breakdown for a specific category and its children"""
+    query = """
+    WITH RECURSIVE category_tree AS (
+        -- Base case: the selected category
+        SELECT id, name, color, icon, parent_id, level, path, path_ids
+        FROM categories 
+        WHERE id = $1 AND user_id = $2
+        
+        UNION ALL
+        
+        -- Recursive case: children of the category
+        SELECT c.id, c.name, c.color, c.icon, c.parent_id, c.level, c.path, c.path_ids
+        FROM categories c
+        INNER JOIN category_tree ct ON c.parent_id = ct.id
+        WHERE c.user_id = $2 AND c.is_active = true
+    )
+    SELECT 
+        ct.id,
+        ct.name as category_name,
+        ct.color as category_color,
+        ct.icon as category_icon,
+        ct.level,
+        ct.path,
+        COALESCE(SUM(e.amount), 0) as total_amount,
+        COUNT(e.id) as transaction_count
+    FROM category_tree ct
+    LEFT JOIN expenses e ON ct.id = e.category_id 
+        AND e.user_id = $2 
+        AND e.user_date >= $3 AND e.user_date < $4
+    GROUP BY ct.id, ct.name, ct.color, ct.icon, ct.level, ct.path
+    ORDER BY ct.level ASC, total_amount DESC
+    """
+    
+    results = await execute_query(query, category_id, user_id, date_range["start"], date_range["end"])
+    
+    # Calculate total for percentages
+    total_amount = sum(Decimal(str(row["total_amount"])) for row in results)
+    
+    breakdown = []
+    for row in results:
+        amount = Decimal(str(row["total_amount"]))
+        breakdown.append({
+            "id": str(row["id"]),
+            "name": row["category_name"],
+            "color": row["category_color"] or "#64748b",
+            "icon": row["category_icon"] or "💰",
+            "level": row["level"],
+            "path": row["path"],
+            "total_amount": float(amount),
+            "percentage_of_total": float((amount / total_amount * 100)) if total_amount > 0 else 0,
+            "transaction_count": row["transaction_count"]
+        })
+    
+    return {
+        "category_id": category_id,
+        "breakdown": breakdown,
+        "total_amount": float(total_amount)
+    }
 
 def generate_simple_insights(overview_data: dict, top_categories: List[dict]) -> List[dict]:
     """Generate simple insights from real data"""

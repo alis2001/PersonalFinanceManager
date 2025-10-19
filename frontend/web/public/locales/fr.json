@@ -206,7 +206,21 @@
     "otherExpensesDesc": "Dépenses diverses et non catégorisées",
     "otherIncomeDesc": "Sources de revenus diverses",
     "personalCareDesc": "Coupes de cheveux, cosmétiques, gym, bien-être",
-    "rentalIncomeDesc": "Revenus de location de propriété"
+    "rentalIncomeDesc": "Revenus de location de propriété",
+    "parentCategory": "Catégorie Parent",
+    "noParentCategory": "Aucune Catégorie Parent (Catégorie Racine)",
+    "parentCategoryHelp": "Sélectionnez une catégorie parent pour créer une sous-catégorie",
+    "addSubcategory": "Ajouter Sous-catégorie",
+    "deleteWithSubcategories": "Supprimer '{{categoryName}}' et toutes les {{subcategoryCount}} sous-catégories ? Cette action ne peut pas être annulée.",
+    "cannotActivateSubcategoryInactiveParent": "Impossible d'activer la sous-catégorie tant que la catégorie parent est inactive. Veuillez d'abord activer la catégorie parent.",
+    "hasSubcategories": "A des sous-catégories",
+    "selectLeafCategory": "Sélectionnez une catégorie feuille (catégories sans sous-catégories)",
+    "noCategoriesAvailable": "Aucune catégorie disponible",
+    "types": {
+      "expense": "Dépense",
+      "income": "Revenu", 
+      "both": "Les deux"
+    }
   },
   "analytics": {
     "title": "Analyses",

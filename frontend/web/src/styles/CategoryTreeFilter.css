@@ -1,0 +1,240 @@
+.category-tree-filter {
+  position: relative;
+  width: 100%;
+}
+
+.category-filter-dropdown {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 48px;
+}
+
+.category-filter-dropdown:hover {
+  border-color: #3b82f6;
+}
+
+.category-filter-dropdown:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.selected-category {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.placeholder {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.category-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.category-name {
+  font-weight: 500;
+  color: #1f2937;
+  font-size: 1rem;
+}
+
+.dropdown-arrow {
+  color: #6b7280;
+  font-size: 0.8rem;
+  transition: transform 0.2s ease;
+}
+
+.category-tree-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+}
+
+.category-tree-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.category-tree-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 12px 12px 0 0;
+}
+
+.category-tree-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-button:hover {
+  background-color: darkgray;
+  color: #374151;
+}
+
+.category-tree-content {
+  padding: 20px 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.category-tree-options {
+  padding: 12px 0;
+}
+
+.category-tree-node {
+  width: 100%;
+}
+
+.category-tree-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  min-height: 36px;
+  border-radius: 6px;
+  margin: 2px 8px;
+}
+
+.category-tree-item:hover {
+  background-color: #f3f4f6;
+}
+
+.category-item-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.category-tree-item.selected {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: 2px solid #3b82f6;
+}
+
+.expand-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: #6b7280;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.expand-button:hover {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.expand-spacer {
+  width: 24px;
+  height: 24px;
+}
+
+.category-children {
+  background-color: #f9fafb;
+  margin-left: 20px;
+  border-left: 2px solid #e5e7eb;
+  border-radius: 0 8px 8px 0;
+}
+
+.subcategory-indicator {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-left: auto;
+  font-style: italic;
+  background-color: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .category-filter-dropdown {
+    padding: 12px 16px;
+    min-height: 48px;
+  }
+  
+  .category-tree-popup {
+    width: 95%;
+    max-width: none;
+    max-height: 90vh;
+  }
+  
+  .category-tree-header {
+    padding: 16px 20px;
+  }
+  
+  .category-tree-header h3 {
+    font-size: 1.1rem;
+  }
+  
+  .category-tree-item {
+    padding: 16px 20px;
+    margin: 4px 8px;
+  }
+  
+  .category-tree-content {
+    padding: 16px 0;
+  }
+}

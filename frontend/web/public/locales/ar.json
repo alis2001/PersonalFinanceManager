@@ -112,7 +112,21 @@
     "groceries": "البقالة",
     "gas": "البنزين",
     "insurance": "التأمين",
-    "other": "أخرى"
+    "other": "أخرى",
+    "parentCategory": "الفئة الرئيسية",
+    "noParentCategory": "لا توجد فئة رئيسية (فئة جذر)",
+    "parentCategoryHelp": "اختر فئة رئيسية لإنشاء فئة فرعية",
+    "addSubcategory": "إضافة فئة فرعية",
+    "deleteWithSubcategories": "حذف '{{categoryName}}' وجميع {{subcategoryCount}} الفئات الفرعية؟ لا يمكن التراجع عن هذا الإجراء.",
+    "cannotActivateSubcategoryInactiveParent": "لا يمكن تفعيل الفئة الفرعية بينما الفئة الرئيسية غير مفعلة. يرجى تفعيل الفئة الرئيسية أولاً.",
+    "hasSubcategories": "له فئات فرعية",
+    "selectLeafCategory": "اختر فئة نهائية (فئات بدون فئات فرعية)",
+    "noCategoriesAvailable": "لا توجد فئات متاحة",
+    "types": {
+      "expense": "مصروف",
+      "income": "دخل", 
+      "both": "كلاهما"
+    }
   },
   "analytics": {
     "title": "التحليلات",

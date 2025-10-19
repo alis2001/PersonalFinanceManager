@@ -19,16 +19,16 @@ RUN npm install --no-optional --loglevel=error --progress=false
 # Copy TypeScript config
 COPY tsconfig.json ./
 
-# Copy source code
-COPY src/ ./src/
-COPY public/ ./public/
-
 # FIXED: Use build argument for API URL (allows dev/prod flexibility)
 ARG REACT_APP_API_URL=http://localhost:8080/api
 ENV REACT_APP_API_URL=${REACT_APP_API_URL}
 ENV NODE_ENV=production
 
-# Build for production
+# Copy source code - this should always be last before build to ensure changes are picked up
+COPY src/ ./src/
+COPY public/ ./public/
+
+# Build for production - this will always run when source files change
 RUN npm run build
 
 # Production stage with nginx

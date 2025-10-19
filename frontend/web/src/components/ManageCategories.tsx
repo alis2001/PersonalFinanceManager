@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import categoryService from '../services/categoryService';
 import { useTranslation } from '../hooks/useTranslation';
 import type { Category } from '../services/categoryService';
+import { getTranslatedCategoryName, getHierarchicalCategoryName, isLeafCategory } from '../utils/categoryUtils';
 import '../styles/ManageCategories.css';
 
 interface ManageCategoriesProps {
@@ -17,6 +18,7 @@ interface CategoryFormData {
   icon: string;
   type: 'expense' | 'income' | 'both';
   is_active: boolean;
+  parent_id?: string;
 }
 
 const defaultFormData: CategoryFormData = {
@@ -25,7 +27,8 @@ const defaultFormData: CategoryFormData = {
   color: '#4A90E2',
   icon: '💰',
   type: 'expense',
-  is_active: true
+  is_active: true,
+  parent_id: undefined
 };
 
 const predefinedIcons = [
@@ -48,35 +51,6 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
   const { t } = useTranslation();
   const [categories, setCategories] = useState<Category[]>([]);
 
-  // Function to translate category names
-  const getTranslatedCategoryName = (categoryName: string): string => {
-    const categoryMap: { [key: string]: string } = {
-      'Bills & Utilities': t('categories.billsUtilities'),
-      'Food & Dining': t('categories.foodDining'),
-      'Transportation': t('categories.transportation'),
-      'Shopping': t('categories.shopping'),
-      'Entertainment': t('categories.entertainment'),
-      'Healthcare': t('categories.healthcare'),
-      'Education': t('categories.education'),
-      'Travel': t('categories.travel'),
-      'Groceries': t('categories.groceries'),
-      'Gas': t('categories.gas'),
-      'Insurance': t('categories.insurance'),
-      'Other': t('categories.other'),
-      'Business': t('categories.business'),
-      'Business Income': t('categories.businessIncome'),
-      'Freelance': t('categories.freelance'),
-      'Gifts & Bonuses': t('categories.giftsBonuses'),
-      'Gifts & Donations': t('categories.giftsDonations'),
-      'Home & Garden': t('categories.homeGarden'),
-      'Investment Returns': t('categories.investmentReturns'),
-      'Other Expenses': t('categories.otherExpenses'),
-      'Other Income': t('categories.otherIncome'),
-      'Personal Care': t('categories.personalCare'),
-      'Rental Income': t('categories.rentalIncome'),
-    };
-    return categoryMap[categoryName] || categoryName;
-  };
 
   // Function to translate category types
   const getTranslatedCategoryType = (type: string): string => {
@@ -125,6 +99,7 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
   const [formData, setFormData] = useState<CategoryFormData>(defaultFormData);
   const [formLoading, setFormLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (isOpen) {
@@ -157,6 +132,148 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
     setFormData(defaultFormData);
     setEditingCategory(null);
     setShowForm(false);
+    setExpandedCategories(new Set());
+  };
+
+  // Build hierarchical tree structure
+  const buildCategoryTree = (categories: Category[]) => {
+    const map = new Map<string, Category & { children: Category[] }>();
+    const roots: (Category & { children: Category[] })[] = [];
+    
+    // Create map with empty children arrays
+    categories.forEach(cat => {
+      map.set(cat.id, { ...cat, children: [] });
+    });
+    
+    // Build tree structure
+    categories.forEach(cat => {
+      if (cat.parent_id) {
+        const parent = map.get(cat.parent_id);
+        if (parent) {
+          parent.children.push(map.get(cat.id)!);
+        }
+      } else {
+        roots.push(map.get(cat.id)!);
+      }
+    });
+    
+    return roots;
+  };
+
+  const toggleCategoryExpansion = (categoryId: string) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(categoryId)) {
+      newExpanded.delete(categoryId);
+    } else {
+      newExpanded.add(categoryId);
+    }
+    setExpandedCategories(newExpanded);
+  };
+
+  // Get root categories that can be parents (excluding the current category being edited)
+  const getRootCategories = () => {
+    return categories.filter(cat => 
+      !cat.parent_id && 
+      cat.is_active && 
+      (!editingCategory || cat.id !== editingCategory.id)
+    );
+  };
+
+  // Get all categories that can be parents (excluding the current category being edited and its descendants)
+  const getAvailableParents = () => {
+    return categories.filter(cat => 
+      cat.is_active && 
+      (!editingCategory || (
+        cat.id !== editingCategory.id && 
+        !editingCategory.path_ids.includes(cat.id) // Prevent setting parent to descendant
+      ))
+    );
+  };
+
+  const renderCategoryTree = (category: Category & { children: Category[] }, level: number = 0): JSX.Element => {
+    const isExpanded = expandedCategories.has(category.id);
+    const hasChildren = category.children && category.children.length > 0;
+    
+    return (
+      <div key={category.id} className="category-tree-item">
+        <div 
+          className="category-card"
+          style={{ marginLeft: level === 0 ? '0px' : `${level * 16}px` }}
+        >
+          <div className="category-header">
+            <div className="category-tree-controls">
+              {hasChildren && (
+                <button
+                  className="tree-expand-btn"
+                  onClick={() => toggleCategoryExpansion(category.id)}
+                  aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                >
+                  {isExpanded ? '▼' : '▶'}
+                </button>
+              )}
+              {!hasChildren && <div className="tree-spacer" />}
+            </div>
+            
+            <div 
+              className="category-icon"
+              style={{ backgroundColor: category.color + '20', color: category.color }}
+            >
+              {category.icon}
+            </div>
+            <div className="category-info">
+              <h4>{getHierarchicalCategoryName(category, categories, t)}</h4>
+                        <span className={`type-badge ${category.type}`}>
+                          {t(`categories.types.${category.type}`)}
+                        </span>
+              {category.level > 1 && (
+                <span className="level-badge">Level {category.level}</span>
+              )}
+            </div>
+          </div>
+          
+          {category.description && (
+            <p className="category-description">{category.description}</p>
+          )}
+          
+          <div className="category-actions">
+            <button 
+              className="btn-add-subcategory"
+              onClick={() => handleAddSubcategory(category)}
+              disabled={formLoading}
+            >
+              + {t('categories.addSubcategory')}
+            </button>
+            <button 
+              className="btn-edit"
+              onClick={() => handleEdit(category)}
+              disabled={formLoading}
+            >
+              {t('common.edit')}
+            </button>
+            <button 
+              className="btn-deactivate"
+              onClick={() => handleToggleActive(category)}
+              disabled={formLoading}
+            >
+              {category.is_active ? t('categories.deactivate') : t('categories.activate')}
+            </button>
+            <button 
+              className={`btn-delete ${deleteConfirm === category.id ? 'confirm' : ''}`}
+              onClick={() => handleDelete(category.id)}
+              disabled={formLoading}
+            >
+              {deleteConfirm === category.id ? t('categories.confirmDelete') : t('common.delete')}
+            </button>
+          </div>
+        </div>
+        
+        {hasChildren && isExpanded && (
+          <div className="category-children">
+            {category.children?.map(child => renderCategoryTree(child as Category & { children: Category[] }, level + 1))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -218,7 +335,18 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
       color: category.color || '#4A90E2',
       icon: category.icon || '💰',
       type: category.type,
-      is_active: category.is_active
+      is_active: category.is_active,
+      parent_id: category.parent_id
+    });
+    setShowForm(true);
+    resetMessages();
+  };
+
+  const handleAddSubcategory = (parentCategory: Category) => {
+    setEditingCategory(null);
+    setFormData({
+      ...defaultFormData,
+      parent_id: parentCategory.id
     });
     setShowForm(true);
     resetMessages();
@@ -231,6 +359,23 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
     }
 
     try {
+      // Check if category has children
+      const category = categories.find(cat => cat.id === categoryId);
+      const hasChildren = categories.some(cat => cat.parent_id === categoryId);
+      
+      if (hasChildren) {
+        // Show confirmation for cascading delete
+        const confirmMessage = t('categories.deleteWithSubcategories', { 
+          categoryName: getTranslatedCategoryName(category?.name || '', t),
+          subcategoryCount: categories.filter(cat => cat.parent_id === categoryId).length
+        });
+        
+        if (!window.confirm(confirmMessage)) {
+          setDeleteConfirm(null);
+          return;
+        }
+      }
+
       const result = await categoryService.deleteCategory(categoryId);
       if (result.success) {
         setSuccess(t('categories.categoryDeleted'));
@@ -247,12 +392,50 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
 
   const handleToggleActive = async (category: Category) => {
     try {
+      // Check if this is a subcategory trying to be activated while parent is inactive
+      if (!category.is_active && category.parent_id) {
+        const parentCategory = categories.find(cat => cat.id === category.parent_id);
+        if (parentCategory && !parentCategory.is_active) {
+          setError(t('categories.cannotActivateSubcategoryInactiveParent'));
+          return;
+        }
+      }
+
+      // If we're deactivating a parent category, we need to deactivate all its subcategories too
+      if (category.is_active) {
+        // Find all subcategories (children and their children recursively)
+        const getAllSubcategories = (parentId: string): string[] => {
+          const directChildren = categories.filter(cat => cat.parent_id === parentId);
+          const allSubcategories: string[] = [];
+          
+          directChildren.forEach(child => {
+            allSubcategories.push(child.id);
+            allSubcategories.push(...getAllSubcategories(child.id));
+          });
+          
+          return allSubcategories;
+        };
+
+        const subcategoryIds = getAllSubcategories(category.id);
+        
+        // Deactivate all subcategories first
+        if (subcategoryIds.length > 0) {
+          const subcategoryPromises = subcategoryIds.map(subId => 
+            categoryService.updateCategory(subId, { is_active: false })
+          );
+          
+          await Promise.all(subcategoryPromises);
+        }
+      }
+
+      // Now update the main category
       const result = await categoryService.updateCategory(category.id, {
         is_active: !category.is_active
       });
       
       if (result.success) {
-        setSuccess(t(!category.is_active ? 'categories.categoryActivated' : 'categories.categoryDeactivated'));
+        const actionText = !category.is_active ? 'categories.categoryActivated' : 'categories.categoryDeactivated';
+        setSuccess(t(actionText));
         await loadCategories();
         onCategoriesUpdated();
       } else {
@@ -274,7 +457,7 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
 
   return (
     <div className="manage-categories-overlay" onClick={handleClose}>
-      <div className="manage-categories-modal" onClick={(e) => e.stopPropagation()}>
+      <div className={`manage-categories-modal ${showForm || editingCategory ? 'form-mode' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="manage-categories-header">
           <h2>{t('categories.manageCategories')}</h2>
           <button className="close-button" onClick={handleClose}>×</button>
@@ -310,60 +493,12 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
                   </button>
                 </div>
               ) : (
-                <div className="categories-grid">
-                  {categories.map((category) => (
-                    <div 
-                      key={category.id} 
-                      className={`category-card ${!category.is_active ? 'inactive' : ''}`}
-                    >
-                      <div className="category-header">
-                        <div 
-                          className="category-icon"
-                          style={{ backgroundColor: category.color + '20', color: category.color }}
-                        >
-                          {category.icon}
-                        </div>
-                        <div className="category-info">
-                          <h4>{getTranslatedCategoryName(category.name)}</h4>
-                          <span className={`type-badge ${category.type}`}>
-                            {getTranslatedCategoryType(category.type)}
-                          </span>
-                        </div>
-                        <div className="category-status">
-                          {category.is_active ? (
-                            <span className="status-active">{t('categories.active')}</span>
-                          ) : (
-                            <span className="status-inactive">{t('categories.inactive')}</span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {getTranslatedCategoryDescription(category.name) && (
-                        <p className="category-description">{getTranslatedCategoryDescription(category.name)}</p>
-                      )}
-                      
-                      <div className="category-actions">
-                        <button 
-                          className="btn-edit"
-                          onClick={() => handleEdit(category)}
-                        >
-                          {t('common.edit')}
-                        </button>
-                        <button 
-                          className={`btn-toggle ${category.is_active ? 'deactivate' : 'activate'}`}
-                          onClick={() => handleToggleActive(category)}
-                        >
-                          {category.is_active ? t('categories.deactivate') : t('categories.activate')}
-                        </button>
-                        <button 
-                          className={`btn-delete ${deleteConfirm === category.id ? 'confirm' : ''}`}
-                          onClick={() => handleDelete(category.id)}
-                        >
-                          {deleteConfirm === category.id ? t('categories.confirmDelete') : t('common.delete')}
-                        </button>
-                      </div>
+                <div className="categories-container">
+                  <div className="categories-tree">
+                    <div className="root-categories">
+                      {buildCategoryTree(categories).map(category => renderCategoryTree(category))}
                     </div>
-                  ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -419,10 +554,29 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
                     required
                     disabled={formLoading}
                   >
-                    <option value="expense">{t('categories.expense')}</option>
-                    <option value="income">{t('categories.income')}</option>
-                    <option value="both">{t('categories.both')}</option>
+                <option value="expense">{t('categories.types.expense')}</option>
+                <option value="income">{t('categories.types.income')}</option>
+                <option value="both">{t('categories.types.both')}</option>
                   </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="parent_id">{t('categories.parentCategory')}</label>
+                  <select
+                    id="parent_id"
+                    name="parent_id"
+                    value={formData.parent_id || ''}
+                    onChange={handleInputChange}
+                    disabled={formLoading}
+                  >
+                    <option value="">{t('categories.noParentCategory')}</option>
+                    {getAvailableParents().map(category => (
+                      <option key={category.id} value={category.id}>
+                        {'  '.repeat(category.level - 1)}{getTranslatedCategoryName(category.name, t)}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="form-help">{t('categories.parentCategoryHelp')}</small>
                 </div>
 
                 <div className="form-group">

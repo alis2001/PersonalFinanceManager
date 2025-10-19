@@ -214,7 +214,21 @@
     "otherExpensesDesc": "Miscellaneous and uncategorized expenses",
     "otherIncomeDesc": "Miscellaneous income sources",
     "personalCareDesc": "Haircuts, cosmetics, gym, wellness",
-    "rentalIncomeDesc": "Property rental earnings"
+    "rentalIncomeDesc": "Property rental earnings",
+    "parentCategory": "Parent Category",
+    "noParentCategory": "No Parent Category (Root Category)",
+    "parentCategoryHelp": "Select a parent category to create a subcategory. Leave empty for a root category.",
+    "addSubcategory": "Add Subcategory",
+    "deleteWithSubcategories": "Delete '{{categoryName}}' and all {{subcategoryCount}} subcategories? This action cannot be undone.",
+    "cannotActivateSubcategoryInactiveParent": "Cannot activate subcategory while parent category is inactive. Please activate the parent category first.",
+    "hasSubcategories": "Has subcategories",
+    "selectLeafCategory": "Select a leaf category (categories without subcategories)",
+    "noCategoriesAvailable": "No categories available",
+    "types": {
+      "expense": "Expense",
+      "income": "Income", 
+      "both": "Both"
+    }
   },
   "analytics": {
     "title": "Analytics",
@@ -285,6 +299,7 @@
     "fromDate": "From Date",
     "toDate": "To Date",
     "allCategories": "All Categories",
+    "selectCategory": "Select Category",
     "search": "Search",
     "searchPlaceholder": "Search in description or notes...",
     "clearFilters": "Clear Filters",

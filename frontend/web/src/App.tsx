@@ -74,6 +74,8 @@ function App() {
               </ProtectedRoute>
             } 
           />
+
+          {/* NEW ROUTE: Category Management */}
           
           {/* Redirect unknown routes to welcome */}
           <Route path="*" element={<Navigate to="/" replace />} />

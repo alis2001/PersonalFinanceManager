@@ -79,7 +79,7 @@ CREATE TABLE default_categories (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Categories table
+-- Categories table with unlimited hierarchical support
 CREATE TABLE categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -90,9 +90,17 @@ CREATE TABLE categories (
     type category_type NOT NULL DEFAULT 'both',
     is_default BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
+    -- Hierarchical fields
+    parent_id UUID REFERENCES categories(id) ON DELETE CASCADE,
+    level INTEGER NOT NULL DEFAULT 1,
+    path VARCHAR(1000) NOT NULL DEFAULT '',
+    path_ids UUID[] NOT NULL DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, name)
+    -- Constraints
+    CONSTRAINT unique_user_category_name_per_parent UNIQUE (user_id, name, parent_id),
+    CONSTRAINT valid_level CHECK (level >= 1),
+    CONSTRAINT valid_path CHECK (path IS NOT NULL)
 );
 
 -- Expenses table
@@ -163,6 +171,14 @@ CREATE TABLE budgets (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, category_id, period, start_date)
 );
+
+-- Indexes for hierarchical categories performance
+CREATE INDEX idx_categories_user_id ON categories(user_id);
+CREATE INDEX idx_categories_parent_id ON categories(parent_id);
+CREATE INDEX idx_categories_path ON categories(path);
+CREATE INDEX idx_categories_path_ids ON categories USING GIN(path_ids);
+CREATE INDEX idx_categories_user_type ON categories(user_id, type);
+CREATE INDEX idx_categories_level ON categories(level);
 
 -- MISSING DATA - Insert default categories (CRITICAL FIX)
 INSERT INTO default_categories (name, description, color, icon, type) VALUES

@@ -173,7 +173,21 @@
     "otherExpensesDesc": "Verschiedene und nicht kategorisierte Ausgaben",
     "otherIncomeDesc": "Verschiedene Einkommensquellen",
     "personalCareDesc": "Haarschnitte, Kosmetik, Fitnessstudio, Wellness",
-    "rentalIncomeDesc": "Mieteinkommen aus Immobilien"
+    "rentalIncomeDesc": "Mieteinkommen aus Immobilien",
+    "parentCategory": "Übergeordnete Kategorie",
+    "noParentCategory": "Keine übergeordnete Kategorie (Hauptkategorie)",
+    "parentCategoryHelp": "Wählen Sie eine übergeordnete Kategorie aus, um eine Unterkategorie zu erstellen",
+    "addSubcategory": "Unterkategorie hinzufügen",
+    "deleteWithSubcategories": "'{{categoryName}}' und alle {{subcategoryCount}} Unterkategorien löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "cannotActivateSubcategoryInactiveParent": "Unterkategorie kann nicht aktiviert werden, während die übergeordnete Kategorie inaktiv ist. Bitte aktivieren Sie zuerst die übergeordnete Kategorie.",
+    "hasSubcategories": "Hat Unterkategorien",
+    "selectLeafCategory": "Wählen Sie eine Blattkategorie (Kategorien ohne Unterkategorien)",
+    "noCategoriesAvailable": "Keine Kategorien verfügbar",
+    "types": {
+      "expense": "Ausgabe",
+      "income": "Einkommen", 
+      "both": "Beide"
+    }
   },
   "analytics": {
     "title": "Analysen",

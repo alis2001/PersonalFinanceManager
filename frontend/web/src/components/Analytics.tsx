@@ -20,6 +20,9 @@ import currencyService from '../services/currencyService';
 import dateSystemService from '../services/dateSystemService';
 import dateConversionService from '../services/dateConversionService';
 import { useTranslation } from '../hooks/useTranslation';
+import { getTranslatedCategoryName, getHierarchicalCategoryName } from '../utils/categoryUtils';
+import categoryService from '../services/categoryService';
+import type { Category } from '../services/categoryService';
 import '../styles/Analytics.css';
 
 // Register Chart.js components
@@ -84,36 +87,32 @@ interface User {
 const Analytics: React.FC = () => {
   const navigate = useNavigate();
   const { t, currentLanguage } = useTranslation();
+  const [categories, setCategories] = useState<Category[]>([]);
 
-  // Function to translate category names
-  const getTranslatedCategoryName = (categoryName: string): string => {
-    const categoryMap: { [key: string]: string } = {
-      'Bills & Utilities': t('categories.billsUtilities'),
-      'Food & Dining': t('categories.foodDining'),
-      'Transportation': t('categories.transportation'),
-      'Shopping': t('categories.shopping'),
-      'Entertainment': t('categories.entertainment'),
-      'Healthcare': t('categories.healthcare'),
-      'Education': t('categories.education'),
-      'Travel': t('categories.travel'),
-      'Groceries': t('categories.groceries'),
-      'Gas': t('categories.gas'),
-      'Insurance': t('categories.insurance'),
-      'Other': t('categories.other'),
-      'Business': t('categories.business'),
-      'Business Income': t('categories.businessIncome'),
-      'Freelance': t('categories.freelance'),
-      'Gifts & Bonuses': t('categories.giftsBonuses'),
-      'Gifts & Donations': t('categories.giftsDonations'),
-      'Home & Garden': t('categories.homeGarden'),
-      'Investment Returns': t('categories.investmentReturns'),
-      'Other Expenses': t('categories.otherExpenses'),
-      'Other Income': t('categories.otherIncome'),
-      'Personal Care': t('categories.personalCare'),
-      'Rental Income': t('categories.rentalIncome'),
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const result = await categoryService.getCategories();
+        if (result.success && result.categories) {
+          setCategories(result.categories);
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error);
+      }
     };
-    return categoryMap[categoryName] || categoryName;
+
+    loadCategories();
+  }, []);
+
+  // Function to get hierarchical category name
+  const getCategoryDisplayName = (categoryName: string): string => {
+    const category = categories.find(cat => cat.name === categoryName);
+    if (category && category.parent_id) {
+      return getHierarchicalCategoryName(category, categories, t);
+    }
+    return getTranslatedCategoryName(categoryName, t);
   };
+
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
@@ -229,7 +228,7 @@ const Analytics: React.FC = () => {
     
     if (insight.title === 'Highest Spending' || insight.title?.toLowerCase().includes('highest spending')) {
       const topCategory = overview?.top_expense_categories?.[0];
-      const translatedCategoryName = getTranslatedCategoryName(topCategory?.category_name || '');
+      const translatedCategoryName = getCategoryDisplayName(topCategory?.category_name || '');
       return {
         ...insight,
         title: t('analytics.highestSpending', { category: translatedCategoryName }),
@@ -265,7 +264,7 @@ const Analytics: React.FC = () => {
     
     if (insight.title === 'Category Breakdown') {
       const categoryMatch = insight.description.match(/(\w+(?:\s+\w+)*)/);
-      const translatedCategoryName = categoryMatch ? getTranslatedCategoryName(categoryMatch[1]) : '';
+      const translatedCategoryName = categoryMatch ? getCategoryDisplayName(categoryMatch[1]) : '';
       return {
         ...insight,
         title: t('analytics.categoryBreakdown'),
@@ -310,7 +309,7 @@ const Analytics: React.FC = () => {
     
     if (insight.title === 'Largest Transaction') {
       const categoryMatch = insight.description.match(/for\s+(\w+(?:\s+\w+)*)/i);
-      const translatedCategoryName = categoryMatch ? getTranslatedCategoryName(categoryMatch[1]) : '';
+      const translatedCategoryName = categoryMatch ? getCategoryDisplayName(categoryMatch[1]) : '';
       return {
         ...insight,
         title: t('analytics.largestTransaction'),
@@ -323,7 +322,7 @@ const Analytics: React.FC = () => {
     
     if (insight.title === 'Smallest Transaction') {
       const categoryMatch = insight.description.match(/for\s+(\w+(?:\s+\w+)*)/i);
-      const translatedCategoryName = categoryMatch ? getTranslatedCategoryName(categoryMatch[1]) : '';
+      const translatedCategoryName = categoryMatch ? getCategoryDisplayName(categoryMatch[1]) : '';
       return {
         ...insight,
         title: t('analytics.smallestTransaction'),
@@ -336,7 +335,7 @@ const Analytics: React.FC = () => {
     
     // Fallback: try to translate common insight titles
     const commonInsightTitles: { [key: string]: string } = {
-      'Highest Spending': t('analytics.highestSpending', { category: getTranslatedCategoryName(insight.title) }),
+      'Highest Spending': t('analytics.highestSpending', { category: getCategoryDisplayName(insight.title) }),
       'Spending Summary': t('analytics.spendingSummary'),
       'Transaction Pattern': t('analytics.transactionPattern'),
       'Spending Trend': t('analytics.spendingTrend'),
@@ -440,7 +439,7 @@ const Analytics: React.FC = () => {
               if (item.label && /^\d{4}-\d{2}-\d{2}/.test(item.label)) {
                 return formatDateForUser(item.label);
               }
-              return getTranslatedCategoryName(item.label);
+              return getCategoryDisplayName(item.label);
             }),
             datasets: [{
               data: chart.data.map((item: any) => item.value),
@@ -490,7 +489,7 @@ const Analytics: React.FC = () => {
               if (label && /^\d{4}-\d{2}-\d{2}/.test(label)) {
                 return formatDateForUser(label);
               }
-              return getTranslatedCategoryName(label);
+              return getCategoryDisplayName(label);
             }) || chart.data.labels,
             datasets: chart.data.datasets.map((dataset: any, index: number) => ({
               ...dataset,
@@ -564,7 +563,7 @@ const Analytics: React.FC = () => {
               if (label && /^\d{4}-\d{2}-\d{2}/.test(label)) {
                 return formatDateForUser(label);
               }
-              return getTranslatedCategoryName(label);
+              return getCategoryDisplayName(label);
             }) || chart.data.labels,
             datasets: chart.data.datasets.map((dataset: any, index: number) => {
               const originalColor = dataset.borderColor || dataset.backgroundColor || modernColors[index % modernColors.length];
@@ -780,7 +779,7 @@ const Analytics: React.FC = () => {
                   <div className="category-info">
                     <span className="category-icon">{category.category_icon || '•'}</span>
                     <div className="category-details">
-                      <h4>{getTranslatedCategoryName(category.category_name)}</h4>
+                      <h4>{getCategoryDisplayName(category.category_name)}</h4>
                       <p>{formatCurrency(category.total_amount)} ({category.percentage_of_total.toFixed(1)}%)</p>
                     </div>
                   </div>

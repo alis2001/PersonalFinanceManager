@@ -6,6 +6,7 @@ import { useTranslation } from '../hooks/useTranslation';
 import type { Category } from '../services/categoryService';
 import type { Expense } from '../services/expenseService';
 import ConditionalDatePicker from './ConditionalDatePicker';
+import CategoryTreeSelector from './CategoryTreeSelector';
 import '../styles/EditExpense.css';
 
 interface EditExpenseProps {
@@ -19,35 +20,6 @@ interface EditExpenseProps {
 const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onExpenseUpdated, userCurrency = 'USD' }) => {
   const { t, currentLanguage } = useTranslation();
 
-  // Function to translate category names
-  const getTranslatedCategoryName = (categoryName: string): string => {
-    const categoryMap: { [key: string]: string } = {
-      'Bills & Utilities': t('categories.billsUtilities'),
-      'Food & Dining': t('categories.foodDining'),
-      'Transportation': t('categories.transportation'),
-      'Shopping': t('categories.shopping'),
-      'Entertainment': t('categories.entertainment'),
-      'Healthcare': t('categories.healthcare'),
-      'Education': t('categories.education'),
-      'Travel': t('categories.travel'),
-      'Groceries': t('categories.groceries'),
-      'Gas': t('categories.gas'),
-      'Insurance': t('categories.insurance'),
-      'Other': t('categories.other'),
-      'Business': t('categories.business'),
-      'Business Income': t('categories.businessIncome'),
-      'Freelance': t('categories.freelance'),
-      'Gifts & Bonuses': t('categories.giftsBonuses'),
-      'Gifts & Donations': t('categories.giftsDonations'),
-      'Home & Garden': t('categories.homeGarden'),
-      'Investment Returns': t('categories.investmentReturns'),
-      'Other Expenses': t('categories.otherExpenses'),
-      'Other Income': t('categories.otherIncome'),
-      'Personal Care': t('categories.personalCare'),
-      'Rental Income': t('categories.rentalIncome'),
-    };
-    return categoryMap[categoryName] || categoryName;
-  };
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
@@ -266,22 +238,13 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
             {categoriesLoading ? (
               <div className="loading-select">{t('expenses.loadingCategories')}</div>
             ) : (
-              <select
-                id="categoryId"
-                name="categoryId"
-                value={formData.categoryId}
-                onChange={handleInputChange}
-                required
+              <CategoryTreeSelector
+                categories={categories}
+                selectedCategoryId={formData.categoryId}
+                onCategorySelect={(categoryId) => setFormData(prev => ({ ...prev, categoryId }))}
                 disabled={loading}
-                className="category-select"
-              >
-                <option value="">{t('expenses.selectCategory')}</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.icon} {getTranslatedCategoryName(category.name)}
-                  </option>
-                ))}
-              </select>
+                placeholder={t('expenses.selectCategory')}
+              />
             )}
           </div>
 

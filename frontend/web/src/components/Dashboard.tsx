@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import expenseService from '../services/expenseService';
+import categoryService from '../services/categoryService';
 import currencyService from '../services/currencyService';
 import type { Expense } from '../services/expenseService';
+import type { Category } from '../services/categoryService';
 import AddExpense from './AddExpense';
 import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
@@ -11,6 +13,7 @@ import ManageCategories from './ManageCategories';
 // import ReceiptUpload from './ReceiptUpload'; // COMMENTED OUT - Not fully implemented
 import LanguageSwitcher from './LanguageSwitcher';
 import { useTranslation } from '../hooks/useTranslation';
+import { getTranslatedCategoryName, getHierarchicalCategoryName } from '../utils/categoryUtils';
 import '../styles/Dashboard.css';
 
 interface User {
@@ -36,35 +39,71 @@ interface ExpenseStats {
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { t, currentLanguage } = useTranslation();
+  const [categories, setCategories] = useState<Category[]>([]);
 
-  // Function to translate category names
-  const getTranslatedCategoryName = (categoryName: string): string => {
-    const categoryMap: { [key: string]: string } = {
-      'Bills & Utilities': t('categories.billsUtilities'),
-      'Food & Dining': t('categories.foodDining'),
-      'Transportation': t('categories.transportation'),
-      'Shopping': t('categories.shopping'),
-      'Entertainment': t('categories.entertainment'),
-      'Healthcare': t('categories.healthcare'),
-      'Education': t('categories.education'),
-      'Travel': t('categories.travel'),
-      'Groceries': t('categories.groceries'),
-      'Gas': t('categories.gas'),
-      'Insurance': t('categories.insurance'),
-      'Other': t('categories.other'),
-      'Business': t('categories.business'),
-      'Business Income': t('categories.businessIncome'),
-      'Freelance': t('categories.freelance'),
-      'Gifts & Bonuses': t('categories.giftsBonuses'),
-      'Gifts & Donations': t('categories.giftsDonations'),
-      'Home & Garden': t('categories.homeGarden'),
-      'Investment Returns': t('categories.investmentReturns'),
-      'Other Expenses': t('categories.otherExpenses'),
-      'Other Income': t('categories.otherIncome'),
-      'Personal Care': t('categories.personalCare'),
-      'Rental Income': t('categories.rentalIncome'),
-    };
-    return categoryMap[categoryName] || categoryName;
+  // Function to get hierarchical category name
+  const getCategoryDisplayName = (categoryName: string): string => {
+    const category = categories.find(cat => cat.name === categoryName);
+    if (category && category.parent_id) {
+      return getHierarchicalCategoryName(category, categories, t);
+    }
+    return getTranslatedCategoryName(categoryName, t);
+  };
+
+  // Function to aggregate expenses by root categories
+  const aggregateByRootCategories = (topCategories: Array<{
+    name: string;
+    color: string;
+    icon: string;
+    amount: number;
+  }>) => {
+    const rootCategoryMap = new Map<string, {
+      name: string;
+      color: string;
+      icon: string;
+      amount: number;
+    }>();
+
+    topCategories.forEach(category => {
+      const categoryObj = categories.find(cat => cat.name === category.name);
+      
+      if (!categoryObj) {
+        // If category not found in categories list, treat as root
+        rootCategoryMap.set(category.name, category);
+        return;
+      }
+
+      // Find the root category
+      let rootCategory = categoryObj;
+      while (rootCategory.parent_id) {
+        const parent = categories.find(cat => cat.id === rootCategory.parent_id);
+        if (parent) {
+          rootCategory = parent;
+        } else {
+          break;
+        }
+      }
+
+      const rootCategoryName = rootCategory.name;
+      
+      if (rootCategoryMap.has(rootCategoryName)) {
+        // Add to existing root category
+        const existing = rootCategoryMap.get(rootCategoryName)!;
+        existing.amount += category.amount;
+      } else {
+        // Create new root category entry
+        rootCategoryMap.set(rootCategoryName, {
+          name: rootCategoryName,
+          color: rootCategory.color || '#6b7280',
+          icon: rootCategory.icon || '📁',
+          amount: category.amount
+        });
+      }
+    });
+
+    // Convert map to array and sort by amount
+    return Array.from(rootCategoryMap.values())
+      .sort((a, b) => b.amount - a.amount);
   };
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,8 +127,20 @@ const Dashboard: React.FC = () => {
     if (user) {
       loadExpenseStats();
       loadRecentExpenses();
+      loadCategories();
     }
   }, [user]);
+
+  const loadCategories = async () => {
+    try {
+      const result = await categoryService.getCategories();
+      if (result.success && result.categories) {
+        setCategories(result.categories);
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
 
   const loadUserProfile = async () => {
     if (!authService.isAuthenticated()) {
@@ -279,12 +330,12 @@ const Dashboard: React.FC = () => {
             <div className="top-categories-section">
               <h2>{t('dashboard.topCategoriesThisMonth')}</h2>
               <div className="category-grid">
-                {monthlyStats.topCategories.map((category, index) => (
+                {aggregateByRootCategories(monthlyStats.topCategories).map((category, index) => (
                   <div key={index} className="category-item">
                     <div className="category-info">
                       <span className="category-icon">{category.icon}</span>
                       <div>
-                        <h4>{getTranslatedCategoryName(category.name)}</h4>
+                        <h4>{getTranslatedCategoryName(category.name, t)}</h4>
                         <p className="category-amount">{formatCurrency(category.amount)}</p>
                       </div>
                     </div>

@@ -12,6 +12,13 @@ export interface Category {
   icon?: string;
   type: 'income' | 'expense' | 'both';
   is_active: boolean;
+  // Hierarchical fields
+  parent_id?: string;
+  level: number;
+  path: string;
+  path_ids: string[];
+  // Children (for tree structure)
+  children?: Category[];
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +40,7 @@ export interface CreateCategoryData {
   icon?: string;
   type: 'income' | 'expense' | 'both';
   is_active?: boolean;
+  parent_id?: string;
 }
 
 export interface UpdateCategoryData extends Partial<CreateCategoryData> {
@@ -152,6 +160,9 @@ class CategoryService {
     active?: boolean;
     page?: number;
     limit?: number;
+    includeChildren?: boolean;
+    level?: number;
+    parentId?: string;
   } = {}): Promise<CategoryResponse> {
     try {
       const queryParams = new URLSearchParams();
@@ -171,6 +182,18 @@ class CategoryService {
 
       if (params.limit !== undefined) {
         queryParams.append('limit', params.limit.toString());
+      }
+
+      if (params.includeChildren !== undefined) {
+        queryParams.append('includeChildren', params.includeChildren.toString());
+      }
+
+      if (params.level !== undefined) {
+        queryParams.append('level', params.level.toString());
+      }
+
+      if (params.parentId) {
+        queryParams.append('parentId', params.parentId);
       }
 
       const endpoint = `/categories${queryParams.toString() ? `?${queryParams}` : ''}`;
@@ -288,9 +311,10 @@ class CategoryService {
     }
   }
 
-  async deleteCategory(id: string): Promise<CategoryResponse> {
+  async deleteCategory(id: string, deleteChildren: boolean = false): Promise<CategoryResponse> {
     try {
-      const response = await this.makeRequest(`/categories/${id}`, {
+      const endpoint = `/categories/${id}${deleteChildren ? '?deleteChildren=true' : ''}`;
+      const response = await this.makeRequest(endpoint, {
         method: 'DELETE',
       });
 
@@ -299,10 +323,51 @@ class CategoryService {
     } catch (error: any) {
       console.error('Delete category error:', error);
       if (error.message === 'Token refreshed, retry request') {
-        return this.deleteCategory(id);
+        return this.deleteCategory(id, deleteChildren);
       }
       return { success: false, error: error.message };
     }
+  }
+
+  async moveCategory(id: string, newParentId?: string): Promise<CategoryResponse> {
+    try {
+      const response = await this.makeRequest(`/categories/${id}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ new_parent_id: newParentId }),
+      });
+
+      const data = await this.handleResponse(response);
+      return { success: true, category: data.category };
+    } catch (error: any) {
+      console.error('Move category error:', error);
+      if (error.message === 'Token refreshed, retry request') {
+        return this.moveCategory(id, newParentId);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getCategoryTree(type?: 'income' | 'expense' | 'both'): Promise<CategoryResponse> {
+    return this.getCategories({ 
+      type, 
+      active: true, 
+      includeChildren: true 
+    });
+  }
+
+  async getRootCategories(type?: 'income' | 'expense' | 'both'): Promise<CategoryResponse> {
+    return this.getCategories({ 
+      type, 
+      active: true, 
+      level: 1 
+    });
+  }
+
+  async getSubCategories(parentId: string): Promise<CategoryResponse> {
+    return this.getCategories({ 
+      active: true, 
+      parentId 
+    });
   }
 
   async getCategoryStats(): Promise<CategoryResponse> {

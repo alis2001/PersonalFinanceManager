@@ -213,7 +213,21 @@
     "otherExpensesDesc": "هزینه‌های متفرقه و دسته‌بندی نشده",
     "otherIncomeDesc": "منابع درآمد متفرقه",
     "personalCareDesc": "آرایشگاه، لوازم آرایشی، باشگاه، سلامتی",
-    "rentalIncomeDesc": "درآمد اجاره ملک"
+    "rentalIncomeDesc": "درآمد اجاره ملک",
+    "parentCategory": "دسته‌بندی والد",
+    "noParentCategory": "بدون دسته‌بندی والد (دسته‌بندی اصلی)",
+    "parentCategoryHelp": "یک دسته‌بندی والد انتخاب کنید تا زیردسته ایجاد کنید",
+    "addSubcategory": "افزودن زیردسته",
+    "deleteWithSubcategories": "حذف '{{categoryName}}' و همه {{subcategoryCount}} زیردسته‌ها؟ این عمل قابل بازگشت نیست.",
+    "cannotActivateSubcategoryInactiveParent": "نمی‌توان زیردسته را فعال کرد در حالی که دسته‌بندی والد غیرفعال است. لطفاً ابتدا دسته‌بندی والد را فعال کنید.",
+    "hasSubcategories": "دارای زیردسته",
+    "selectLeafCategory": "یک دسته‌بندی برگ انتخاب کنید (دسته‌بندی‌های بدون زیردسته)",
+    "noCategoriesAvailable": "هیچ دسته‌بندی در دسترس نیست",
+    "types": {
+      "expense": "هزینه",
+      "income": "درآمد", 
+      "both": "هر دو"
+    }
   },
   "analytics": {
     "title": "تحلیل‌ها",

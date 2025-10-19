@@ -6,6 +6,11 @@ interface Category {
   icon?: string;
   type: 'income' | 'expense' | 'both';
   is_active: boolean;
+  parent_id?: string;
+  level: number;
+  path: string;
+  path_ids: string[];
+  children?: Category[];
   created_at: string;
   updated_at: string;
 }
@@ -177,6 +182,7 @@ class CategoryService {
     icon?: string;
     type: 'income' | 'expense' | 'both';
     is_active?: boolean;
+    parent_id?: string;
   }): Promise<CategoryResponse> {
     try {
       const response = await fetch(`${this.categoryURL}/categories`, {
@@ -207,6 +213,7 @@ class CategoryService {
     icon?: string;
     type?: 'income' | 'expense' | 'both';
     is_active?: boolean;
+    parent_id?: string;
   }): Promise<CategoryResponse> {
     try {
       const response = await fetch(`${this.categoryURL}/categories/${id}`, {

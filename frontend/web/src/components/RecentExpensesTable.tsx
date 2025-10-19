@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Expense } from '../services/expenseService';
 import expenseService from '../services/expenseService';
+import categoryService from '../services/categoryService';
 import currencyService from '../services/currencyService';
 import dateConversionService from '../services/dateConversionService';
 import { useTranslation } from '../hooks/useTranslation';
+import { getTranslatedCategoryName, getHierarchicalCategoryName } from '../utils/categoryUtils';
+import type { Category } from '../services/categoryService';
 import '../styles/RecentExpensesTable.css';
 
 interface RecentExpensesTableProps {
@@ -22,36 +25,23 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
   userCurrency = 'USD'
 }) => {
   const { t, currentLanguage } = useTranslation();
+  const [categories, setCategories] = useState<Category[]>([]);
 
-  // Function to translate category names
-  const getTranslatedCategoryName = (categoryName: string): string => {
-    const categoryMap: { [key: string]: string } = {
-      'Bills & Utilities': t('categories.billsUtilities'),
-      'Food & Dining': t('categories.foodDining'),
-      'Transportation': t('categories.transportation'),
-      'Shopping': t('categories.shopping'),
-      'Entertainment': t('categories.entertainment'),
-      'Healthcare': t('categories.healthcare'),
-      'Education': t('categories.education'),
-      'Travel': t('categories.travel'),
-      'Groceries': t('categories.groceries'),
-      'Gas': t('categories.gas'),
-      'Insurance': t('categories.insurance'),
-      'Other': t('categories.other'),
-      'Business': t('categories.business'),
-      'Business Income': t('categories.businessIncome'),
-      'Freelance': t('categories.freelance'),
-      'Gifts & Bonuses': t('categories.giftsBonuses'),
-      'Gifts & Donations': t('categories.giftsDonations'),
-      'Home & Garden': t('categories.homeGarden'),
-      'Investment Returns': t('categories.investmentReturns'),
-      'Other Expenses': t('categories.otherExpenses'),
-      'Other Income': t('categories.otherIncome'),
-      'Personal Care': t('categories.personalCare'),
-      'Rental Income': t('categories.rentalIncome'),
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const result = await categoryService.getCategories();
+        if (result.success && result.categories) {
+          setCategories(result.categories);
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error);
+      }
     };
-    return categoryMap[categoryName] || categoryName;
-  };
+
+    loadCategories();
+  }, []);
+
 
   const formatDate = (userDate: string): string => {
     // userDate is already in YYYY-MM-DD format (user's local date)
@@ -157,8 +147,65 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
                     >
                       {expense.category.icon}
                     </div>
-                    <span className="category-name">
-                      {getTranslatedCategoryName(expense.category.name)}
+                    <span 
+                      className="category-name"
+                      title={(() => {
+                        // Find the full category information from the categories list
+                        const fullCategory = categories.find(cat => cat.name === expense.category.name);
+                        if (fullCategory && fullCategory.parent_id) {
+                          return getHierarchicalCategoryName(fullCategory, categories, t);
+                        }
+                        return getTranslatedCategoryName(expense.category.name, t);
+                      })()}
+                      onMouseEnter={(e) => {
+                        const tooltip = e.target as HTMLElement;
+                        const title = tooltip.getAttribute('title');
+                        if (title && title !== tooltip.textContent) {
+                          const tooltipElement = document.createElement('div');
+                          tooltipElement.className = 'custom-tooltip';
+                          tooltipElement.textContent = title;
+                          tooltipElement.style.cssText = `
+                            position: fixed;
+                            background: rgba(0, 0, 0, 0.9);
+                            color: white;
+                            padding: 8px 12px;
+                            border-radius: 6px;
+                            font-size: 0.8rem;
+                            white-space: nowrap;
+                            z-index: 10000;
+                            pointer-events: none;
+                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                            opacity: 1;
+                            transition: opacity 0.1s ease;
+                          `;
+                          document.body.appendChild(tooltipElement);
+                          
+                          const updatePosition = (event: MouseEvent) => {
+                            tooltipElement.style.left = (event.clientX + 10) + 'px';
+                            tooltipElement.style.top = (event.clientY - 30) + 'px';
+                          };
+                          
+                          updatePosition(e.nativeEvent);
+                          tooltip.addEventListener('mousemove', updatePosition);
+                          
+                          tooltip.addEventListener('mouseleave', () => {
+                            document.body.removeChild(tooltipElement);
+                            tooltip.removeEventListener('mousemove', updatePosition);
+                          }, { once: true });
+                        }
+                      }}
+                    >
+                      {(() => {
+                        // Find the full category information from the categories list
+                        const fullCategory = categories.find(cat => cat.name === expense.category.name);
+                        if (fullCategory && fullCategory.parent_id) {
+                          const fullName = getHierarchicalCategoryName(fullCategory, categories, t);
+                          // Truncate if too long, show with ellipsis
+                          return fullName.length > 25 ? fullName.substring(0, 22) + '...' : fullName;
+                        }
+                        const translatedName = getTranslatedCategoryName(expense.category.name, t);
+                        return translatedName.length > 25 ? translatedName.substring(0, 22) + '...' : translatedName;
+                      })()}
                     </span>
                   </div>
                 </td>

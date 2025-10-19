@@ -6,6 +6,8 @@ import currencyService from '../services/currencyService';
 import { useTranslation } from '../hooks/useTranslation';
 import type { Category } from '../services/categoryService';
 import ConditionalDatePicker from './ConditionalDatePicker';
+import CategoryTreeSelector from './CategoryTreeSelector';
+import { getLeafCategories } from '../utils/categoryUtils';
 import '../styles/AddExpense.css';
 
 interface AddExpenseProps {
@@ -325,22 +327,13 @@ const AddExpense: React.FC<AddExpenseProps> = ({
             {categoriesLoading ? (
               <div className="loading-categories">{t('expenses.loadingCategories')}</div>
             ) : (
-              <select
-                id="categoryId"
-                name="categoryId"
-                value={formData.categoryId}
-                onChange={handleInputChange}
-                required
+              <CategoryTreeSelector
+                categories={categories}
+                selectedCategoryId={formData.categoryId}
+                onCategorySelect={(categoryId) => setFormData(prev => ({ ...prev, categoryId }))}
                 disabled={loading}
-                className="category-select"
-              >
-                <option value="">{t('expenses.selectCategory')}</option>
-                {categories.map(category => (
-                  <option key={category.id} value={category.id}>
-                    {category.icon} {getTranslatedCategoryName(category.name)}
-                  </option>
-                ))}
-              </select>
+                placeholder={t('expenses.selectCategory')}
+              />
             )}
           </div>
 

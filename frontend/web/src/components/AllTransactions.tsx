@@ -5,45 +5,26 @@ import expenseService from '../services/expenseService';
 import categoryService from '../services/categoryService';
 import dateConversionService from '../services/dateConversionService';
 import { useTranslation } from '../hooks/useTranslation';
+import { getTranslatedCategoryName, getHierarchicalCategoryName } from '../utils/categoryUtils';
 import type { Expense } from '../services/expenseService';
 import type { Category } from '../services/categoryService';
 import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
 import ConditionalDatePicker from './ConditionalDatePicker';
+import CategoryTreeFilter from './CategoryTreeFilter';
 import '../styles/AllTransactions.css';
 
 const AllTransactions: React.FC = () => {
   const navigate = useNavigate();
   const { t, currentLanguage } = useTranslation();
 
-  // Function to translate category names
-  const getTranslatedCategoryName = (categoryName: string): string => {
-    const categoryMap: { [key: string]: string } = {
-      'Bills & Utilities': t('categories.billsUtilities'),
-      'Food & Dining': t('categories.foodDining'),
-      'Transportation': t('categories.transportation'),
-      'Shopping': t('categories.shopping'),
-      'Entertainment': t('categories.entertainment'),
-      'Healthcare': t('categories.healthcare'),
-      'Education': t('categories.education'),
-      'Travel': t('categories.travel'),
-      'Groceries': t('categories.groceries'),
-      'Gas': t('categories.gas'),
-      'Insurance': t('categories.insurance'),
-      'Other': t('categories.other'),
-      'Business': t('categories.business'),
-      'Business Income': t('categories.businessIncome'),
-      'Freelance': t('categories.freelance'),
-      'Gifts & Bonuses': t('categories.giftsBonuses'),
-      'Gifts & Donations': t('categories.giftsDonations'),
-      'Home & Garden': t('categories.homeGarden'),
-      'Investment Returns': t('categories.investmentReturns'),
-      'Other Expenses': t('categories.otherExpenses'),
-      'Other Income': t('categories.otherIncome'),
-      'Personal Care': t('categories.personalCare'),
-      'Rental Income': t('categories.rentalIncome'),
-    };
-    return categoryMap[categoryName] || categoryName;
+  // Function to get hierarchical category name
+  const getCategoryDisplayName = (categoryName: string): string => {
+    const category = categories.find(cat => cat.name === categoryName);
+    if (category && category.parent_id) {
+      return getHierarchicalCategoryName(category, categories, t);
+    }
+    return getTranslatedCategoryName(categoryName, t);
   };
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
@@ -103,6 +84,16 @@ const AllTransactions: React.FC = () => {
     setLoading(true);
     
     try {
+      // If a category is selected, get all subcategory IDs for hierarchical filtering
+      let categoryIds: string[] = [];
+      if (filters.categoryId) {
+        const selectedCategory = categories.find(cat => cat.id === filters.categoryId);
+        if (selectedCategory) {
+          // Get all subcategory IDs including the selected category itself
+          categoryIds = getAllSubcategoryIds(selectedCategory.id, categories);
+        }
+      }
+
       const result = await expenseService.getExpenses({
         page: pagination.page,
         limit: pagination.limit,
@@ -115,12 +106,21 @@ const AllTransactions: React.FC = () => {
       });
 
       if (result.success) {
-        setExpenses(result.expenses || []);
+        let filteredExpenses = result.expenses || [];
+        
+        // If we have category IDs for hierarchical filtering, filter on frontend
+        if (categoryIds.length > 0) {
+          filteredExpenses = filteredExpenses.filter(expense => 
+            categoryIds.includes(expense.categoryId)
+          );
+        }
+        
+        setExpenses(filteredExpenses);
         if (result.pagination) {
           setPagination(prev => ({
             ...prev,
-            total: result.pagination!.total,
-            pages: result.pagination!.pages
+            total: filteredExpenses.length, // Update total based on filtered results
+            pages: Math.ceil(filteredExpenses.length / pagination.limit)
           }));
         }
       }
@@ -129,6 +129,19 @@ const AllTransactions: React.FC = () => {
     }
     
     setLoading(false);
+  };
+
+  // Helper function to get all subcategory IDs for a given category
+  const getAllSubcategoryIds = (categoryId: string, allCategories: Category[]): string[] => {
+    const subcategoryIds: string[] = [categoryId]; // Include the category itself
+    
+    (
+      allCategories.filter(cat => cat.parent_id === categoryId)
+    ).forEach(subcategory => {
+      subcategoryIds.push(...getAllSubcategoryIds(subcategory.id, allCategories));
+    });
+    
+    return subcategoryIds;
   };
 
   const handleFilterChange = (field: string, value: string) => {
@@ -213,19 +226,12 @@ const AllTransactions: React.FC = () => {
               {/* Category Filter */}
               <div className="filter-group">
                 <label htmlFor="categoryId">{t('expenses.category')}</label>
-                <select
-                  id="categoryId"
-                  value={filters.categoryId}
-                  onChange={(e) => handleFilterChange('categoryId', e.target.value)}
-                  className="filter-input"
-                >
-                  <option value="">{t('transactions.allCategories')}</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.icon} {getTranslatedCategoryName(category.name)}
-                    </option>
-                  ))}
-                </select>
+                <CategoryTreeFilter
+                  categories={categories}
+                  selectedCategoryId={filters.categoryId}
+                  onCategorySelect={(categoryId) => handleFilterChange('categoryId', categoryId)}
+                  placeholder={t('transactions.allCategories')}
+                />
               </div>
 
               {/* Search */}

@@ -53,7 +53,9 @@ const categorySchema = Joi.object({
   color: Joi.string().pattern(/^#[0-9A-F]{6}$/i).optional(),
   icon: Joi.string().max(50).optional(),
   type: Joi.string().valid('income', 'expense', 'both').default('both'),
-  is_active: Joi.boolean().default(true)
+  is_active: Joi.boolean().default(true),
+  // Hierarchical fields
+  parent_id: Joi.string().uuid().optional().allow(null)
 });
 
 // FIXED: Update schema allows partial updates
@@ -63,8 +65,107 @@ const categoryUpdateSchema = Joi.object({
   color: Joi.string().pattern(/^#[0-9A-F]{6}$/i).optional(),
   icon: Joi.string().max(50).optional(),
   type: Joi.string().valid('income', 'expense', 'both').optional(),
-  is_active: Joi.boolean().optional()
+  is_active: Joi.boolean().optional(),
+  // Hierarchical fields
+  parent_id: Joi.string().uuid().optional().allow(null)
 }).min(1); // Require at least one field to update
+
+// Helper functions for hierarchical categories
+const calculateCategoryPath = async (parentId, categoryName) => {
+  if (!parentId) {
+    return categoryName;
+  }
+  
+  const parentResult = await db.query(
+    'SELECT path FROM categories WHERE id = $1',
+    [parentId]
+  );
+  
+  if (parentResult.rows.length === 0) {
+    throw new Error('Parent category not found');
+  }
+  
+  return `${parentResult.rows[0].path}/${categoryName}`;
+};
+
+const calculateCategoryPathIds = async (parentId) => {
+  if (!parentId) {
+    return [];
+  }
+  
+  const parentResult = await db.query(
+    'SELECT path_ids FROM categories WHERE id = $1',
+    [parentId]
+  );
+  
+  if (parentResult.rows.length === 0) {
+    throw new Error('Parent category not found');
+  }
+  
+  return [...parentResult.rows[0].path_ids, parentId];
+};
+
+const calculateCategoryLevel = async (parentId) => {
+  if (!parentId) {
+    return 1;
+  }
+  
+  const parentResult = await db.query(
+    'SELECT level FROM categories WHERE id = $1',
+    [parentId]
+  );
+  
+  if (parentResult.rows.length === 0) {
+    throw new Error('Parent category not found');
+  }
+  
+  return parentResult.rows[0].level + 1;
+};
+
+const buildCategoryTree = (categories) => {
+  const map = new Map();
+  const roots = [];
+  
+  // Create map of all categories
+  categories.forEach(cat => {
+    map.set(cat.id, { ...cat, children: [] });
+  });
+  
+  // Build tree structure
+  categories.forEach(cat => {
+    if (cat.parent_id) {
+      const parent = map.get(cat.parent_id);
+      if (parent) {
+        parent.children.push(map.get(cat.id));
+      }
+    } else {
+      roots.push(map.get(cat.id));
+    }
+  });
+  
+  return roots;
+};
+
+const updateChildrenPaths = async (parentId, newParentPath, newParentPathIds, newParentLevel) => {
+  const children = await db.query(
+    'SELECT id, name FROM categories WHERE parent_id = $1',
+    [parentId]
+  );
+  
+  for (const child of children.rows) {
+    const childPath = `${newParentPath}/${child.name}`;
+    const childPathIds = [...newParentPathIds, parentId];
+    const childLevel = newParentLevel + 1;
+    
+    await db.query(
+      'UPDATE categories SET path = $1, path_ids = $2, level = $3 WHERE id = $4',
+      [childPath, childPathIds, childLevel, child.id]
+    );
+    
+    // Recursively update grandchildren
+    await updateChildrenPaths(child.id, childPath, childPathIds, childLevel);
+  }
+};
 
 // Auth middleware
 const authenticateToken = async (req, res, next) => {
@@ -135,7 +236,7 @@ app.get('/', (req, res) => {
 // Get all categories for a user
 app.get('/categories', authenticateToken, async (req, res) => {
   try {
-    const { type, active } = req.query;
+    const { type, active, includeChildren, level, parentId } = req.query;
     
     let query = 'SELECT * FROM categories WHERE user_id = $1';
     const params = [req.user.userId];
@@ -151,12 +252,29 @@ app.get('/categories', authenticateToken, async (req, res) => {
       params.push(activeFilter);
     }
     
-    query += ' ORDER BY name ASC';
+    if (level) {
+      query += ` AND level = $${params.length + 1}`;
+      params.push(parseInt(level));
+    }
+    
+    if (parentId) {
+      query += ` AND parent_id = $${params.length + 1}`;
+      params.push(parentId);
+    }
+    
+    query += ' ORDER BY path ASC';
     
     const result = await db.query(query, params);
     
+    let categories = result.rows;
+    
+    // If includeChildren is true, return hierarchical structure
+    if (includeChildren === 'true') {
+      categories = buildCategoryTree(result.rows);
+    }
+    
     res.json({
-      categories: result.rows,
+      categories,
       total: result.rows.length
     });
     
@@ -197,29 +315,34 @@ app.post('/categories', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: error.details[0].message });
     }
     
-    const { name, description, color, icon, type, is_active } = value;
+    const { name, description, color, icon, type, is_active, parent_id } = value;
     
-    // Check if category name already exists for user
+    // Check if category name already exists for user under the same parent
     const existingCategory = await db.query(
-      'SELECT id FROM categories WHERE user_id = $1 AND LOWER(name) = LOWER($2)',
-      [req.user.userId, name]
+      'SELECT id FROM categories WHERE user_id = $1 AND LOWER(name) = LOWER($2) AND (parent_id = $3 OR (parent_id IS NULL AND $3 IS NULL))',
+      [req.user.userId, name, parent_id]
     );
     
     if (existingCategory.rows.length > 0) {
-      return res.status(409).json({ error: 'Category with this name already exists' });
+      return res.status(409).json({ error: 'Category with this name already exists under the same parent' });
     }
+    
+    // Calculate hierarchical fields
+    const path = await calculateCategoryPath(parent_id, name);
+    const pathIds = await calculateCategoryPathIds(parent_id);
+    const level = await calculateCategoryLevel(parent_id);
     
     // Create category
     const result = await db.query(
-      `INSERT INTO categories (user_id, name, description, color, icon, type, is_active) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) 
+      `INSERT INTO categories (user_id, name, description, color, icon, type, is_active, parent_id, level, path, path_ids) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
        RETURNING *`,
-      [req.user.userId, name, description, color, icon, type, is_active]
+      [req.user.userId, name, description, color, icon, type, is_active, parent_id, level, path, pathIds]
     );
     
     const category = result.rows[0];
     
-    logger.info(`Category created: ${name} by user ${req.user.userId}`);
+    logger.info(`Category created: ${name} (level ${level}) by user ${req.user.userId}`);
     
     res.status(201).json({
       message: 'Category created successfully',
@@ -253,15 +376,43 @@ app.put('/categories/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Category not found' });
     }
     
-    // Check if name already exists for user (only if name is being updated)
+    const currentCategory = existingCategory.rows[0];
+    
+    // Check if name already exists for user under the same parent (only if name is being updated)
     if (value.name) {
       const nameCheck = await db.query(
-        'SELECT id FROM categories WHERE user_id = $1 AND LOWER(name) = LOWER($2) AND id != $3',
-        [req.user.userId, value.name, id]
+        'SELECT id FROM categories WHERE user_id = $1 AND LOWER(name) = LOWER($2) AND id != $3 AND (parent_id = $4 OR (parent_id IS NULL AND $4 IS NULL))',
+        [req.user.userId, value.name, id, currentCategory.parent_id]
       );
       
       if (nameCheck.rows.length > 0) {
-        return res.status(409).json({ error: 'Category with this name already exists' });
+        return res.status(409).json({ error: 'Category with this name already exists under the same parent' });
+      }
+    }
+    
+    // Check if parent_id is being changed and validate it
+    if (value.parent_id !== undefined && value.parent_id !== currentCategory.parent_id) {
+      // Prevent setting parent to self or descendant
+      if (value.parent_id === id) {
+        return res.status(400).json({ error: 'Category cannot be its own parent' });
+      }
+      
+      // Check if new parent exists and belongs to user
+      if (value.parent_id) {
+        const parentCheck = await db.query(
+          'SELECT id, path_ids FROM categories WHERE id = $1 AND user_id = $2',
+          [value.parent_id, req.user.userId]
+        );
+        
+        if (parentCheck.rows.length === 0) {
+          return res.status(404).json({ error: 'Parent category not found' });
+        }
+        
+        // Check if new parent is a descendant of current category
+        const parentPathIds = parentCheck.rows[0].path_ids;
+        if (parentPathIds.includes(id)) {
+          return res.status(400).json({ error: 'Cannot set parent to a descendant category' });
+        }
       }
     }
     
@@ -272,11 +423,25 @@ app.put('/categories/:id', authenticateToken, async (req, res) => {
     
     // Only update fields that are provided
     Object.keys(value).forEach(key => {
-      if (value[key] !== undefined) {
+      if (value[key] !== undefined && key !== 'parent_id') {
         updateFields.push(`${key} = $${++paramCount}`);
         values.push(value[key]);
       }
     });
+    
+    // Handle parent_id change separately to recalculate hierarchical fields
+    if (value.parent_id !== undefined && value.parent_id !== currentCategory.parent_id) {
+      const newPath = await calculateCategoryPath(value.parent_id, value.name || currentCategory.name);
+      const newPathIds = await calculateCategoryPathIds(value.parent_id);
+      const newLevel = await calculateCategoryLevel(value.parent_id);
+      
+      updateFields.push(`parent_id = $${++paramCount}`);
+      updateFields.push(`path = $${++paramCount}`);
+      updateFields.push(`path_ids = $${++paramCount}`);
+      updateFields.push(`level = $${++paramCount}`);
+      
+      values.push(value.parent_id, newPath, newPathIds, newLevel);
+    }
     
     // Always update the updated_at timestamp
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
@@ -292,10 +457,14 @@ app.put('/categories/:id', authenticateToken, async (req, res) => {
     `;
     
     const result = await db.query(updateQuery, values);
-    
     const category = result.rows[0];
     
-    logger.info(`Category updated: ${category.name} by user ${req.user.userId}`);
+    // If parent_id changed, update all children paths
+    if (value.parent_id !== undefined && value.parent_id !== currentCategory.parent_id) {
+      await updateChildrenPaths(id, category.path, category.path_ids, category.level);
+    }
+    
+    logger.info(`Category updated: ${category.name} (level ${category.level}) by user ${req.user.userId}`);
     
     res.json({
       message: 'Category updated successfully',
@@ -312,6 +481,7 @@ app.put('/categories/:id', authenticateToken, async (req, res) => {
 app.delete('/categories/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
+    const { deleteChildren } = req.query;
     
     // Check if category exists and belongs to user
     const existingCategory = await db.query(
@@ -321,6 +491,23 @@ app.delete('/categories/:id', authenticateToken, async (req, res) => {
     
     if (existingCategory.rows.length === 0) {
       return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    const category = existingCategory.rows[0];
+    
+    // Check if category has children
+    const childrenCheck = await db.query(
+      'SELECT COUNT(*) as children_count FROM categories WHERE parent_id = $1',
+      [id]
+    );
+    
+    const childrenCount = parseInt(childrenCheck.rows[0].children_count);
+    
+    if (childrenCount > 0 && deleteChildren !== 'true') {
+      return res.status(409).json({ 
+        error: 'Category has sub-categories. Use deleteChildren=true to delete with all sub-categories',
+        children_count: childrenCount
+      });
     }
     
     // Check if category is being used in expenses or income
@@ -338,18 +525,125 @@ app.delete('/categories/:id', authenticateToken, async (req, res) => {
       });
     }
     
-    // Delete category
+    // If deleting with children, check if any child categories are being used
+    if (deleteChildren === 'true') {
+      const childUsageCheck = await db.query(
+        `SELECT COUNT(*) as child_usage_count FROM (
+          SELECT category_id FROM expenses WHERE category_id IN (
+            SELECT id FROM categories WHERE path_ids @> ARRAY[$1]::uuid[]
+          )
+          UNION ALL
+          SELECT category_id FROM income WHERE category_id IN (
+            SELECT id FROM categories WHERE path_ids @> ARRAY[$1]::uuid[]
+          )
+        ) as child_usage`,
+        [id]
+      );
+      
+      const childUsageCount = parseInt(childUsageCheck.rows[0].child_usage_count);
+      
+      if (childUsageCount > 0) {
+        return res.status(409).json({ 
+          error: 'Cannot delete category tree that contains categories being used in transactions',
+          child_usage_count: childUsageCount
+        });
+      }
+    }
+    
+    // Delete category (CASCADE will handle children if deleteChildren=true)
     await db.query(
       'DELETE FROM categories WHERE id = $1 AND user_id = $2',
       [id, req.user.userId]
     );
     
-    logger.info(`Category deleted: ${id} by user ${req.user.userId}`);
+    logger.info(`Category deleted: ${category.name} (${childrenCount} children) by user ${req.user.userId}`);
     
-    res.json({ message: 'Category deleted successfully' });
+    res.json({ 
+      message: 'Category deleted successfully',
+      deleted_children: childrenCount
+    });
     
   } catch (error) {
     logger.error('Delete category error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Move category to different parent
+app.put('/categories/:id/move', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { new_parent_id } = req.body;
+    
+    // Validate new_parent_id if provided
+    if (new_parent_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(new_parent_id)) {
+      return res.status(400).json({ error: 'Invalid parent ID format' });
+    }
+    
+    // Check if category exists and belongs to user
+    const existingCategory = await db.query(
+      'SELECT * FROM categories WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    
+    if (existingCategory.rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    const category = existingCategory.rows[0];
+    
+    // Prevent moving to self
+    if (new_parent_id === id) {
+      return res.status(400).json({ error: 'Category cannot be moved to itself' });
+    }
+    
+    // Check if new parent exists and belongs to user (if provided)
+    if (new_parent_id) {
+      const parentCheck = await db.query(
+        'SELECT id, path_ids FROM categories WHERE id = $1 AND user_id = $2',
+        [new_parent_id, req.user.userId]
+      );
+      
+      if (parentCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Parent category not found' });
+      }
+      
+      // Check if new parent is a descendant of current category
+      const parentPathIds = parentCheck.rows[0].path_ids;
+      if (parentPathIds.includes(id)) {
+        return res.status(400).json({ error: 'Cannot move category to a descendant' });
+      }
+    }
+    
+    // Calculate new hierarchical fields
+    const newPath = await calculateCategoryPath(new_parent_id, category.name);
+    const newPathIds = await calculateCategoryPathIds(new_parent_id);
+    const newLevel = await calculateCategoryLevel(new_parent_id);
+    
+    // Update category
+    await db.query(
+      'UPDATE categories SET parent_id = $1, path = $2, path_ids = $3, level = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5',
+      [new_parent_id, newPath, newPathIds, newLevel, id]
+    );
+    
+    // Update all children paths
+    await updateChildrenPaths(id, newPath, newPathIds, newLevel);
+    
+    // Get updated category
+    const updatedCategory = await db.query(
+      'SELECT * FROM categories WHERE id = $1',
+      [id]
+    );
+    
+    logger.info(`Category moved: ${category.name} to parent ${new_parent_id || 'root'} by user ${req.user.userId}`);
+    
+    res.json({
+      message: 'Category moved successfully',
+      category: updatedCategory.rows[0]
+    });
+    
+  } catch (error) {
+    logger.error('Move category error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

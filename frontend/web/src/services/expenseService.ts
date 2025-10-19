@@ -2,9 +2,14 @@ interface Expense {
   id: string;
   categoryId: string;
   category: {
+    id: string;
     name: string;
     color: string;
     icon: string;
+    parent_id?: string;
+    level?: number;
+    path?: string;
+    path_ids?: string[];
   };
   amount: number;
   description?: string;
@@ -23,9 +28,14 @@ interface ExpenseStats {
   total: number;
   transactionCount: number;
   topCategories: Array<{
+    id: string;
     name: string;
     color: string;
     icon: string;
+    parent_id?: string;
+    level?: number;
+    path?: string;
+    path_ids?: string[];
     amount: number;
   }>;
 }

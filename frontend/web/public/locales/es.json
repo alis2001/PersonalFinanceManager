@@ -173,7 +173,21 @@
     "otherExpensesDesc": "Gastos diversos y no categorizados",
     "otherIncomeDesc": "Fuentes de ingresos diversas",
     "personalCareDesc": "Cortes de cabello, cosméticos, gimnasio, bienestar",
-    "rentalIncomeDesc": "Ingresos por alquiler de propiedades"
+    "rentalIncomeDesc": "Ingresos por alquiler de propiedades",
+    "parentCategory": "Categoría Principal",
+    "noParentCategory": "Sin Categoría Principal (Categoría Raíz)",
+    "parentCategoryHelp": "Selecciona una categoría principal para crear una subcategoría",
+    "addSubcategory": "Agregar Subcategoría",
+    "deleteWithSubcategories": "¿Eliminar '{{categoryName}}' y todas las {{subcategoryCount}} subcategorías? Esta acción no se puede deshacer.",
+    "cannotActivateSubcategoryInactiveParent": "No se puede activar la subcategoría mientras la categoría principal está inactiva. Por favor, active primero la categoría principal.",
+    "hasSubcategories": "Tiene subcategorías",
+    "selectLeafCategory": "Selecciona una categoría hoja (categorías sin subcategorías)",
+    "noCategoriesAvailable": "No hay categorías disponibles",
+    "types": {
+      "expense": "Gasto",
+      "income": "Ingreso", 
+      "both": "Ambos"
+    }
   },
   "analytics": {
     "title": "Análisis",
