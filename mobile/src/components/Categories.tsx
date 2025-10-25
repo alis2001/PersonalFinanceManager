@@ -8,11 +8,14 @@ import {
   Alert, 
   TextInput, 
   Modal,
-  Platform 
+  Platform,
+  Animated 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
+import { Ionicons } from '@expo/vector-icons';
 import categoryService, { Category } from '../services/categoryService';
+import CategoryContextMenu from './CategoryContextMenu';
 import BottomNavigation from './BottomNavigation';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -30,6 +33,7 @@ interface CategoryFormData {
   icon: string;
   type: 'income' | 'expense' | 'both';
   is_active: boolean;
+  parent_id?: string;
 }
 
 const defaultFormData: CategoryFormData = {
@@ -137,6 +141,14 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
   const [formData, setFormData] = useState<CategoryFormData>(defaultFormData);
   const [formLoading, setFormLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  
+  // Hierarchical view state
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  
+  // Context menu state
+  const [contextMenuVisible, setContextMenuVisible] = useState(false);
+  const [contextMenuCategory, setContextMenuCategory] = useState<Category | null>(null);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     loadCategories();
@@ -146,10 +158,11 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
     try {
       setError(null);
       console.log('Loading categories...');
-      // Load ALL categories (both active and inactive) like web version
+      // Load ALL categories (both active and inactive) with hierarchical structure
       const result = await categoryService.getCategories({ 
         type: 'expense', 
-        active: undefined // This loads both active and inactive categories
+        active: undefined,
+        includeChildren: true // This loads hierarchical structure
       });
 
       console.log('Categories result:', result);
@@ -158,7 +171,6 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
       console.log('Categories result error:', result.error);
 
       if (result.success && result.categories && Array.isArray(result.categories)) {
-        console.log('Setting categories:', result.categories);
         setCategories(result.categories);
         
         // If no categories exist, create default ones (like web version)
@@ -168,7 +180,8 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
           // Reload categories after creating defaults
           const reloadResult = await categoryService.getCategories({ 
             type: 'expense', 
-            active: undefined 
+            active: undefined,
+            includeChildren: true
           });
           if (reloadResult.success && reloadResult.categories) {
             setCategories(reloadResult.categories);
@@ -196,6 +209,84 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
     if (onNavigate) {
       onNavigate(route);
     }
+  };
+
+  // Build hierarchical tree structure
+  const buildCategoryTree = (categories: Category[]) => {
+    // If categories already have children structure, use it directly
+    if (categories.some(cat => cat.children && cat.children.length > 0)) {
+      return categories.filter(cat => !cat.parent_id);
+    }
+    
+    // Otherwise build tree from flat structure
+    const map = new Map<string, Category & { children: Category[] }>();
+    const roots: (Category & { children: Category[] })[] = [];
+    
+    // Create map with empty children arrays
+    categories.forEach(cat => {
+      map.set(cat.id, { ...cat, children: [] });
+    });
+    
+    // Build tree structure
+    categories.forEach(cat => {
+      if (cat.parent_id) {
+        const parent = map.get(cat.parent_id);
+        if (parent) {
+          parent.children.push(map.get(cat.id)!);
+        }
+      } else {
+        roots.push(map.get(cat.id)!);
+      }
+    });
+    
+    return roots;
+  };
+
+  const toggleCategoryExpansion = (categoryId: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(categoryId)) {
+        newSet.delete(categoryId);
+      } else {
+        newSet.add(categoryId);
+      }
+      return newSet;
+    });
+  };
+
+  // Get available parent categories (excluding current category being edited and its descendants)
+  const getAvailableParents = () => {
+    if (!editingCategory) {
+      return categories.filter(cat => cat.is_active);
+    }
+    
+    return categories.filter(cat => 
+      cat.is_active && 
+      cat.id !== editingCategory.id && 
+      !isDescendantOf(cat, editingCategory) // Prevent circular references
+    );
+  };
+
+  // Check if a category is a descendant of another category
+  const isDescendantOf = (potentialDescendant: Category, ancestor: Category): boolean => {
+    if (!potentialDescendant.parent_id) return false;
+    if (potentialDescendant.parent_id === ancestor.id) return true;
+    
+    const parent = categories.find(cat => cat.id === potentialDescendant.parent_id);
+    return parent ? isDescendantOf(parent, ancestor) : false;
+  };
+
+  // Context menu handlers
+  const handleContextMenu = (category: Category, event: any) => {
+    const { pageX, pageY } = event.nativeEvent;
+    setContextMenuCategory(category);
+    setContextMenuPosition({ x: pageX, y: pageY });
+    setContextMenuVisible(true);
+  };
+
+  const handleCloseContextMenu = () => {
+    setContextMenuVisible(false);
+    setContextMenuCategory(null);
   };
 
   const getTypeBadgeStyle = (type: string) => {
@@ -287,7 +378,24 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
       color: category.color || '#4A90E2',
       icon: category.icon || '💰',
       type: category.type,
-      is_active: category.is_active
+      is_active: category.is_active,
+      parent_id: category.parent_id
+    });
+    setShowForm(true);
+    setError(null);
+    setSuccess(null);
+  };
+
+  const handleAddSubcategory = (parentCategory: Category) => {
+    setEditingCategory(null);
+    setFormData({
+      name: '',
+      description: '',
+      color: parentCategory.color || '#4A90E2',
+      icon: '💰',
+      type: parentCategory.type,
+      is_active: true,
+      parent_id: parentCategory.id
     });
     setShowForm(true);
     setError(null);
@@ -337,65 +445,108 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
     }
   };
 
-  const renderCategoryCard = (category: Category) => (
-    <View key={category.id} style={[styles.categoryCard, !category.is_active && styles.categoryCardInactive]}>
-      <View style={styles.categoryHeader}>
-        <View style={[styles.categoryIcon, { backgroundColor: category.color + '20' }]}>
-          <Text style={styles.categoryIconText}>{category.icon}</Text>
-        </View>
-        <View style={styles.categoryInfo}>
-          <Text style={[styles.categoryName, !category.is_active && styles.categoryNameInactive]}>{getTranslatedCategoryName(category.name)}</Text>
-          <View style={[styles.typeBadge, getTypeBadgeStyle(category.type)]}>
-            <Text style={[styles.typeBadgeText, getTypeBadgeTextStyle(category.type)]}>
-              {getTranslatedCategoryType(category.type)}
-            </Text>
+  const renderCategoryTree = (category: Category & { children: Category[] }, level: number = 0): React.JSX.Element => {
+    const isExpanded = expandedCategories.has(category.id);
+    const hasChildren = category.children && category.children.length > 0;
+    const isSubcategory = level > 0;
+    
+    return (
+      <View key={category.id} style={styles.categoryTreeItem}>
+        {/* Connecting Line for Subcategories */}
+        {isSubcategory && (
+          <View style={[styles.connectingLine, { marginLeft: (level - 1) * 20 + 16 }]} />
+        )}
+        
+        <View 
+          style={[
+            isSubcategory ? styles.subcategoryCard : styles.categoryCard,
+            { marginLeft: level * 20 },
+            !category.is_active && styles.categoryCardInactive
+          ]}
+        >
+          <View style={styles.categoryHeader}>
+            {/* Expand/Collapse Button */}
+            {hasChildren && (
+              <TouchableOpacity
+                style={styles.treeExpandBtn}
+                onPress={() => toggleCategoryExpansion(category.id)}
+              >
+                <Ionicons 
+                  name={isExpanded ? 'chevron-down' : 'chevron-forward'} 
+                  size={18} 
+                  color="#666" 
+                />
+              </TouchableOpacity>
+            )}
+            
+            {/* Category Icon */}
+            <View 
+              style={[
+                isSubcategory ? styles.subcategoryIcon : styles.categoryIcon
+              ]}
+            >
+              <Text style={[
+                styles.categoryIconText,
+                isSubcategory && styles.subcategoryIconText
+              ]}>
+                {category.icon}
+              </Text>
+            </View>
+            
+            {/* Category Info */}
+            <View style={styles.categoryInfo}>
+              <View style={styles.categoryTitleRow}>
+                <Text style={[
+                  isSubcategory ? styles.subcategoryName : styles.categoryName,
+                  !category.is_active && styles.categoryNameInactive
+                ]}>
+                  {getTranslatedCategoryName(category.name)}
+                </Text>
+                
+              </View>
+              
+              <View style={styles.categoryMeta}>
+                <View style={[styles.typeBadge, getTypeBadgeStyle(category.type)]}>
+                  <Text style={[styles.typeBadgeText, getTypeBadgeTextStyle(category.type)]}>
+                    {getTranslatedCategoryType(category.type)}
+                  </Text>
+                </View>
+                
+              </View>
+            </View>
+            
+            {/* Context Menu Button */}
+            <TouchableOpacity
+              style={styles.contextMenuButton}
+              onPress={(event) => handleContextMenu(category, event)}
+            >
+              <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+            </TouchableOpacity>
           </View>
-        </View>
-        <View style={styles.categoryStatus}>
-          {category.is_active ? (
-            <View style={styles.statusActive}>
-              <Text style={styles.statusActiveText}>{t('categories.active')}</Text>
-            </View>
-          ) : (
-            <View style={styles.statusInactive}>
-              <Text style={styles.statusInactiveText}>{t('categories.inactive')}</Text>
-            </View>
+          
+          {/* Description (only for parent categories or if explicitly set) */}
+          {!isSubcategory && category.description && (
+            <Text style={[
+              styles.categoryDescription,
+              !category.is_active && styles.categoryDescriptionInactive
+            ]} numberOfLines={2}>
+              {category.description}
+            </Text>
           )}
         </View>
+        
+        {/* Minimalist Hierarchical Subcategories */}
+        {isExpanded && hasChildren && (
+          <View style={styles.subcategoriesContainer}>
+            {category.children.map(child => 
+              renderCategoryTree(child as Category & { children: Category[] }, level + 1)
+            )}
+          </View>
+        )}
       </View>
-      
-      {(category.description || getTranslatedCategoryDescription(category.name)) && (
-        <Text style={[styles.categoryDescription, !category.is_active && styles.categoryDescriptionInactive]} numberOfLines={2}>
-          {category.description || getTranslatedCategoryDescription(category.name)}
-        </Text>
-      )}
-      
-      <View style={styles.categoryActions}>
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => handleEdit(category)}
-        >
-          <Text style={styles.actionButtonText}>{t('common.edit')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.toggleButton]}
-          onPress={() => handleToggleActive(category)}
-        >
-          <Text style={styles.actionButtonText}>
-            {category.is_active ? t('categories.deactivate') : t('categories.activate')}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.deleteButton, deleteConfirm === category.id && styles.deleteButtonConfirm]}
-          onPress={() => handleDelete(category.id)}
-        >
-          <Text style={[styles.actionButtonText, deleteConfirm === category.id && styles.deleteButtonTextConfirm]}>
-            {deleteConfirm === category.id ? t('common.confirm') : t('common.delete')}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
+
 
   const renderLoadingState = () => (
     <View style={styles.centerContainer}>
@@ -505,6 +656,28 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
           </View>
 
           <View style={styles.formGroup}>
+            <Text style={styles.label}>{t('categories.parentCategory')}</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={formData.parent_id || ''}
+                onValueChange={(value) => handleInputChange('parent_id', value)}
+                style={styles.picker}
+                enabled={!formLoading}
+              >
+                <Picker.Item label={t('categories.noParentCategory')} value="" />
+                {getAvailableParents().map(category => (
+                  <Picker.Item 
+                    key={category.id} 
+                    label={`${'  '.repeat(category.level - 1)}${getTranslatedCategoryName(category.name)}`} 
+                    value={category.id} 
+                  />
+                ))}
+              </Picker>
+            </View>
+            <Text style={styles.formHelp}>{t('categories.parentCategoryHelp')}</Text>
+          </View>
+
+          <View style={styles.formGroup}>
             <Text style={styles.label}>{t('categories.icon')}</Text>
             <ScrollView 
               style={styles.iconSelector} 
@@ -600,7 +773,7 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
         ) : categories && categories.length > 0 ? (
           <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
             <View style={styles.categoriesList}>
-              {categories.map(renderCategoryCard)}
+              {buildCategoryTree(categories).map(category => renderCategoryTree(category))}
             </View>
           </ScrollView>
         ) : (
@@ -611,12 +784,24 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
       {/* Form Modal */}
       {renderForm()}
 
+      {/* Context Menu */}
+      <CategoryContextMenu
+        visible={contextMenuVisible}
+        category={contextMenuCategory}
+        onClose={handleCloseContextMenu}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onToggleActive={handleToggleActive}
+        onAddSubcategory={handleAddSubcategory}
+        position={contextMenuPosition}
+      />
+
       {/* Bottom Navigation */}
-        <BottomNavigation 
-          activeRoute={activeRoute} 
-          onNavigate={handleNavigate}
-          onAddExpense={onAddExpense}
-          onSettings={onSettings}
+      <BottomNavigation 
+        activeRoute={activeRoute}
+        onNavigate={handleNavigate}
+        onAddExpense={onAddExpense}
+        onSettings={onSettings}
       />
     </SafeAreaView>
   );
@@ -675,6 +860,109 @@ const styles = StyleSheet.create({
     gap: 20,
     paddingBottom: 100,
   },
+  categoryTreeItem: {
+    marginBottom: 4,
+  },
+  categoryTreeControls: {
+    alignItems: 'center',
+    marginRight: 8,
+    width: 40,
+  },
+  treeSpacer: {
+    width: 20,
+    height: 20,
+  },
+  categoryChildren: {
+    borderLeftWidth: 2,
+    borderLeftColor: '#e1e5e9',
+    marginLeft: 24,
+    paddingLeft: 12,
+    backgroundColor: '#fafbfc',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  levelBadge: {
+    fontSize: 10,
+    color: '#6c757d',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  formHelp: {
+    fontSize: 12,
+    color: '#6c757d',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  subcategoryButton: {
+    backgroundColor: '#e3f2fd',
+    borderColor: '#2196f3',
+  },
+  // Minimalist Subcategory Styles
+  subcategoryCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  subcategoriesContainer: {
+    marginTop: 8,
+    paddingLeft: 16,
+  },
+  connectingLine: {
+    position: 'absolute',
+    top: -8,
+    width: 2,
+    height: 16,
+    backgroundColor: '#e0e0e0',
+    zIndex: 1,
+  },
+  subcategoryIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    backgroundColor: '#f8f9fa',
+  },
+  subcategoryIconText: {
+    fontSize: 14,
+  },
+  subcategoryName: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1a1a1a',
+    flex: 1,
+  },
+  categoryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  contextMenuButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: '#f8f9fa',
+    marginLeft: 8,
+  },
+  treeExpandBtn: {
+    padding: 4,
+    borderRadius: 4,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   categoryCard: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
@@ -704,6 +992,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f8f9fa',
   },
   categoryIconText: {
     fontSize: 22,
@@ -716,6 +1005,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#1a1a1a',
     marginBottom: 8,
+  },
+  categoryMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   categoryNameInactive: {
     color: '#999999',

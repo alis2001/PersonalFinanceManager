@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Picker } from '@react-native-picker/picker';
 import ConditionalDatePicker from './ConditionalDatePicker';
+import CategoryTreeSelector from './CategoryTreeSelector';
 import expenseService from '../services/expenseService';
 import categoryService, { Category } from '../services/categoryService';
 import currencyService from '../services/currencyService';
@@ -192,13 +192,24 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   const loadCategories = async () => {
     setCategoriesLoading(true);
     try {
-      const result = await categoryService.getExpenseCategories();
+      // Load all categories for hierarchical display
+      const result = await categoryService.getCategories({ 
+        type: 'expense', 
+        active: true,
+        includeChildren: true 
+      });
       if (result.success && result.categories) {
         const categoryList = result.categories;
         setCategories(categoryList);
-        // Auto-select first category if none selected and categories exist
+        // Auto-select first leaf category if none selected and categories exist
         if (!formData.categoryId && categoryList.length > 0) {
-          setFormData(prev => ({ ...prev, categoryId: categoryList[0].id }));
+          // Find first leaf category (category without children)
+          const leafCategories = categoryList.filter(cat => 
+            !categoryList.some(child => child.parent_id === cat.id)
+          );
+          if (leafCategories.length > 0) {
+            setFormData(prev => ({ ...prev, categoryId: leafCategories[0].id }));
+          }
         }
       } else {
         setError(t('expenses.failedToLoadCategories'));
@@ -240,6 +251,15 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   const validateForm = (): string | null => {
     if (!formData.categoryId) {
       return t('expenses.pleaseSelectCategory');
+    }
+    
+    // Validate that selected category is a leaf category (no children)
+    const selectedCategory = categories.find(cat => cat.id === formData.categoryId);
+    if (selectedCategory) {
+      const hasChildren = categories.some(cat => cat.parent_id === selectedCategory.id);
+      if (hasChildren) {
+        return t('expenses.cannotSelectParentCategory');
+      }
     }
     
     // Get clean numeric value for validation
@@ -487,23 +507,14 @@ const AddExpense: React.FC<AddExpenseProps> = ({
                 <Text style={styles.loadingCategoriesText}>{t('expenses.loadingCategories')}</Text>
               </View>
             ) : (
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={formData.categoryId}
-                  onValueChange={(value) => handleInputChange('categoryId', value)}
-                  style={styles.picker}
-                  enabled={!loading}
-                >
-                  <Picker.Item label={t('expenses.selectCategory')} value="" />
-                  {categories.map(category => (
-                    <Picker.Item 
-                      key={category.id} 
-                      label={`${category.icon} ${getTranslatedCategoryName(category.name)}`} 
-                      value={category.id} 
-                    />
-                  ))}
-                </Picker>
-              </View>
+              <CategoryTreeSelector
+                categories={categories}
+                selectedCategoryId={formData.categoryId}
+                onCategorySelect={(categoryId) => handleInputChange('categoryId', categoryId)}
+                disabled={loading}
+                placeholder={t('expenses.selectCategory')}
+                type="expense"
+              />
             )}
           </View>
 

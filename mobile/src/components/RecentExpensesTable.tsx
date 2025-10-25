@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, Platform, RefreshControl } from 'react-native';
 import { Expense } from '../services/expenseService';
+import { Category } from '../services/categoryService';
 import currencyService from '../services/currencyService';
 import { useTranslation } from '../hooks/useTranslation';
 import { formatDateForDisplay } from '../utils/dateFormatter';
@@ -13,6 +14,7 @@ interface RecentExpensesTableProps {
   userCurrency?: string;
   refreshing?: boolean;
   onRefresh?: () => void;
+  categories?: Category[];
 }
 
 const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
@@ -22,7 +24,8 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
   onRetry,
   userCurrency = 'USD',
   refreshing = false,
-  onRefresh
+  onRefresh,
+  categories = []
 }) => {
   const { t, currentLanguage } = useTranslation();
   const [formattedDates, setFormattedDates] = useState<{[key: string]: string}>({});
@@ -55,6 +58,52 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
       'Rental Income': t('categories.rentalIncome'),
     };
     return categoryMap[categoryName] || categoryName;
+  };
+
+  // Flatten hierarchical categories to a flat list
+  const flattenCategories = (categories: Category[]): Category[] => {
+    const flattened: Category[] = [];
+    
+    const flatten = (cats: Category[]) => {
+      cats.forEach(cat => {
+        flattened.push(cat);
+        if (cat.children && cat.children.length > 0) {
+          flatten(cat.children);
+        }
+      });
+    };
+    
+    flatten(categories);
+    return flattened;
+  };
+
+  // Function to get hierarchical category path
+  const getCategoryHierarchicalPath = (expenseCategory: any): string => {
+    if (categories.length === 0) {
+      return getTranslatedCategoryName(expenseCategory.name);
+    }
+
+    // Find the full category info by matching the name
+    const flatCategories = flattenCategories(categories);
+    const fullCategory = flatCategories.find(cat => cat.name === expenseCategory.name);
+    
+    if (!fullCategory) {
+      return getTranslatedCategoryName(expenseCategory.name);
+    }
+
+    // Build hierarchical path
+    const buildPath = (cat: Category): string[] => {
+      const path = [getTranslatedCategoryName(cat.name)];
+      if (cat.parent_id) {
+        const parent = flatCategories.find(c => c.id === cat.parent_id);
+        if (parent) {
+          return [...buildPath(parent), ...path];
+        }
+      }
+      return path;
+    };
+    
+    return buildPath(fullCategory).join(' → ');
   };
   const formatCurrency = (amount: number): string => {
     return currencyService.formatCurrency(amount, userCurrency, currentLanguage);
@@ -128,7 +177,7 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
               {truncateText(item.description, 30) || '—'}
             </Text>
             <Text style={styles.expenseCategory}>
-              {getTranslatedCategoryName(item.category.name)}
+              {getCategoryHierarchicalPath(item.category)}
             </Text>
           </View>
         </View>

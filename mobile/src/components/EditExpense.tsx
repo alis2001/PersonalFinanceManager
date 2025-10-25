@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Modal, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Picker } from '@react-native-picker/picker';
 import ConditionalDatePicker from './ConditionalDatePicker';
+import CategoryTreeSelector from './CategoryTreeSelector';
 import expenseService from '../services/expenseService';
 import categoryService, { Category } from '../services/categoryService';
 import currencyService from '../services/currencyService';
@@ -131,7 +131,12 @@ const EditExpense: React.FC<EditExpenseProps> = ({
   const loadCategories = async () => {
     setCategoriesLoading(true);
     try {
-      const result = await categoryService.getExpenseCategories();
+      // Load all categories for hierarchical display
+      const result = await categoryService.getCategories({ 
+        type: 'expense', 
+        active: true,
+        includeChildren: true 
+      });
       if (result.success && result.categories) {
         setCategories(result.categories);
       } else {
@@ -209,6 +214,15 @@ const EditExpense: React.FC<EditExpenseProps> = ({
   const validateForm = (): string | null => {
     if (!formData.categoryId.trim()) {
       return t('expenses.pleaseSelectCategory');
+    }
+    
+    // Validate that selected category is a leaf category (no children)
+    const selectedCategory = categories.find(cat => cat.id === formData.categoryId);
+    if (selectedCategory) {
+      const hasChildren = categories.some(cat => cat.parent_id === selectedCategory.id);
+      if (hasChildren) {
+        return t('expenses.cannotSelectParentCategory');
+      }
     }
     
     // Get clean numeric value for validation
@@ -349,22 +363,20 @@ const EditExpense: React.FC<EditExpenseProps> = ({
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>{t('expenses.category')} *</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={formData.categoryId}
-                onValueChange={(value) => handleInputChange('categoryId', value)}
-                style={styles.picker}
-                enabled={!loading && !categoriesLoading}
-              >
-                {categories.map((category) => (
-                  <Picker.Item 
-                    key={category.id} 
-                    label={`${category.icon} ${getTranslatedCategoryName(category.name)}`} 
-                    value={category.id} 
-                  />
-                ))}
-              </Picker>
-            </View>
+            {categoriesLoading ? (
+              <View style={styles.loadingCategories}>
+                <Text style={styles.loadingCategoriesText}>{t('expenses.loadingCategories')}</Text>
+              </View>
+            ) : (
+              <CategoryTreeSelector
+                categories={categories}
+                selectedCategoryId={formData.categoryId}
+                onCategorySelect={(categoryId) => handleInputChange('categoryId', categoryId)}
+                disabled={loading}
+                placeholder={t('expenses.selectCategory')}
+                type="expense"
+              />
+            )}
           </View>
 
           <View style={styles.formGroup}>
@@ -723,6 +735,16 @@ const styles = StyleSheet.create({
     height: 50,
     width: '100%',
     color: '#1a1a1a',
+  },
+  loadingCategories: {
+    padding: 16,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  loadingCategoriesText: {
+    color: '#6c757d',
+    fontSize: 14,
   },
   formActions: {
     marginTop: 40,

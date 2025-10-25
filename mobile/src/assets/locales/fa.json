@@ -18,7 +18,8 @@
     "retry": "تلاش مجدد",
     "filter": "فیلتر",
     "apply": "اعمال",
-    "refresh": "تازه‌سازی"
+    "refresh": "تازه‌سازی",
+    "clearSelection": "پاک کردن انتخاب"
   },
   "auth": {
     "login": "ورود",
@@ -216,7 +217,20 @@
     "otherExpensesDesc": "هزینه‌های متفرقه و دسته‌بندی نشده",
     "otherIncomeDesc": "منابع درآمد متفرقه",
     "personalCareDesc": "آرایشگاه، لوازم آرایشی، باشگاه، سلامتی",
-    "rentalIncomeDesc": "درآمد اجاره ملک"
+    "rentalIncomeDesc": "درآمد اجاره ملک",
+    "listView": "نمای لیستی",
+    "treeView": "نمای درختی",
+    "parentCategory": "دسته‌بندی والد",
+    "noParentCategory": "بدون دسته‌بندی والد",
+    "parentCategoryHelp": "یک دسته‌بندی والد انتخاب کنید تا زیردسته ایجاد کنید",
+    "selectLeafCategory": "یک دسته‌بندی برگ انتخاب کنید (دسته‌بندی‌های بدون زیردسته)",
+    "noCategoriesAvailable": "هیچ دسته‌بندی موجود نیست",
+    "hasSubcategories": "دارای زیردسته‌ها",
+    "addSubcategory": "افزودن زیردسته",
+    "subcategories": "زیردسته‌ها",
+    "expandAll": "باز کردن همه",
+    "collapseAll": "بستن همه",
+    "cannotSelectParentCategory": "نمی‌توان دسته‌بندی والد را انتخاب کرد. لطفاً یک زیردسته انتخاب کنید."
   },
   "analytics": {
     "title": "تحلیل‌ها",

@@ -6,6 +6,7 @@ import ProfessionalDatePicker from './ProfessionalDatePicker';
 import BottomNavigation from './BottomNavigation';
 import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
+import CategoryTreeSelector from './CategoryTreeSelector';
 import { Expense } from '../services/expenseService';
 import { Category } from '../services/categoryService';
 import expenseService from '../services/expenseService';
@@ -71,6 +72,17 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
       'both': t('categories.both'),
     };
     return typeMap[type] || type;
+  };
+
+  // Function to get hierarchical category path
+  const getCategoryHierarchicalPath = (category: any): string => {
+    if (category.path && category.path !== category.name) {
+      // If we have a path that's different from name, use it
+      return category.path.split('/').map((part: string) => getTranslatedCategoryName(part)).join(' → ');
+    } else {
+      // Fallback to just the translated name
+      return getTranslatedCategoryName(category.name);
+    }
   };
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -167,7 +179,11 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
 
   const loadCategories = async () => {
     try {
-      const result = await categoryService.getExpenseCategories();
+      const result = await categoryService.getCategories({ 
+        type: 'expense', 
+        active: true,
+        includeChildren: true // Load hierarchical structure
+      });
       if (result.success && result.categories) {
         setCategories(result.categories);
       }
@@ -354,18 +370,14 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
 
           <View style={styles.filterGroup}>
             <Text style={styles.label}>{t('expenses.category')}</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={filters.categoryId}
-                onValueChange={(value) => handleFilterChange('categoryId', value)}
-                style={styles.picker}
-              >
-                <Picker.Item label={t('transactions.allCategories')} value="" />
-                {categories.map((category) => (
-                  <Picker.Item key={category.id} label={`${category.icon} ${getTranslatedCategoryName(category.name)}`} value={category.id} />
-                ))}
-              </Picker>
-            </View>
+            <CategoryTreeSelector
+              categories={categories}
+              selectedCategoryId={filters.categoryId}
+              onCategorySelect={(categoryId) => handleFilterChange('categoryId', categoryId)}
+              placeholder={t('transactions.allCategories')}
+              type="expense"
+              allowEmpty={true}
+            />
           </View>
 
           <View style={styles.filterGroup}>
@@ -469,6 +481,7 @@ const AllTransactions: React.FC<AllTransactionsProps> = ({
               userCurrency={user?.defaultCurrency || 'USD'}
               refreshing={refreshing}
               onRefresh={handleRefresh}
+              categories={categories}
             />
             
             {renderLoadMore()}

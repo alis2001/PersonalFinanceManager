@@ -51,6 +51,27 @@ class CategoryService {
   private baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.123:8080/api';
   private categoryURL = `${this.baseURL}/categories`;
 
+  // Utility function to get full hierarchical path for a category
+  getCategoryPath(category: Category, allCategories: Category[]): string {
+    const buildPath = (cat: Category): string[] => {
+      const path = [cat.name];
+      if (cat.parent_id) {
+        const parent = allCategories.find(c => c.id === cat.parent_id);
+        if (parent) {
+          return [...buildPath(parent), ...path];
+        }
+      }
+      return path;
+    };
+    
+    return buildPath(category).join(' → ');
+  }
+
+  // Check if a category is a leaf category (has no children)
+  isLeafCategory(category: Category, allCategories: Category[]): boolean {
+    return !allCategories.some(cat => cat.parent_id === category.id);
+  }
+
   private async getAuthHeaders(): Promise<HeadersInit> {
     const token = await secureStorage.getItem('accessToken');
     

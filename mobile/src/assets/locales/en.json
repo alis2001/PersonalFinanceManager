@@ -18,7 +18,8 @@
     "retry": "Retry",
     "filter": "Filter",
     "apply": "Apply",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "clearSelection": "Clear Selection"
   },
   "auth": {
     "login": "Login",
@@ -216,7 +217,20 @@
     "otherExpensesDesc": "Miscellaneous and uncategorized expenses",
     "otherIncomeDesc": "Miscellaneous income sources",
     "personalCareDesc": "Haircuts, cosmetics, gym, wellness",
-    "rentalIncomeDesc": "Property rental earnings"
+    "rentalIncomeDesc": "Property rental earnings",
+    "listView": "List View",
+    "treeView": "Tree View",
+    "parentCategory": "Parent Category",
+    "noParentCategory": "No Parent Category",
+    "parentCategoryHelp": "Select a parent category to create a subcategory",
+    "selectLeafCategory": "Select a leaf category (categories without subcategories)",
+    "noCategoriesAvailable": "No categories available",
+    "hasSubcategories": "Has subcategories",
+    "addSubcategory": "Add Subcategory",
+    "subcategories": "Subcategories",
+    "expandAll": "Expand All",
+    "collapseAll": "Collapse All",
+    "cannotSelectParentCategory": "Cannot select parent category. Please select a subcategory."
   },
   "analytics": {
     "title": "Analytics",
