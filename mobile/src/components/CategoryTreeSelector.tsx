@@ -133,13 +133,31 @@ const CategoryTreeSelector: React.FC<CategoryTreeSelectorProps> = ({
   };
 
   const handleCategoryClick = (category: Category) => {
-    // Only allow selection of leaf categories (categories without subcategories)
-    if (isLeafCategory(category)) {
+    const isLeaf = isLeafCategory(category);
+    
+    if (isLeaf) {
+      // Leaf category - safe to select
       onCategorySelect(category.id);
       setIsOpen(false);
     } else {
-      // If it has subcategories, toggle expansion instead
+      // Parent category - toggle expansion for navigation
       toggleCategoryExpansion(category.id);
+    }
+  };
+
+  const handleCategorySelect = (category: Category) => {
+    const isLeaf = isLeafCategory(category);
+    
+    if (isLeaf) {
+      // Leaf category - safe to select
+      onCategorySelect(category.id);
+      setIsOpen(false);
+    } else {
+      // Parent category - show professional error
+      console.warn(`🚫 SELECTION BLOCKED: Cannot select parent category "${category.name}" for expenses. Only leaf categories allowed.`);
+      
+      // Show professional alert for selection attempt
+      alert(t('categories.parentCategoryBlockedMessage'));
     }
   };
 
@@ -203,9 +221,7 @@ const CategoryTreeSelector: React.FC<CategoryTreeSelectorProps> = ({
         <TouchableOpacity
           style={[
             styles.categoryTreeNode,
-            isSelected && styles.categoryTreeNodeSelected,
-            isLeaf && styles.categoryTreeNodeSelectable,
-            !isLeaf && styles.categoryTreeNodeNonSelectable
+            isSelected && styles.categoryTreeNodeSelected
           ]}
           onPress={() => handleCategoryClick(category)}
           disabled={disabled}
@@ -231,19 +247,33 @@ const CategoryTreeSelector: React.FC<CategoryTreeSelectorProps> = ({
               <View 
                 style={[
                   styles.categoryIconSmall,
-                  { backgroundColor: isLeaf ? '#f8f9fa' : '#fff3cd' }
+                  { backgroundColor: '#f8f9fa' }
                 ]}
               >
-                <Text style={styles.categoryIconText}>{category.icon}</Text>
-              </View>
-              <View style={styles.categoryNameContainer}>
-                <Text style={[
-                  styles.categoryName,
-                  !isLeaf && styles.nonSelectableCategoryName
-                ]}>
-                  {getTranslatedCategoryName(category.name)}
+                <Text style={styles.categoryIconText}>
+                  {category.icon}
                 </Text>
               </View>
+              <View style={styles.categoryNameContainer}>
+                <Text style={styles.categoryName}>
+                  {getTranslatedCategoryName(category.name)}
+                </Text>
+                {category.description && (
+                  <Text style={styles.categoryDescription}>
+                    {category.description}
+                  </Text>
+                )}
+              </View>
+              
+              {/* Select button for leaf categories only */}
+              {isLeaf && (
+                <TouchableOpacity
+                  style={styles.selectButton}
+                  onPress={() => handleCategorySelect(category)}
+                >
+                  <Text style={styles.selectButtonText}>{t('common.select')}</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </TouchableOpacity>
@@ -453,8 +483,17 @@ const styles = StyleSheet.create({
   categoryTreeNodeSelectable: {
     // Leaf categories can be selected
   },
-  categoryTreeNodeNonSelectable: {
-    opacity: 0.7,
+  selectButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  selectButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   categoryItemContent: {
     flexDirection: 'row',

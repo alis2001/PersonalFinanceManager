@@ -473,12 +473,28 @@ app.post('/expenses', authenticateToken, async (req, res) => {
     
     // Verify category exists and belongs to user
     const categoryCheck = await db.query(
-      'SELECT id FROM categories WHERE id = $1 AND user_id = $2 AND type IN ($3, $4)',
+      'SELECT id, name FROM categories WHERE id = $1 AND user_id = $2 AND type IN ($3, $4)',
       [categoryId, req.user.userId, 'expense', 'both']
     );
     
     if (categoryCheck.rows.length === 0) {
       return res.status(400).json({ error: 'Invalid category or category not found' });
+    }
+    
+    // 🚫 CRITICAL VALIDATION: Check if category is a leaf category (has no children)
+    const childrenCheck = await db.query(
+      'SELECT id FROM categories WHERE parent_id = $1 AND user_id = $2',
+      [categoryId, req.user.userId]
+    );
+    
+    if (childrenCheck.rows.length > 0) {
+      logger.warn(`🚫 BLOCKED: User ${req.user.userId} tried to add expense to parent category "${categoryCheck.rows[0].name}" (${categoryId}) which has ${childrenCheck.rows.length} subcategories`);
+      return res.status(400).json({ 
+        error: 'Cannot add expense to parent category',
+        message: 'Expenses can only be added to categories without subcategories. This category has subcategories.',
+        categoryName: categoryCheck.rows[0].name,
+        subcategoryCount: childrenCheck.rows.length
+      });
     }
     
     // Validate that user_date and user_time are provided (required from frontend)

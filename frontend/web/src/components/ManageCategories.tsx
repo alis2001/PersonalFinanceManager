@@ -43,6 +43,15 @@ const predefinedColors = [
   '#AED6F1', '#F9E79F', '#D7BDE2', '#A3E4D7', '#FADBD8', '#D5DBDB'
 ];
 
+interface MergePreview {
+  sourceCategory: { id: string; name: string; level: number };
+  targetCategory: { id: string; name: string; level: number };
+  transactionsToMove: number;
+  expenseCount: number;
+  incomeCount: number;
+  hasSubcategories: boolean;
+}
+
 const ManageCategories: React.FC<ManageCategoriesProps> = ({ 
   isOpen, 
   onClose, 
@@ -100,6 +109,15 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
   const [formLoading, setFormLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [categoryExpenseStatus, setCategoryExpenseStatus] = useState<Record<string, boolean>>({});
+  
+  // Merge Categories Interface State
+  const [showMergeInterface, setShowMergeInterface] = useState(false);
+  const [draggedCategory, setDraggedCategory] = useState<Category | null>(null);
+  const [dragOverCategory, setDragOverCategory] = useState<Category | null>(null);
+  const [mergePreview, setMergePreview] = useState<MergePreview | null>(null);
+  const [showConfirmMerge, setShowConfirmMerge] = useState(false);
+  const [mergeLoading, setMergeLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -114,6 +132,31 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
       const result = await categoryService.getCategories({ active: undefined });
       if (result.success && result.categories) {
         setCategories(result.categories);
+        
+        // Load expense status for each category (like mobile version)
+        const expenseStatusPromises = result.categories.map(async (category) => {
+          const usage = await categoryService.checkCategoryUsage(category.id);
+          if (usage.success) {
+            return {
+              categoryId: category.id,
+              hasExpenses: usage.hasExpenses === true
+            };
+          } else {
+            console.error('Failed to check usage for category:', category.id, usage.error);
+            return {
+              categoryId: category.id,
+              hasExpenses: false // Default to allowing subcategory creation on error
+            };
+          }
+        });
+        
+        const expenseStatusResults = await Promise.all(expenseStatusPromises);
+        const expenseStatusMap = expenseStatusResults.reduce((acc, { categoryId, hasExpenses }) => {
+          acc[categoryId] = hasExpenses;
+          return acc;
+        }, {} as Record<string, boolean>);
+        
+        setCategoryExpenseStatus(expenseStatusMap);
       } else {
         setError(t('categories.failedToLoadCategories'));
       }
@@ -126,6 +169,123 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
   const resetMessages = () => {
     setError('');
     setSuccess('');
+  };
+
+  // Category Merge Handlers
+  const handleDragStart = (e: React.DragEvent, category: Category) => {
+    setDraggedCategory(category);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', category.id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, category: Category) => {
+    e.preventDefault();
+    
+    // Check if target category is a parent (has children) - can't merge into parent categories
+    const hasChildren = categories.some(cat => cat.parent_id === category.id);
+    
+    if (hasChildren) {
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverCategory(category);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverCategory(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetCategory: Category) => {
+    e.preventDefault();
+    setDragOverCategory(null);
+
+    if (!draggedCategory || draggedCategory.id === targetCategory.id) {
+      console.log('🚫 Drop cancelled: same category or no dragged category');
+      return;
+    }
+
+    // CRITICAL: Check if target category is a parent (has children) - CANNOT merge into parent categories
+    const targetHasChildren = categories.some(cat => cat.parent_id === targetCategory.id);
+    if (targetHasChildren) {
+      console.log('🚫 Drop cancelled: cannot merge into parent category');
+      setError(t('categories.cannotMergeIntoParentCategory'));
+      setDraggedCategory(null);
+      return;
+    }
+
+    console.log('🔄 DROP: Attempting to merge', draggedCategory.name, '→', targetCategory.name);
+
+    try {
+      setMergeLoading(true);
+      
+      // Preview the merge first
+      console.log('📋 Requesting merge preview...');
+      const preview = await categoryService.previewMerge(draggedCategory.id, targetCategory.id);
+      
+      console.log('📋 Preview response:', preview);
+      
+      if (preview.success && preview.canMerge) {
+        console.log('✅ Merge preview successful, showing confirmation');
+        setMergePreview(preview.preview);
+        setShowConfirmMerge(true);
+      } else {
+        console.log('❌ Cannot merge:', preview.message);
+        setError(preview.message || 'Cannot merge these categories');
+      }
+    } catch (err: any) {
+      console.error('❌ Merge preview error:', err);
+      setError(err.message || 'Failed to preview merge');
+    } finally {
+      setMergeLoading(false);
+      setDraggedCategory(null);
+    }
+  };
+
+  const handleExecuteMerge = async () => {
+    if (!mergePreview) {
+      console.log('❌ No merge preview available');
+      return;
+    }
+
+    console.log('🚀 EXECUTING MERGE:', mergePreview.sourceCategory.name, '→', mergePreview.targetCategory.name);
+
+    try {
+      setMergeLoading(true);
+      
+      const result = await categoryService.executeMerge(
+        mergePreview.sourceCategory.id,
+        mergePreview.targetCategory.id
+      );
+
+      console.log('🚀 Merge execution result:', result);
+
+      if (result.success) {
+        console.log('✅ Merge successful!');
+        setSuccess(`Merged "${mergePreview.sourceCategory.name}" into "${mergePreview.targetCategory.name}" successfully!`);
+        setShowConfirmMerge(false);
+        setMergePreview(null);
+        setShowMergeInterface(false);
+        loadCategories();
+        onCategoriesUpdated();
+      } else {
+        console.log('❌ Merge failed:', result.error);
+        setError(result.error || 'Failed to merge categories');
+      }
+    } catch (err: any) {
+      console.error('❌ Merge execution error:', err);
+      setError(err.message || 'Failed to merge categories');
+    } finally {
+      setMergeLoading(false);
+    }
+  };
+
+  const handleCancelMerge = () => {
+    setShowConfirmMerge(false);
+    setMergePreview(null);
+    setDraggedCategory(null);
+    setDragOverCategory(null);
   };
 
   const resetForm = () => {
@@ -236,13 +396,16 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
           )}
           
           <div className="category-actions">
-            <button 
-              className="btn-add-subcategory"
-              onClick={() => handleAddSubcategory(category)}
-              disabled={formLoading}
-            >
-              + {t('categories.addSubcategory')}
-            </button>
+            {/* Only show "Add Subcategory" button if category doesn't have expenses (like mobile version) */}
+            {!categoryExpenseStatus[category.id] && (
+              <button 
+                className="btn-add-subcategory"
+                onClick={() => handleAddSubcategory(category)}
+                disabled={formLoading}
+              >
+                + {t('categories.addSubcategory')}
+              </button>
+            )}
             <button 
               className="btn-edit"
               onClick={() => handleEdit(category)}
@@ -342,7 +505,17 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
     resetMessages();
   };
 
-  const handleAddSubcategory = (parentCategory: Category) => {
+  const handleAddSubcategory = async (parentCategory: Category) => {
+    // Double-check if parent category has expenses (like mobile version)
+    const usage = await categoryService.checkCategoryUsage(parentCategory.id);
+    
+    if (usage.success && usage.hasExpenses) {
+      // Cannot add subcategory to category with expenses
+      setError(t('categories.cannotAddSubcategoryWithExpenses'));
+      return;
+    }
+    
+    // Proceed with adding subcategory
     setEditingCategory(null);
     setFormData({
       ...defaultFormData,
@@ -453,6 +626,81 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
     onClose();
   };
 
+  // Render draggable category tree for merge interface
+  const renderMergeableCategory = (category: Category): JSX.Element => {
+    const hasChildren = category.children && category.children.length > 0;
+    const isExpanded = expandedCategories.has(category.id);
+    const isDraggedOver = dragOverCategory?.id === category.id;
+    const isDragging = draggedCategory?.id === category.id;
+
+    return (
+      <div key={category.id} className="category-tree-item">
+        <div 
+          className={`category-tree-node ${isDraggedOver ? 'drag-over' : ''} ${isDragging ? 'dragging' : ''}`}
+          draggable={!hasChildren} // Only leaf categories can be dragged
+          onDragStart={(e) => handleDragStart(e, category)}
+          onDragOver={(e) => handleDragOver(e, category)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, category)}
+        >
+          <div className="category-header">
+            <div className="category-tree-controls">
+              {hasChildren && (
+                <button
+                  className="tree-expand-btn"
+                  onClick={() => toggleCategoryExpansion(category.id)}
+                  aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                >
+                  {isExpanded ? '▼' : '▶'}
+                </button>
+              )}
+              {!hasChildren && <div className="tree-spacer" />}
+            </div>
+            
+            <div 
+              className="category-icon"
+              style={{ backgroundColor: category.color + '20', color: category.color }}
+            >
+              {category.icon}
+            </div>
+            
+            <div className="category-info">
+              <h4>{getHierarchicalCategoryName(category, categories, t)}</h4>
+              <div className="category-meta">
+                <span className={`type-badge ${category.type}`}>
+                  {t(`categories.types.${category.type}`)}
+                </span>
+                {category.level > 1 && (
+                  <span className="level-badge">Level {category.level}</span>
+                )}
+                <span className={`status-badge ${category.is_active ? 'active' : 'inactive'}`}>
+                  {category.is_active ? '✅ Active' : '❌ Inactive'}
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          {category.description && (
+            <p className="category-description">{category.description}</p>
+          )}
+
+          {!hasChildren && (
+            <div className="merge-hint">🔄 Drag to merge with another category</div>
+          )}
+          {hasChildren && (
+            <div className="merge-hint">⚠️ Contains subcategories - cannot be merged or used as merge target</div>
+          )}
+        </div>
+        
+        {hasChildren && isExpanded && (
+          <div className="category-children">
+            {category.children?.map(child => renderMergeableCategory(child))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -467,16 +715,59 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
           {error && <div className="error-message">{error}</div>}
           {success && <div className="success-message">{success}</div>}
 
-          {!showForm ? (
+          {showMergeInterface ? (
+            <div className="categories-list">
+              <div className="list-header">
+                <h3>{t('categories.mergeCategories')}</h3>
+                <button 
+                  className="btn-back"
+                  onClick={() => setShowMergeInterface(false)}
+                >
+                  ← {t('categories.backToList')}
+                </button>
+              </div>
+
+              <div className="merge-instructions">
+                <p><strong>📋 {t('categories.howToMerge')}</strong></p>
+                <p>{t('categories.mergeInstructions')}</p>
+                <ul>
+                  <li>{t('categories.mergeRule1')}</li>
+                  <li>{t('categories.mergeRule2')}</li>
+                  <li>{t('categories.mergeRule3')}</li>
+                </ul>
+              </div>
+
+              {mergeLoading ? (
+                <div className="loading-state">{t('categories.loadingMerge')}</div>
+              ) : (
+                <div className="categories-container">
+                  <div className="categories-tree">
+                    <div className="root-categories">
+                      {buildCategoryTree(categories).map(category => renderMergeableCategory(category))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : !showForm ? (
             <div className="categories-list">
               <div className="list-header">
                 <h3>{t('categories.yourCategories', { count: categories.length })}</h3>
-                <button 
-                  className="btn-add-category"
-                  onClick={() => setShowForm(true)}
-                >
-                  <span>+</span> {t('categories.addCategory')}
-                </button>
+                <div className="list-header-buttons">
+                  <button 
+                    className="btn-add-category"
+                    onClick={() => setShowForm(true)}
+                  >
+                    <span>+</span> {t('categories.addCategory')}
+                  </button>
+                  <button 
+                    className="btn-merge-categories"
+                    onClick={() => setShowMergeInterface(true)}
+                    disabled={categories.length < 2}
+                  >
+                    <span>🔄</span> {t('categories.mergeCategories')}
+                  </button>
+                </div>
               </div>
 
               {loading ? (
@@ -648,6 +939,61 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
           )}
         </div>
       </div>
+
+      {/* Merge Confirmation Modal */}
+      {showConfirmMerge && mergePreview && (
+        <div className="manage-categories-overlay" onClick={handleCancelMerge}>
+          <div className="manage-categories-modal form-mode" onClick={(e) => e.stopPropagation()}>
+            <div className="manage-categories-header">
+              <h2>⚠️ {t('categories.confirmMerge')}</h2>
+              <button className="close-button" onClick={handleCancelMerge}>×</button>
+            </div>
+
+            <div className="manage-categories-content">
+              <div className="merge-confirmation-details">
+                <div className="confirmation-section">
+                  <h3>{t('categories.sourceCategory')}: {mergePreview.sourceCategory.name}</h3>
+                  <p>↓ {t('categories.transactionsWillMove')}</p>
+                  <h3>{t('categories.targetCategory')}: {mergePreview.targetCategory.name}</h3>
+                </div>
+
+                <div className="confirmation-section">
+                  <h4>📊 {t('categories.whatWillHappen')}</h4>
+                  <ul>
+                    <li><strong>{mergePreview.transactionsToMove}</strong> {t('categories.transactionsWillMove')}</li>
+                    <li><strong>{mergePreview.expenseCount}</strong> {t('categories.expenseTransactions')}</li>
+                    <li><strong>{mergePreview.incomeCount}</strong> {t('categories.incomeTransactions')}</li>
+                    <li>{t('categories.sourceCategoryWillBeDeleted')}</li>
+                  </ul>
+                </div>
+
+                <div className="error-message">
+                  ⚠️ {t('categories.mergeWarning')}
+                </div>
+
+                <div className="form-actions">
+                  <button 
+                    type="button"
+                    className="btn-cancel"
+                    onClick={handleCancelMerge}
+                    disabled={mergeLoading}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button 
+                    type="button"
+                    className="btn-submit"
+                    onClick={handleExecuteMerge}
+                    disabled={mergeLoading}
+                  >
+                    {mergeLoading ? t('categories.merging') : t('categories.confirmMergeButton')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

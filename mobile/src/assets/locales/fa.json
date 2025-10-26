@@ -10,6 +10,7 @@
     "edit": "ویرایش",
     "add": "افزودن",
     "confirm": "تأیید",
+    "select": "انتخاب",
     "yes": "بله",
     "no": "خیر",
     "required": "الزامی",
@@ -230,7 +231,16 @@
     "subcategories": "زیردسته‌ها",
     "expandAll": "باز کردن همه",
     "collapseAll": "بستن همه",
-    "cannotSelectParentCategory": "نمی‌توان دسته‌بندی والد را انتخاب کرد. لطفاً یک زیردسته انتخاب کنید."
+    "cannotSelectParentCategory": "نمی‌توان دسته‌بندی والد را انتخاب کرد. لطفاً یک زیردسته انتخاب کنید.",
+    "categoryHasExpensesCannotDelete": "امکان حذف دسته‌بندی وجود ندارد",
+    "categoryHasExpensesMessage": "این دسته‌بندی شامل {count} تراکنش هزینه است و قابل حذف نیست. لطفاً ابتدا این تراکنش‌ها را حذف یا تغییر دهید.",
+    "subcategoryReactivationBlocked": "امکان فعال‌سازی زیردسته وجود ندارد",
+    "subcategoryReactivationMessage": "برای فعال‌سازی این زیردسته، لطفاً ابتدا دسته‌بندی والد '{parentName}' را فعال کنید. این کار امکان فعال‌سازی این دسته‌بندی را فراهم می‌کند.",
+    "onlyTopLevelActivation": "فقط فعال‌سازی سطح بالا مجاز است",
+    "onlyTopLevelActivationMessage": "زیردسته‌ها فقط از طریق فعال‌سازی دسته‌بندی اصلی قابل فعال‌سازی هستند. لطفاً '{rootCategoryName}' را فعال کنید.",
+    "expensesOnlyInLeafCategories": "هزینه‌ها فقط می‌توانند به دسته‌بندی‌های بدون زیردسته اضافه شوند",
+    "cannotAddExpenseToParentCategory": "امکان افزودن هزینه به دسته‌بندی والد وجود ندارد",
+    "parentCategoryBlockedMessage": "این دسته‌بندی دارای زیردسته است. هزینه‌ها فقط می‌توانند به دسته‌بندی‌های بدون زیردسته اضافه شوند. لطفاً یک زیردسته انتخاب کنید."
   },
   "analytics": {
     "title": "تحلیل‌ها",

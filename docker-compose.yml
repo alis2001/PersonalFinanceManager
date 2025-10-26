@@ -114,6 +114,7 @@ services:
       - EXPENSE_SERVICE_URL=http://expense:3000
       - INCOME_SERVICE_URL=http://income:3000
       - CATEGORY_SERVICE_URL=http://category:3000
+      - CATEGORY_MERGE_SERVICE_URL=http://category-merge:3000
       - ANALYTICS_SERVICE_URL=http://analytics:8000
       - ANALYTICS_ENGINE_URL=http://analytics-engine:8080
       - REPORTING_ENGINE_URL=http://reporting-engine:8080
@@ -311,6 +312,44 @@ services:
       # Timeout configuration
       - REQUEST_TIMEOUT=60000
       - DB_TIMEOUT=30000
+    networks:
+      - finance-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  category-merge:
+    build:
+      context: ./services/category-merge
+      dockerfile: Dockerfile
+    container_name: finance-category-merge
+    env_file:
+      - .env
+    ports:
+      - "${CATEGORY_MERGE_SERVICE_PORT:-3007}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=${APP_ENV}
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      # Timeout configuration
+      - REQUEST_TIMEOUT=60000
+      - DB_TIMEOUT=30000
+      - AUTH_SERVICE_URL=http://auth:3000
+      - LOG_LEVEL=${LOG_LEVEL}
     networks:
       - finance-network
     restart: unless-stopped

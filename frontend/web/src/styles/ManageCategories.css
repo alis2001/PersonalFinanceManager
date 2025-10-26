@@ -832,6 +832,20 @@
   transform: translateY(-1px);
 }
 
+.btn-add-subcategory.disabled-with-expenses {
+  background: #f8f9fa;
+  color: #6c757d;
+  border: 1px solid #dee2e6;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn-add-subcategory.disabled-with-expenses:hover {
+  background: #f8f9fa;
+  color: #6c757d;
+  transform: none;
+}
+
 .category-tree-controls {
   display: flex;
   align-items: center;
@@ -886,4 +900,348 @@
   font-size: 12px;
   margin-top: 4px;
   display: block;
+}
+
+/* ===== MERGE CATEGORIES INTERFACE ===== */
+
+/* Header Buttons Container */
+.list-header-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Merge Categories Button - White with Black Text (opposite of Add Category) */
+.btn-merge-categories {
+  background: #ffffff;
+  color: #1a1a1a;
+  border: 2px solid #1a1a1a;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-merge-categories:hover:not(:disabled) {
+  background: #f5f5f5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(26, 26, 26, 0.2);
+}
+
+.btn-merge-categories:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-merge-categories span {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+/* Merge Instructions */
+.merge-instructions {
+  background: #f8f9fa;
+  padding: 20px;
+  margin-bottom: 25px;
+  border-radius: 8px;
+}
+
+.merge-instructions p {
+  margin: 0 0 12px 0;
+  color: #333;
+  line-height: 1.6;
+}
+
+.merge-instructions ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #555;
+}
+
+.merge-instructions li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+/* Drag and Drop Styling for Merge Interface */
+.category-tree-node {
+  background: #ffffff;
+  border: 2px solid #e9ecef;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.category-tree-node:hover {
+  border-color: #1a1a1a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.category-tree-node.dragging {
+  opacity: 0.7;
+  transform: rotate(1deg) scale(0.98);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  border-color: #667eea;
+  background: #ffffff;
+}
+
+.category-tree-node.drag-over {
+  border: 2px solid #4caf50;
+  background: #ffffff;
+  transform: scale(1.02);
+  box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.1);
+}
+
+.category-tree-node[draggable="true"] {
+  cursor: grab;
+}
+
+.category-tree-node[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.category-tree-node[draggable="false"] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.category-tree-node[draggable="false"]:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: #dc3545;
+}
+
+.merge-hint {
+  font-size: 12px;
+  color: #667eea;
+  margin-top: 8px;
+  font-weight: 500;
+  padding: 4px 8px;
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* Merge Confirmation Modal Styling */
+.merge-confirmation-details {
+  padding: 0;
+}
+
+.confirmation-section {
+  margin-bottom: 20px;
+}
+
+.confirmation-section h3 {
+  margin: 0 0 8px 0;
+  color: #1a1a1a;
+  font-size: 1.1rem;
+}
+
+.confirmation-section p {
+  margin: 8px 0;
+  color: #666;
+  text-align: center;
+  font-weight: 500;
+}
+
+.confirmation-section h4 {
+  margin: 0 0 12px 0;
+  color: #1a1a1a;
+  font-size: 1rem;
+}
+
+.confirmation-section ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #555;
+}
+
+.confirmation-section li {
+  margin-bottom: 6px;
+}
+
+
+/* Merge Confirmation Modal */
+.merge-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+}
+
+.merge-confirm-modal {
+  background: white;
+  border-radius: 16px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.merge-confirm-header {
+  padding: 24px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  border-radius: 16px 16px 0 0;
+}
+
+.merge-confirm-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.merge-confirm-content {
+  padding: 24px;
+}
+
+.merge-flow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.source-category,
+.target-category {
+  flex: 1;
+}
+
+.source-category h4,
+.target-category h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #6b7280;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.category-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 2px solid #e2e8f0;
+}
+
+.category-card .category-icon {
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #667eea;
+}
+
+.category-card .category-name {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 16px;
+}
+
+.category-card .category-level {
+  font-size: 12px;
+  color: #718096;
+  background: #e2e8f0;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.merge-arrow {
+  font-size: 24px;
+  color: #667eea;
+  font-weight: bold;
+  margin: 0 8px;
+}
+
+.merge-impact {
+  margin-bottom: 24px;
+}
+
+.merge-impact h4 {
+  margin: 0 0 12px 0;
+  color: #2d3748;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.merge-impact ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #4a5568;
+}
+
+.merge-impact li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.merge-warning {
+  padding: 16px;
+  background: #fef2f2;
+  border-radius: 8px;
+  border-left: 4px solid #ef4444;
+  margin-bottom: 24px;
+}
+
+.merge-warning p {
+  margin: 0;
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.merge-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.btn-confirm-merge {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-confirm-merge:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);
 }

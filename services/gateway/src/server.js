@@ -13,6 +13,7 @@ console.log('🚀 Starting Finance Gateway...');
 const serviceUrls = {
   auth: process.env.AUTH_SERVICE_URL || 'http://auth:3000',
   category: process.env.CATEGORY_SERVICE_URL || 'http://category:3000',
+  categoryMerge: process.env.CATEGORY_MERGE_SERVICE_URL || 'http://category-merge:3000',
   expense: process.env.EXPENSE_SERVICE_URL || 'http://expense:3000',
   income: process.env.INCOME_SERVICE_URL || 'http://income:3000',
   analytics: process.env.ANALYTICS_SERVICE_URL || 'http://analytics:8000',
@@ -113,7 +114,8 @@ const bodyParserErrorHandler = () => {
 
 // Apply proxies BEFORE body parsing to avoid conflicts
 app.use('/api/auth', createEnhancedProxy('Auth', serviceUrls.auth, { '^/api/auth': '' }));
-app.use('/api/categories', createEnhancedProxy('Categories', serviceUrls.category, { '^/api/categories': '' }));
+app.use('/api/categories', createEnhancedProxy('Categories', serviceUrls.category, { '^/api': '' }));
+app.use('/api/category-merge', createEnhancedProxy('CategoryMerge', serviceUrls.categoryMerge, { '^/api/category-merge': '' }));
 app.use('/api/expenses', createEnhancedProxy('Expenses', serviceUrls.expense, { '^/api/expenses': '' }));
 app.use('/api/income', createEnhancedProxy('Income', serviceUrls.income, { '^/api/income': '' }));
 app.use('/api/analytics', createEnhancedProxy('Analytics', serviceUrls.analytics, { '^/api/analytics': '' }));
@@ -154,6 +156,7 @@ app.get('/', (req, res) => {
     routes: {
       auth: '/api/auth/*',
       categories: '/api/categories/*',
+      categoryMerge: '/api/category-merge/*',  
       expenses: '/api/expenses/*',
       income: '/api/income/*',
       analytics: '/api/analytics/*'
@@ -161,6 +164,7 @@ app.get('/', (req, res) => {
     serviceHealth: {
       auth: serviceUrls.auth,
       category: serviceUrls.category,
+      categoryMerge: serviceUrls.categoryMerge,
       expense: serviceUrls.expense,
       income: serviceUrls.income,
       analytics: serviceUrls.analytics
@@ -208,6 +212,7 @@ const server = app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Service mappings:`);
   console.log(`   📡 Auth proxy: /api/auth/* → ${serviceUrls.auth}`);
   console.log(`   📁 Categories proxy: /api/categories/* → ${serviceUrls.category}`);
+  console.log(`   🔄 Category Merge proxy: /api/category-merge/* → ${serviceUrls.categoryMerge}`);
   console.log(`   💰 Expenses proxy: /api/expenses/* → ${serviceUrls.expense}`);
   console.log(`   📈 Income proxy: /api/income/* → ${serviceUrls.income}`);
   console.log(`   📊 Analytics proxy: /api/analytics/* → ${serviceUrls.analytics}`);

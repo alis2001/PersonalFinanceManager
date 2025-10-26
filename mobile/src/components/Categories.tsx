@@ -13,10 +13,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
-import { Ionicons } from '@expo/vector-icons';
+// import { Ionicons } from '@expo/vector-icons'; // Temporarily commented to avoid import issues
 import categoryService, { Category } from '../services/categoryService';
 import CategoryContextMenu from './CategoryContextMenu';
 import BottomNavigation from './BottomNavigation';
+import AlertDialog from './AlertDialog';
 import { useTranslation } from '../hooks/useTranslation';
 
 interface CategoriesProps {
@@ -134,13 +135,13 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [categoryExpenseStatus, setCategoryExpenseStatus] = useState<Record<string, boolean>>({});
   
   // Form state
   const [showForm, setShowForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [formData, setFormData] = useState<CategoryFormData>(defaultFormData);
   const [formLoading, setFormLoading] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   
   // Hierarchical view state
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -148,7 +149,19 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
   // Context menu state
   const [contextMenuVisible, setContextMenuVisible] = useState(false);
   const [contextMenuCategory, setContextMenuCategory] = useState<Category | null>(null);
-  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  
+  // Alert dialog state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'error' | 'warning' | 'info' | 'success',
+    buttons: [] as Array<{
+      text: string;
+      style?: 'default' | 'cancel' | 'destructive';
+      onPress?: () => void;
+    }>
+  });
 
   useEffect(() => {
     loadCategories();
@@ -212,10 +225,15 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
   };
 
   // Build hierarchical tree structure
-  const buildCategoryTree = (categories: Category[]) => {
-    // If categories already have children structure, use it directly
+  const buildCategoryTree = (categories: Category[]): (Category & { children: Category[] })[] => {
+    // If categories already have children structure, normalize it to ensure type consistency
     if (categories.some(cat => cat.children && cat.children.length > 0)) {
-      return categories.filter(cat => !cat.parent_id);
+      return categories
+        .filter(cat => !cat.parent_id)
+        .map(cat => ({
+          ...cat,
+          children: cat.children || []
+        }));
     }
     
     // Otherwise build tree from flat structure
@@ -255,32 +273,181 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
   };
 
   // Get available parent categories (excluding current category being edited and its descendants)
+  // Flatten hierarchical categories to a flat list for easier processing
+  const flattenCategories = (categories: Category[]): Category[] => {
+    const flattened: Category[] = [];
+    
+    const flatten = (cats: Category[]) => {
+      cats.forEach(cat => {
+        flattened.push(cat);
+        if (cat.children && cat.children.length > 0) {
+          flatten(cat.children);
+        }
+      });
+    };
+    
+    flatten(categories);
+    return flattened;
+  };
+
   const getAvailableParents = () => {
+    // Always work with flattened data so we can see all categories at all levels
+    const flatCategories = flattenCategories(categories);
+    console.log('Categories: Flattened categories for parent selection:', flatCategories.length);
+    console.log('Categories: Available categories:', flatCategories.map(c => ({
+      id: c.id, 
+      name: c.name, 
+      parent_id: c.parent_id, 
+      level: c.level
+    })));
+    
     if (!editingCategory) {
-      return categories.filter(cat => cat.is_active);
+      console.log('Categories: Creating new category - all active categories available');
+      return flatCategories.filter(cat => cat.is_active);
     }
     
-    return categories.filter(cat => 
+    console.log('Categories: Editing category:', {
+      id: editingCategory.id,
+      name: editingCategory.name,
+      parent_id: editingCategory.parent_id,
+      level: editingCategory.level
+    });
+    
+    const availableParents = flatCategories.filter(cat => 
       cat.is_active && 
       cat.id !== editingCategory.id && 
-      !isDescendantOf(cat, editingCategory) // Prevent circular references
+      !isDescendantOf(cat, editingCategory, flatCategories) // Prevent circular references
     );
+    
+    console.log('Categories: Available parent categories:', availableParents.map(c => ({
+      id: c.id, 
+      name: c.name, 
+      level: c.level
+    })));
+    
+    return availableParents;
   };
 
   // Check if a category is a descendant of another category
-  const isDescendantOf = (potentialDescendant: Category, ancestor: Category): boolean => {
+  const isDescendantOf = (potentialDescendant: Category, ancestor: Category, flatCategories?: Category[]): boolean => {
     if (!potentialDescendant.parent_id) return false;
     if (potentialDescendant.parent_id === ancestor.id) return true;
     
-    const parent = categories.find(cat => cat.id === potentialDescendant.parent_id);
-    return parent ? isDescendantOf(parent, ancestor) : false;
+    // Use provided flat categories or fallback to flattening current categories
+    const searchCategories = flatCategories || flattenCategories(categories);
+    const parent = searchCategories.find(cat => cat.id === potentialDescendant.parent_id);
+    return parent ? isDescendantOf(parent, ancestor, searchCategories) : false;
+  };
+
+  // Helper function to show professional alerts
+  const showAlert = (
+    title: string, 
+    message: string, 
+    type: 'error' | 'warning' | 'info' | 'success',
+    buttons: Array<{
+      text: string;
+      style?: 'default' | 'cancel' | 'destructive';
+      onPress?: () => void;
+    }>
+  ) => {
+    setAlertConfig({ title, message, type, buttons });
+    setAlertVisible(true);
+  };
+
+  const closeAlert = () => {
+    setAlertVisible(false);
+  };
+
+  // Check if category has expenses using the proper backend endpoint
+  const checkCategoryHasExpenses = async (categoryId: string): Promise<boolean> => {
+    try {
+      console.log('Categories: Checking if category has expenses:', categoryId);
+      const usage = await categoryService.checkCategoryUsage(categoryId);
+      
+      if (usage.success) {
+        console.log('Categories: Category usage check result:', usage);
+        return usage.hasExpenses === true;
+      } else {
+        console.error('Categories: Failed to check category usage:', usage.error);
+        return false; // Default to allowing subcategory creation on error
+      }
+    } catch (error) {
+      console.error('Error checking category usage:', error);
+      return false; // Default to allowing subcategory creation on error
+    }
+  };
+
+  // Check if category has children
+  const checkCategoryHasChildren = (categoryId: string): boolean => {
+    const flatCategoriesForCheck = flattenCategories(categories);
+    return flatCategoriesForCheck.some(cat => cat.parent_id === categoryId);
+  };
+
+  // Find the root parent of a category (top-level category)
+  const findRootParent = (categoryId: string): Category | null => {
+    const flatCategoriesForCheck = flattenCategories(categories);
+    const category = flatCategoriesForCheck.find(cat => cat.id === categoryId);
+    
+    if (!category) return null;
+    if (!category.parent_id) return category; // This is already a root category
+    
+    // Traverse up the hierarchy to find the root
+    let currentCategory = category;
+    while (currentCategory.parent_id) {
+      const parent = flatCategoriesForCheck.find(cat => cat.id === currentCategory.parent_id);
+      if (!parent) break;
+      currentCategory = parent;
+    }
+    
+    return currentCategory;
+  };
+
+  // Check if all parents in the chain are active
+  const areAllParentsActive = (categoryId: string): boolean => {
+    const flatCategoriesForCheck = flattenCategories(categories);
+    const category = flatCategoriesForCheck.find(cat => cat.id === categoryId);
+    
+    if (!category || !category.parent_id) return true; // Root categories or not found
+    
+    // Check immediate parent
+    const parent = flatCategoriesForCheck.find(cat => cat.id === category.parent_id);
+    if (!parent || !parent.is_active) return false;
+    
+    // Recursively check up the chain
+    return areAllParentsActive(parent.id);
+  };
+
+  // Find the immediate inactive parent (the first inactive parent going up the chain)
+  const findImmediateInactiveParent = (categoryId: string): Category | null => {
+    const flatCategoriesForCheck = flattenCategories(categories);
+    const category = flatCategoriesForCheck.find(cat => cat.id === categoryId);
+    
+    if (!category || !category.parent_id) return null; // Root categories or not found
+    
+    // Check immediate parent
+    const parent = flatCategoriesForCheck.find(cat => cat.id === category.parent_id);
+    if (!parent) return null;
+    
+    if (!parent.is_active) {
+      // Found the immediate inactive parent
+      return parent;
+    }
+    
+    // Parent is active, check up the chain
+    return findImmediateInactiveParent(parent.id);
   };
 
   // Context menu handlers
-  const handleContextMenu = (category: Category, event: any) => {
-    const { pageX, pageY } = event.nativeEvent;
+  const handleContextMenu = async (category: Category) => {
     setContextMenuCategory(category);
-    setContextMenuPosition({ x: pageX, y: pageY });
+    
+    // Check if category has expenses for context menu
+    const hasExpenses = await checkCategoryHasExpenses(category.id);
+    setCategoryExpenseStatus(prev => ({
+      ...prev,
+      [category.id]: hasExpenses
+    }));
+    
     setContextMenuVisible(true);
   };
 
@@ -386,62 +553,294 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
     setSuccess(null);
   };
 
-  const handleAddSubcategory = (parentCategory: Category) => {
-    setEditingCategory(null);
-    setFormData({
-      name: '',
-      description: '',
-      color: parentCategory.color || '#4A90E2',
-      icon: '💰',
-      type: parentCategory.type,
-      is_active: true,
-      parent_id: parentCategory.id
-    });
-    setShowForm(true);
-    setError(null);
-    setSuccess(null);
-  };
 
-  const handleDelete = async (categoryId: string) => {
-    if (deleteConfirm !== categoryId) {
-      setDeleteConfirm(categoryId);
-      return;
-    }
-
+  const handleDelete = async (categoryId: string, deleteChildren: boolean = false) => {
     try {
-      const result = await categoryService.deleteCategory(categoryId);
+      console.log('Categories: Attempting to delete category:', categoryId, 'with children:', deleteChildren);
+      
+      const result = await categoryService.deleteCategory(categoryId, deleteChildren);
+      
       if (result.success) {
-        setSuccess('Category deleted successfully');
-        setDeleteConfirm(null);
+        setSuccess(t('categories.categoryDeleted'));
         await loadCategories();
       } else {
-        setError(result.error || 'Failed to delete category');
+        console.log('Categories: Delete failed with error:', result.error);
+        console.log('Categories: Full result object:', JSON.stringify(result));
+        // Handle specific backend error responses with professional alerts
+        if (result.error) {
+          if (result.error.includes('has sub-categories')) {
+            // Category has children - professional dialog
+            showAlert(
+              t('categories.cannotDeleteCategoryWithSubcategories'),
+              t('categories.deleteSubcategoriesFirst'),
+              'error',
+              [
+                {
+                  text: t('common.cancel'),
+                  style: 'cancel',
+                },
+                {
+                  text: t('categories.deleteAll'),
+                  style: 'destructive',
+                  onPress: () => handleDelete(categoryId, true),
+                },
+              ]
+            );
+          } else if (result.error.includes('being used in transactions')) {
+            // Check if we can extract the expense count from the error
+            const expenseCount = 1; // Default fallback
+            showAlert(
+              t('categories.categoryHasExpensesCannotDelete'),
+              t('categories.categoryHasExpensesMessage').replace('{count}', expenseCount.toString()),
+              'error',
+              [
+                {
+                  text: t('common.ok'),
+                  style: 'default',
+                }
+              ]
+            );
+          } else if (result.error.includes('child categories are being used')) {
+            showAlert(
+              t('categories.subcategoriesInUse'),
+              t('categories.subcategoriesInUseMessage'),
+              'error',
+              [
+                {
+                  text: t('common.ok'),
+                  style: 'default',
+                }
+              ]
+            );
+          } else {
+            // Show generic professional error for any other delete failure
+            showAlert(
+              t('categories.failedToDeleteCategory'),
+              result.error || t('categories.operationFailedTryAgain'),
+              'error',
+              [
+                {
+                  text: t('common.ok'),
+                  style: 'default',
+                }
+              ]
+            );
+          }
+        } else {
+          showAlert(
+            t('categories.failedToDeleteCategory'),
+            t('categories.operationFailedTryAgain'),
+            'error',
+            [
+              {
+                text: t('common.ok'),
+                style: 'default',
+              }
+            ]
+          );
+        }
       }
     } catch (err: any) {
-      console.log('Category deletion error:', err);
-      // Handle specific error cases
-      if (err.message && err.message.includes('being used in transactions')) {
-        setError('Cannot delete category that is being used in transactions. Please go to Transactions and remove or change the category for all transactions using this category first.');
-      } else {
-        setError('Failed to delete category');
-      }
+      console.error('Category deletion error:', err);
+      showAlert(
+        t('categories.failedToDeleteCategory'),
+        t('categories.operationFailedTryAgain'),
+        'error',
+        [
+          {
+            text: t('common.ok'),
+            style: 'default',
+          }
+        ]
+      );
     }
   };
 
   const handleToggleActive = async (category: Category) => {
     try {
-      const result = await categoryService.updateCategory(category.id, {
-        is_active: !category.is_active
-      });
+      const hasChildren = checkCategoryHasChildren(category.id);
+      const rootParent = findRootParent(category.id);
+      const isRootCategory = !category.parent_id;
       
-      if (result.success) {
-        setSuccess(category.is_active ? 'Category deactivated successfully' : 'Category activated successfully');
-        await loadCategories();
+      // If trying to activate a subcategory (not root level)
+      if (!category.is_active && !isRootCategory) {
+        // Check if ALL parents in the chain are active
+        const allParentsActive = areAllParentsActive(category.id);
+        
+        if (!allParentsActive) {
+          // Find the immediate inactive parent that needs to be activated first
+          const immediateInactiveParent = findImmediateInactiveParent(category.id);
+          const parentToActivate = immediateInactiveParent || rootParent;
+          
+          console.log(`🔄 REACTIVATION BLOCKED: Category "${category.name}" cannot be reactivated because parent "${parentToActivate?.name}" is inactive`);
+          console.log(`🔄 Immediate inactive parent:`, immediateInactiveParent?.name);
+          console.log(`🔄 Root parent:`, rootParent?.name);
+          
+          // Block subcategory reactivation - must activate the immediate inactive parent first
+          showAlert(
+            t('categories.subcategoryReactivationBlocked'),
+            t('categories.subcategoryReactivationMessage').replace('{parentName}', parentToActivate?.name || 'Unknown'),
+            'warning',
+            [
+              {
+                text: t('common.ok'),
+                style: 'default',
+              }
+            ]
+          );
+          return;
+        } else {
+          // All parents are active, allow direct activation of subcategory
+          await performToggleActive(category, false);
+          return;
+        }
+      }
+      
+      // If deactivating any category (allowed)
+      if (category.is_active) {
+        if (hasChildren) {
+          // Deactivating parent with children - cascade deactivation
+          showAlert(
+            t('categories.cascadeDeactivateConfirm'),
+            t('categories.cascadeDeactivateMessage'),
+            'warning',
+            [
+              {
+                text: t('common.cancel'),
+                style: 'cancel',
+              },
+              {
+                text: t('categories.deactivate'),
+                style: 'destructive',
+                onPress: () => performCascadeActivation(category, false),
+              },
+            ]
+          );
+        } else {
+          // Leaf category deactivation
+          await performToggleActive(category, false);
+        }
+        return;
+      }
+      
+      // If activating any category (root or intermediate level)
+      if (!category.is_active) {
+        if (hasChildren) {
+          // Activating parent with children - cascade activation (works for any level)
+          console.log(`🔄 CASCADING ACTIVATION: Category "${category.name}" (Level ${category.level || 'unknown'}) will cascade activate ${checkCategoryHasChildren(category.id) ? 'its children' : 'no children found'}`);
+          
+          showAlert(
+            t('categories.cascadeActivateConfirm'),
+            t('categories.cascadeActivateMessage'),
+            'info',
+            [
+              {
+                text: t('common.cancel'),
+                style: 'cancel',
+              },
+              {
+                text: t('categories.activate'),
+                style: 'default',
+                onPress: () => performCascadeActivation(category, true),
+              },
+            ]
+          );
+        } else {
+          // Leaf category activation (any level)
+          console.log(`🔄 LEAF ACTIVATION: Category "${category.name}" (Level ${category.level || 'unknown'}) is a leaf category - direct activation`);
+          await performToggleActive(category, false);
+        }
+      }
+      
+    } catch (err) {
+      setError(t('categories.failedToUpdateCategory'));
+    }
+  };
+
+  const performToggleActive = async (category: Category, cascade: boolean = false) => {
+    try {
+      const newActiveState = !category.is_active;
+      
+      if (cascade) {
+        console.log(`🔄 CALLING BACKEND CASCADE: Category "${category.name}" newActiveState=${newActiveState} cascade=true`);
+        const result = await categoryService.updateCategoryWithCascade(
+          category.id, 
+          { is_active: newActiveState }, 
+          true
+        );
+        console.log(`🔄 BACKEND CASCADE RESULT: Success=${result.success}, Error=${result.error}`);
+        
+        if (result.success) {
+          setSuccess(newActiveState 
+            ? t('categories.allSubcategoriesActivated') 
+            : t('categories.allSubcategoriesDeactivated')
+          );
+          await loadCategories();
+        } else {
+          setError(result.error || t('categories.failedToUpdateCategory'));
+        }
       } else {
-        setError(result.error || 'Failed to update category');
+        const result = await categoryService.updateCategory(category.id, {
+          is_active: newActiveState
+        });
+        
+        if (result.success) {
+          setSuccess(newActiveState 
+            ? t('categories.categoryActivated') 
+            : t('categories.categoryDeactivated')
+          );
+          await loadCategories();
+        } else {
+          setError(result.error || t('categories.failedToUpdateCategory'));
+        }
       }
     } catch (err) {
-      setError('Failed to update category');
+      setError(t('categories.failedToUpdateCategory'));
+    }
+  };
+
+  const performCascadeActivation = async (category: Category, activate: boolean) => {
+    console.log(`🔄 PERFORMING CASCADE ACTIVATION: Category "${category.name}" activate=${activate} with cascade=true`);
+    await performToggleActive(category, true);
+  };
+
+  const handleAddSubcategory = async (parentCategory: Category) => {
+    try {
+      // Check if parent category has expenses
+      const hasExpenses = await checkCategoryHasExpenses(parentCategory.id);
+      
+      if (hasExpenses) {
+        // Cannot add subcategory to category with expenses
+        showAlert(
+          t('categories.cannotAddSubcategoryWithExpenses'),
+          t('categories.expensesOnlyInLeafCategories'),
+          'error',
+          [
+            {
+              text: t('common.ok'),
+              style: 'default',
+            }
+          ]
+        );
+        return;
+      }
+      
+      // Proceed with adding subcategory
+      setEditingCategory(null);
+      setFormData({
+        name: '',
+        description: '',
+        color: parentCategory.color || '#4A90E2',
+        icon: '💰',
+        type: parentCategory.type,
+        is_active: true,
+        parent_id: parentCategory.id
+      });
+      setShowForm(true);
+      setError(null);
+      setSuccess(null);
+    } catch (err) {
+      setError(t('categories.failedToCheckCategoryUsage'));
     }
   };
 
@@ -471,11 +870,9 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
                 style={styles.treeExpandBtn}
                 onPress={() => toggleCategoryExpansion(category.id)}
               >
-                <Ionicons 
-                  name={isExpanded ? 'chevron-down' : 'chevron-forward'} 
-                  size={18} 
-                  color="#666" 
-                />
+                <Text style={{ color: '#666', fontSize: 18 }}>
+                  {isExpanded ? '▼' : '▶'}
+                </Text>
               </TouchableOpacity>
             )}
             
@@ -518,9 +915,9 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
             {/* Context Menu Button */}
             <TouchableOpacity
               style={styles.contextMenuButton}
-              onPress={(event) => handleContextMenu(category, event)}
+              onPress={() => handleContextMenu(category)}
             >
-              <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+              <Text style={{ color: '#666', fontSize: 20 }}>⋮</Text>
             </TouchableOpacity>
           </View>
           
@@ -793,7 +1190,17 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
         onDelete={handleDelete}
         onToggleActive={handleToggleActive}
         onAddSubcategory={handleAddSubcategory}
-        position={contextMenuPosition}
+        hasExpenses={contextMenuCategory ? categoryExpenseStatus[contextMenuCategory.id] || false : false}
+      />
+
+      {/* Professional Alert Dialog */}
+      <AlertDialog
+        visible={alertVisible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type={alertConfig.type}
+        buttons={alertConfig.buttons}
+        onClose={closeAlert}
       />
 
       {/* Bottom Navigation */}

@@ -10,6 +10,7 @@
     "edit": "Bearbeiten",
     "add": "Hinzufügen",
     "confirm": "Bestätigen",
+    "select": "Auswählen",
     "yes": "Ja",
     "no": "Nein",
     "required": "Erforderlich",
@@ -211,7 +212,13 @@
     "otherExpensesDesc": "Verschiedene und nicht kategorisierte Ausgaben",
     "otherIncomeDesc": "Verschiedene Einkommensquellen",
     "personalCareDesc": "Haarschnitte, Kosmetik, Fitnessstudio, Wellness",
-    "rentalIncomeDesc": "Mieteinkommen aus Immobilien"
+    "rentalIncomeDesc": "Mieteinkommen aus Immobilien",
+    "categoryHasExpensesCannotDelete": "Kategorie kann nicht gelöscht werden",
+    "categoryHasExpensesMessage": "Diese Kategorie enthält {count} Ausgabentransaktionen und kann nicht gelöscht werden. Bitte entfernen oder übertragen Sie diese Transaktionen zuerst.",
+    "subcategoryReactivationBlocked": "Unterkategorie kann nicht reaktiviert werden",
+    "subcategoryReactivationMessage": "Um diese Unterkategorie zu reaktivieren, aktivieren Sie bitte zuerst die übergeordnete Kategorie '{parentName}'. Dies ermöglicht es Ihnen, diese Kategorie zu reaktivieren.",
+    "onlyTopLevelActivation": "Nur Aktivierung der obersten Ebene erlaubt",
+    "onlyTopLevelActivationMessage": "Unterkategorien können nur durch Aktivierung ihrer übergeordneten Hauptkategorie reaktiviert werden. Bitte aktivieren Sie stattdessen '{rootCategoryName}'."
   },
   "analytics": {
     "title": "Analysen",

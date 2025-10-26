@@ -167,6 +167,31 @@ const updateChildrenPaths = async (parentId, newParentPath, newParentPathIds, ne
   }
 };
 
+// Cascade active status to all children and grandchildren
+const cascadeActiveStatus = async (parentId, isActive, userId) => {
+  const children = await db.query(
+    'SELECT id, name FROM categories WHERE parent_id = $1 AND user_id = $2',
+    [parentId, userId]
+  );
+  
+  logger.info(`🔄 CASCADE FUNCTION: Parent ${parentId} has ${children.rows.length} children to update to is_active=${isActive}`);
+  
+  for (const child of children.rows) {
+    logger.info(`🔄 CASCADE UPDATING: Child "${child.name}" (${child.id}) to is_active=${isActive}`);
+    
+    // Update child's active status
+    await db.query(
+      'UPDATE categories SET is_active = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3',
+      [isActive, child.id, userId]
+    );
+    
+    // Recursively update grandchildren
+    await cascadeActiveStatus(child.id, isActive, userId);
+  }
+  
+  logger.info(`🔄 CASCADE FUNCTION COMPLETED: Updated ${children.rows.length} children of parent ${parentId}`);
+};
+
 // Auth middleware
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -355,10 +380,11 @@ app.post('/categories', authenticateToken, async (req, res) => {
   }
 });
 
-// Update category - FIXED to support partial updates
+// Update category - FIXED to support partial updates and cascade operations
 app.put('/categories/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
+    const { cascade } = req.query;
     
     // FIXED: Use update schema instead of create schema
     const { error, value } = categoryUpdateSchema.validate(req.body);
@@ -462,6 +488,15 @@ app.put('/categories/:id', authenticateToken, async (req, res) => {
     // If parent_id changed, update all children paths
     if (value.parent_id !== undefined && value.parent_id !== currentCategory.parent_id) {
       await updateChildrenPaths(id, category.path, category.path_ids, category.level);
+    }
+    
+    // If cascade is enabled and is_active is being updated, cascade to children
+    if (cascade === 'true' && value.is_active !== undefined && value.is_active !== currentCategory.is_active) {
+      logger.info(`🔄 BACKEND CASCADE STARTING: Category "${category.name}" (${id}) changing from is_active=${currentCategory.is_active} to is_active=${value.is_active} - cascading to children`);
+      await cascadeActiveStatus(id, value.is_active, req.user.userId);
+      logger.info(`🔄 BACKEND CASCADE COMPLETED: Cascaded active status ${value.is_active} to all children of category: ${category.name} by user ${req.user.userId}`);
+    } else {
+      logger.info(`🔄 BACKEND NO CASCADE: Category "${category.name}" (${id}) - cascade=${cascade}, is_active change=${value.is_active !== undefined ? 'yes' : 'no'}, changed=${value.is_active !== currentCategory.is_active ? 'yes' : 'no'}`);
     }
     
     logger.info(`Category updated: ${category.name} (level ${category.level}) by user ${req.user.userId}`);
@@ -644,6 +679,52 @@ app.put('/categories/:id/move', authenticateToken, async (req, res) => {
     
   } catch (error) {
     logger.error('Move category error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Check category usage (expenses/income transactions)
+app.get('/categories/:id/usage', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if category exists and belongs to user
+    const categoryCheck = await db.query(
+      'SELECT * FROM categories WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    
+    if (categoryCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    // Check if category is being used in expenses or income
+    const usageCheck = await db.query(
+      'SELECT COUNT(*) as usage_count FROM (SELECT category_id FROM expenses WHERE category_id = $1 UNION ALL SELECT category_id FROM income WHERE category_id = $1) as usage',
+      [id]
+    );
+    
+    const usageCount = parseInt(usageCheck.rows[0].usage_count);
+    
+    // Check if category has children
+    const childrenCheck = await db.query(
+      'SELECT COUNT(*) as children_count FROM categories WHERE parent_id = $1',
+      [id]
+    );
+    
+    const childrenCount = parseInt(childrenCheck.rows[0].children_count);
+    
+    logger.info(`Category usage check: ${id} - expenses: ${usageCount}, children: ${childrenCount} by user ${req.user.userId}`);
+    
+    res.json({
+      hasExpenses: usageCount > 0,
+      hasChildren: childrenCount > 0,
+      expenseCount: usageCount,
+      childrenCount: childrenCount
+    });
+    
+  } catch (error) {
+    logger.error('Category usage check error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

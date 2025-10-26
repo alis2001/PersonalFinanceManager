@@ -10,6 +10,7 @@
     "edit": "Modifier",
     "add": "Ajouter",
     "confirm": "Confirmer",
+    "select": "Sélectionner",
     "yes": "Oui",
     "no": "Non",
     "required": "Requis",
@@ -213,7 +214,13 @@
     "otherExpensesDesc": "Dépenses diverses et non catégorisées",
     "otherIncomeDesc": "Sources de revenus diverses",
     "personalCareDesc": "Coupes de cheveux, cosmétiques, gym, bien-être",
-    "rentalIncomeDesc": "Revenus de location de propriété"
+    "rentalIncomeDesc": "Revenus de location de propriété",
+    "categoryHasExpensesCannotDelete": "Impossible de supprimer la catégorie",
+    "categoryHasExpensesMessage": "Cette catégorie contient {count} transactions de dépenses et ne peut pas être supprimée. Veuillez d'abord supprimer ou réassigner ces transactions.",
+    "subcategoryReactivationBlocked": "Impossible de réactiver la sous-catégorie",
+    "subcategoryReactivationMessage": "Pour réactiver cette sous-catégorie, veuillez d'abord activer la catégorie parent '{parentName}'. Cela vous permettra de réactiver cette catégorie.",
+    "onlyTopLevelActivation": "Seule l'activation de niveau supérieur est autorisée",
+    "onlyTopLevelActivationMessage": "Les sous-catégories ne peuvent être réactivées qu'en activant leur catégorie parent principale. Veuillez activer '{rootCategoryName}' à la place."
   },
   "analytics": {
     "title": "Analyses",

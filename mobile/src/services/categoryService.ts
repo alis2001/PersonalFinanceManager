@@ -407,6 +407,58 @@ class CategoryService {
       return { success: false, error: error.message };
     }
   }
+
+  async checkCategoryUsage(id: string): Promise<{
+    success: boolean;
+    hasExpenses?: boolean;
+    hasChildren?: boolean;
+    expenseCount?: number;
+    childrenCount?: number;
+    error?: string;
+  }> {
+    try {
+      const response = await this.makeRequest(`/categories/${id}/usage`, {
+        method: 'GET',
+      });
+
+      const data = await this.handleResponse(response);
+      return { 
+        success: true, 
+        hasExpenses: data.hasExpenses,
+        hasChildren: data.hasChildren,
+        expenseCount: data.expenseCount,
+        childrenCount: data.childrenCount
+      };
+    } catch (error: any) {
+      console.error('Check category usage error:', error);
+      if (error.message === 'Token refreshed, retry request') {
+        return this.checkCategoryUsage(id);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateCategoryWithCascade(id: string, categoryData: UpdateCategoryData, cascadeToChildren: boolean = false): Promise<CategoryResponse> {
+    try {
+      const endpoint = `/categories/${id}${cascadeToChildren ? '?cascade=true' : ''}`;
+      console.log(`🔄 CATEGORY SERVICE CASCADE: Calling endpoint ${endpoint} with data:`, categoryData);
+      
+      const response = await this.makeRequest(endpoint, {
+        method: 'PUT',
+        body: JSON.stringify(categoryData),
+      });
+
+      const data = await this.handleResponse(response);
+      console.log(`🔄 CATEGORY SERVICE CASCADE SUCCESS: Response data:`, data);
+      return { success: true, category: data };
+    } catch (error: any) {
+      console.error('Update category with cascade error:', error);
+      if (error.message === 'Token refreshed, retry request') {
+        return this.updateCategoryWithCascade(id, categoryData, cascadeToChildren);
+      }
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 const categoryService = new CategoryService();

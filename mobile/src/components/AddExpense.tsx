@@ -371,7 +371,12 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           onClose();
         }
       } else {
-        setError(result.error || t('expenses.failedToCreateExpenseTryAgain'));
+        // Handle specific error for parent category selection
+        if (result.error && result.error.includes('Cannot add expense to parent category')) {
+          setError(t('categories.parentCategoryBlockedMessage'));
+        } else {
+          setError(result.error || t('expenses.failedToCreateExpenseTryAgain'));
+        }
       }
     } catch (err) {
       logger.error('Error creating expense:', err);

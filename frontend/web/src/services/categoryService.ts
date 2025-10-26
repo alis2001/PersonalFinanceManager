@@ -98,7 +98,7 @@ class CategoryService {
         queryParams.append('active', params.active.toString());
       }
 
-      const url = `${this.categoryURL}/categories${queryParams.toString() ? `?${queryParams}` : ''}`;
+      const url = `${this.categoryURL}${queryParams.toString() ? `?${queryParams}` : ''}`;
       
       const response = await fetch(url, {
         headers: this.getAuthHeaders()
@@ -160,7 +160,7 @@ class CategoryService {
 
   async getCategory(id: string): Promise<CategoryResponse> {
     try {
-      const response = await fetch(`${this.categoryURL}/categories/${id}`, {
+      const response = await fetch(`${this.categoryURL}/${id}`, {
         headers: this.getAuthHeaders()
       });
 
@@ -185,7 +185,7 @@ class CategoryService {
     parent_id?: string;
   }): Promise<CategoryResponse> {
     try {
-      const response = await fetch(`${this.categoryURL}/categories`, {
+      const response = await fetch(`${this.categoryURL}`, {
         method: 'POST',
         headers: this.getAuthHeaders(),
         body: JSON.stringify(categoryData)
@@ -216,7 +216,7 @@ class CategoryService {
     parent_id?: string;
   }): Promise<CategoryResponse> {
     try {
-      const response = await fetch(`${this.categoryURL}/categories/${id}`, {
+      const response = await fetch(`${this.categoryURL}/${id}`, {
         method: 'PUT',
         headers: this.getAuthHeaders(),
         body: JSON.stringify(categoryData)
@@ -239,7 +239,7 @@ class CategoryService {
 
   async deleteCategory(id: string): Promise<CategoryResponse> {
     try {
-      const response = await fetch(`${this.categoryURL}/categories/${id}`, {
+      const response = await fetch(`${this.categoryURL}/${id}`, {
         method: 'DELETE',
         headers: this.getAuthHeaders()
       });
@@ -253,6 +253,106 @@ class CategoryService {
       console.error('Delete category error:', error);
       if (error.message === 'Token refreshed, retry request') {
         return this.deleteCategory(id);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Category Merge Service Methods
+  async getCategoryTree(): Promise<CategoryResponse> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/category-merge/categories/tree`, {
+        headers: this.getAuthHeaders()
+      });
+      const data = await this.handleResponse(response);
+      return { 
+        success: true, 
+        categories: data.categories,
+        total: data.total 
+      };
+    } catch (error: any) {
+      console.error('Get category tree error:', error);
+      if (error.message === 'Token refreshed, retry request') {
+        return this.getCategoryTree();
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async previewMerge(sourceCategoryId: string, targetCategoryId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/category-merge/merge/preview`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({
+          sourceCategoryId,
+          targetCategoryId
+        })
+      });
+      const data = await this.handleResponse(response);
+      return { success: true, ...data };
+    } catch (error: any) {
+      console.error('Preview merge error:', error);
+      if (error.message === 'Token refreshed, retry request') {
+        return this.previewMerge(sourceCategoryId, targetCategoryId);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async executeMerge(sourceCategoryId: string, targetCategoryId: string): Promise<CategoryResponse> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/category-merge/merge/execute`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({
+          sourceCategoryId,
+          targetCategoryId,
+          confirmMerge: true
+        })
+      });
+      const data = await this.handleResponse(response);
+      return { 
+        success: true, 
+        message: data.message,
+        category: data.details 
+      };
+    } catch (error: any) {
+      console.error('Execute merge error:', error);
+      if (error.message === 'Token refreshed, retry request') {
+        return this.executeMerge(sourceCategoryId, targetCategoryId);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async checkCategoryUsage(id: string): Promise<{
+    success: boolean;
+    hasExpenses?: boolean;
+    hasChildren?: boolean;
+    expenseCount?: number;
+    childrenCount?: number;
+    error?: string;
+  }> {
+    try {
+      // Direct API call to avoid gateway path issues
+      const response = await fetch(`${this.baseURL}/api/categories/${id}/usage`, {
+        method: 'GET',
+        headers: this.getAuthHeaders()
+      });
+
+      const data = await this.handleResponse(response);
+      return { 
+        success: true, 
+        hasExpenses: data.hasExpenses,
+        hasChildren: data.hasChildren,
+        expenseCount: data.expenseCount,
+        childrenCount: data.childrenCount
+      };
+    } catch (error: any) {
+      console.error('Check category usage error:', error);
+      if (error.message === 'Token refreshed, retry request') {
+        return this.checkCategoryUsage(id);
       }
       return { success: false, error: error.message };
     }

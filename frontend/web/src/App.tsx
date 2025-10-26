@@ -8,7 +8,7 @@ import Register from './components/Register';
 import VerifyEmail from './components/VerifyEmail';
 import Dashboard from './components/Dashboard';
 import Analytics from './components/Analytics';
-import AllTransactions from './components/AllTransactions'; // NEW IMPORT
+import AllTransactions from './components/AllTransactions';
 import authService from './services/authService';
 import translationService from './services/translationService';
 import './styles/App.css';

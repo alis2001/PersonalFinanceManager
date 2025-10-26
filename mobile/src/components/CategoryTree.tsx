@@ -5,16 +5,15 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
-  PanGestureHandler,
-  State,
   Alert,
   Modal,
   TextInput,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { PanGestureHandlerGestureEvent } from 'react-native-gesture-handler';
+import { Picker } from '@react-native-picker/picker';
+import { PanGestureHandler, State, PanGestureHandlerGestureEvent } from 'react-native-gesture-handler';
+// Note: Using Text as placeholder for Ionicons to avoid import issues
 import categoryService, { Category } from '../services/categoryService';
 
 interface CategoryTreeProps {
@@ -160,11 +159,9 @@ const CategoryNode: React.FC<CategoryNodeProps> = ({
             <View style={styles.expandButton}>
               {hasChildren ? (
                 <TouchableOpacity onPress={onToggleExpand}>
-                  <Ionicons
-                    name={isExpanded ? 'chevron-down' : 'chevron-forward'}
-                    size={16}
-                    color="#6b7280"
-                  />
+                  <Text style={{ color: '#6b7280', fontSize: 16 }}>
+                    {isExpanded ? '▼' : '▶'}
+                  </Text>
                 </TouchableOpacity>
               ) : (
                 <View style={{ width: 16 }} />
@@ -194,7 +191,7 @@ const CategoryNode: React.FC<CategoryNodeProps> = ({
 
             {/* Arrow for selection */}
             {onCategorySelect && (
-              <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+              <Text style={{ color: '#9ca3af', fontSize: 16 }}>▶</Text>
             )}
           </TouchableOpacity>
 
@@ -205,21 +202,21 @@ const CategoryNode: React.FC<CategoryNodeProps> = ({
                 style={[styles.actionButton, styles.editButton]}
                 onPress={() => handleActionPress('edit')}
               >
-                <Ionicons name="pencil" size={16} color="white" />
+                <Text style={{ color: 'white', fontSize: 16 }}>✏️</Text>
                 <Text style={styles.actionText}>Edit</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.actionButton, styles.addButton]}
                 onPress={() => handleActionPress('add')}
               >
-                <Ionicons name="add" size={16} color="white" />
+                <Text style={{ color: 'white', fontSize: 16 }}>➕</Text>
                 <Text style={styles.actionText}>Add</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.actionButton, styles.deleteButton]}
                 onPress={() => handleActionPress('delete')}
               >
-                <Ionicons name="trash" size={16} color="white" />
+                <Text style={{ color: 'white', fontSize: 16 }}>🗑️</Text>
                 <Text style={styles.actionText}>Delete</Text>
               </TouchableOpacity>
             </View>
@@ -255,6 +252,7 @@ const CategoryTree: React.FC<CategoryTreeProps> = ({
   type = 'expense'
 }) => {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [flatCategories, setFlatCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -267,17 +265,38 @@ const CategoryTree: React.FC<CategoryTreeProps> = ({
   const loadCategories = async () => {
     try {
       setLoading(true);
-      const result = await categoryService.getCategoryTree(type);
-      if (result.success && result.categories) {
-        setCategories(result.categories as Category[]);
+      console.log('CategoryTree: Loading categories with type:', type);
+      
+      // Get flat structure first to ensure all parent_id relationships are correct
+      const flatResult = await categoryService.getCategories({ 
+        type, 
+        active: true 
+      });
+      console.log('CategoryTree: Flat categories result:', flatResult);
+      
+      if (flatResult.success && flatResult.categories) {
+        console.log('CategoryTree: Raw flat categories from API:', JSON.stringify(flatResult.categories, null, 2));
+        
+        // Store the flat data for the modal
+        setFlatCategories(flatResult.categories);
+        
+        // Build hierarchical structure from flat data for display
+        const hierarchicalCategories = buildCategoryTreeFromFlat(flatResult.categories);
+        console.log('CategoryTree: Built hierarchical structure:', hierarchicalCategories.length);
+        
+        setCategories(hierarchicalCategories);
+        
         // Auto-expand first level
-        const firstLevelIds = result.categories
+        const firstLevelIds = hierarchicalCategories
           .filter((cat: Category) => cat.level === 1)
           .map((cat: Category) => cat.id);
+        console.log('CategoryTree: Auto-expanding first level categories:', firstLevelIds);
         setExpandedCategories(new Set(firstLevelIds));
+      } else {
+        console.error('CategoryTree: Failed to load categories:', flatResult.error);
       }
     } catch (error) {
-      console.error('Failed to load categories:', error);
+      console.error('CategoryTree: Exception loading categories:', error);
     } finally {
       setLoading(false);
     }
@@ -301,6 +320,17 @@ const CategoryTree: React.FC<CategoryTreeProps> = ({
   };
 
   const handleCategoryEdit = (category: Category) => {
+    console.log('=== CategoryTree: Editing category ===');
+    console.log('CategoryTree: Selected category for editing:', {
+      id: category.id,
+      name: category.name,
+      parent_id: category.parent_id,
+      level: category.level,
+      path: category.path,
+      path_ids: category.path_ids
+    });
+    console.log('CategoryTree: Full category object:', JSON.stringify(category, null, 2));
+    
     setEditingCategory(category);
     setShowCreateModal(true);
   };
@@ -331,6 +361,94 @@ const CategoryTree: React.FC<CategoryTreeProps> = ({
     }
   };
 
+  // Build hierarchical structure from flat category data
+  const buildCategoryTreeFromFlat = (flatCategories: Category[]): Category[] => {
+    console.log('CategoryTree: Building tree from flat data:', flatCategories.length);
+    
+    // Create a map for quick lookup
+    const categoryMap = new Map<string, Category & { children: Category[] }>();
+    
+    // First pass: create all categories with empty children arrays
+    flatCategories.forEach(cat => {
+      console.log('CategoryTree: Processing flat category:', {
+        id: cat.id,
+        name: cat.name,
+        parent_id: cat.parent_id,
+        level: cat.level
+      });
+      
+      categoryMap.set(cat.id, {
+        ...cat,
+        children: []
+      });
+    });
+    
+    const rootCategories: Category[] = [];
+    
+    // Second pass: build the tree structure
+    flatCategories.forEach(cat => {
+      const categoryWithChildren = categoryMap.get(cat.id)!;
+      
+      if (cat.parent_id) {
+        // This is a child category
+        const parent = categoryMap.get(cat.parent_id);
+        if (parent) {
+          parent.children.push(categoryWithChildren);
+          console.log(`CategoryTree: Added "${cat.name}" as child of "${parent.name}"`);
+        } else {
+          console.warn(`CategoryTree: Parent not found for category "${cat.name}" (parent_id: ${cat.parent_id})`);
+          // If parent not found, treat as root
+          rootCategories.push(categoryWithChildren);
+        }
+      } else {
+        // This is a root category
+        rootCategories.push(categoryWithChildren);
+        console.log(`CategoryTree: Added "${cat.name}" as root category`);
+      }
+    });
+    
+    console.log('CategoryTree: Tree building complete. Root categories:', rootCategories.length);
+    return rootCategories;
+  };
+
+  // Flatten hierarchical categories to a flat list for easier processing
+  const flattenCategories = (categories: Category[]): Category[] => {
+    const flattened: Category[] = [];
+    
+    const flatten = (cats: Category[], depth: number = 0) => {
+      console.log(`CategoryTree: Flattening at depth ${depth}, categories:`, cats.length);
+      
+      cats.forEach((cat, index) => {
+        console.log(`CategoryTree: Processing category ${index} at depth ${depth}:`, {
+          id: cat.id,
+          name: cat.name,
+          parent_id: cat.parent_id,
+          level: cat.level,
+          hasChildren: !!(cat.children && cat.children.length > 0),
+          childrenCount: cat.children?.length || 0
+        });
+        
+        flattened.push(cat);
+        
+        if (cat.children && cat.children.length > 0) {
+          console.log(`CategoryTree: Flattening ${cat.children.length} children of "${cat.name}"`);
+          flatten(cat.children, depth + 1);
+        }
+      });
+    };
+    
+    console.log('CategoryTree: Starting to flatten categories:', categories.length);
+    flatten(categories);
+    console.log('CategoryTree: Flattened result:', flattened.map(c => ({
+      id: c.id,
+      name: c.name,
+      parent_id: c.parent_id,
+      level: c.level
+    })));
+    
+    return flattened;
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -345,7 +463,7 @@ const CategoryTree: React.FC<CategoryTreeProps> = ({
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {categories.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="folder-outline" size={48} color="#9ca3af" />
+            <Text style={{ color: '#9ca3af', fontSize: 48 }}>📁</Text>
             <Text style={styles.emptyTitle}>No categories yet</Text>
             <Text style={styles.emptySubtitle}>Create your first category to get started</Text>
           </View>
@@ -374,7 +492,7 @@ const CategoryTree: React.FC<CategoryTreeProps> = ({
           style={styles.fab}
           onPress={() => handleCategoryCreate()}
         >
-          <Ionicons name="add" size={24} color="white" />
+          <Text style={{ color: 'white', fontSize: 24 }}>➕</Text>
         </TouchableOpacity>
       )}
 
@@ -392,6 +510,16 @@ const CategoryTree: React.FC<CategoryTreeProps> = ({
           await loadCategories();
         }}
         type={type}
+        availableCategories={(() => {
+          console.log('CategoryTree: Passing flat categories to modal:', flatCategories.length);
+          console.log('CategoryTree: Flat categories for modal:', flatCategories.map(c => ({
+            id: c.id,
+            name: c.name,
+            parent_id: c.parent_id,
+            level: c.level
+          })));
+          return flatCategories;
+        })()}
       />
     </View>
   );
@@ -404,6 +532,7 @@ interface CategoryModalProps {
   onClose: () => void;
   onSave: () => void;
   type: 'income' | 'expense' | 'both';
+  availableCategories?: Category[];
 }
 
 const CategoryModal: React.FC<CategoryModalProps> = ({
@@ -411,30 +540,121 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
   category,
   onClose,
   onSave,
-  type
+  type,
+  availableCategories = []
 }) => {
-  const [name, setName] = useState(category?.name || '');
-  const [description, setDescription] = useState(category?.description || '');
-  const [color, setColor] = useState(category?.color || '#3b82f6');
-  const [icon, setIcon] = useState(category?.icon || '📄');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [color, setColor] = useState('#3b82f6');
+  const [icon, setIcon] = useState('📄');
+  const [parentId, setParentId] = useState('');
   const [loading, setLoading] = useState(false);
 
   const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+  // Reset form when category changes or modal becomes visible
+  React.useEffect(() => {
+    if (visible) {
+      console.log('=== CategoryModal: Modal opened ===');
+      console.log('CategoryModal: Initializing form with category:', category);
+      console.log('CategoryModal: Category parent_id:', category?.parent_id);
+      console.log('CategoryModal: Available categories count:', availableCategories.length);
+      
+      setName(category?.name || '');
+      setDescription(category?.description || '');
+      setColor(category?.color || '#3b82f6');
+      setIcon(category?.icon || '📄');
+      
+      // Handle parent_id properly - convert null/undefined to empty string
+      let initialParentId = '';
+      if (category?.parent_id) {
+        initialParentId = String(category.parent_id);
+      }
+      
+      console.log('CategoryModal: Setting parentId to:', `"${initialParentId}"`);
+      setParentId(initialParentId);
+      console.log('=== CategoryModal: Form initialization complete ===');
+    } else {
+      // Clear form when modal is closed
+      console.log('CategoryModal: Modal closed, clearing form');
+      setName('');
+      setDescription('');
+      setColor('#3b82f6');
+      setIcon('📄');
+      setParentId('');
+    }
+  }, [category, visible, availableCategories]);
+
+  // Get available parent categories (exclude self and descendants to prevent circular references)
+  const getAvailableParents = () => {
+    console.log('CategoryModal: Available categories:', availableCategories.length);
+    console.log('CategoryModal: Current category:', category?.id, category?.name);
+    
+    if (!category) {
+      // For new categories, all categories are available as parents
+      const newCategoryParents = availableCategories.filter(cat => cat.is_active);
+      console.log('CategoryModal: New category - available parents:', newCategoryParents.length);
+      return newCategoryParents;
+    }
+
+    // For editing, exclude the category itself and its descendants
+    // BUT always include the current parent (even if it might be filtered otherwise)
+    const editingParents = availableCategories.filter(cat => {
+      // Always include the current parent
+      if (category.parent_id && cat.id === category.parent_id) {
+        return cat.is_active; // Only include if active
+      }
+      
+      // For all other categories, exclude self and descendants
+      return cat.is_active && 
+             cat.id !== category.id && 
+             !isDescendantOf(cat, category);
+    });
+    
+    console.log('CategoryModal: Editing category - available parents:', editingParents.length);
+    console.log('CategoryModal: Current parent_id should be:', category.parent_id);
+    
+    // Check if current parent is in the list
+    if (category.parent_id) {
+      const currentParent = editingParents.find(cat => cat.id === category.parent_id);
+      console.log('CategoryModal: Current parent found in available list:', !!currentParent, currentParent?.name);
+      
+      // If current parent is still not found, there might be an issue with the data
+      if (!currentParent) {
+        console.warn('CategoryModal: Current parent not found in available categories!');
+        console.log('CategoryModal: All available categories:', availableCategories.map(c => ({id: c.id, name: c.name, active: c.is_active})));
+      }
+    }
+    
+    return editingParents;
+  };
+
+  // Check if a category is a descendant of another category
+  const isDescendantOf = (potentialDescendant: Category, ancestor: Category): boolean => {
+    if (!potentialDescendant.parent_id) return false;
+    if (potentialDescendant.parent_id === ancestor.id) return true;
+    
+    const parent = availableCategories.find(cat => cat.id === potentialDescendant.parent_id);
+    return parent ? isDescendantOf(parent, ancestor) : false;
+  };
 
   const handleSave = async () => {
     if (!name.trim()) return;
 
     setLoading(true);
     try {
+      const categoryData = {
+        name: name.trim(),
+        description: description.trim(),
+        color,
+        icon,
+        type,
+        parent_id: parentId || undefined
+      };
+
       if (category) {
         // Update existing category
-        const result = await categoryService.updateCategory(category.id, {
-          name: name.trim(),
-          description: description.trim(),
-          color,
-          icon,
-          type
-        });
+        const result = await categoryService.updateCategory(category.id, categoryData);
         if (result.success) {
           onSave();
         } else {
@@ -442,13 +662,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
         }
       } else {
         // Create new category
-        const result = await categoryService.createCategory({
-          name: name.trim(),
-          description: description.trim(),
-          color,
-          icon,
-          type
-        });
+        const result = await categoryService.createCategory(categoryData);
         if (result.success) {
           onSave();
         } else {
@@ -504,6 +718,39 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
               maxLength={500}
               multiline
             />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Parent Category</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={parentId}
+                onValueChange={(value) => {
+                  console.log('CategoryModal: Parent changed to:', value);
+                  setParentId(value);
+                }}
+                style={styles.picker}
+                enabled={!loading}
+              >
+                <Picker.Item label="No Parent Category" value="" />
+                {(() => {
+                  const availableParents = getAvailableParents();
+                  console.log('CategoryModal: Rendering picker with parentId:', parentId);
+                  console.log('CategoryModal: Available parent options:', availableParents.map(c => ({id: c.id, name: c.name})));
+                  
+                  return availableParents.map(cat => (
+                    <Picker.Item
+                      key={cat.id}
+                      label={`${'  '.repeat((cat.level || 1) - 1)}${cat.name}`}
+                      value={cat.id}
+                    />
+                  ));
+                })()}
+              </Picker>
+            </View>
+            <Text style={styles.helperText}>
+              Select a parent to create a subcategory
+            </Text>
           </View>
 
           <View style={styles.inputGroup}>
@@ -724,6 +971,28 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     backgroundColor: 'white',
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: 'white',
+    overflow: 'hidden',
+  },
+  picker: {
+    backgroundColor: 'white',
+  },
+  helperText: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#ef4444',
+    marginBottom: 4,
+    fontFamily: 'monospace',
   },
   colorPicker: {
     flexDirection: 'row',

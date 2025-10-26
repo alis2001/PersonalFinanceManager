@@ -10,6 +10,7 @@
     "edit": "Editar",
     "add": "Agregar",
     "confirm": "Confirmar",
+    "select": "Seleccionar",
     "yes": "Sí",
     "no": "No",
     "required": "Requerido",
@@ -211,7 +212,13 @@
     "otherExpensesDesc": "Gastos diversos y no categorizados",
     "otherIncomeDesc": "Fuentes de ingresos diversas",
     "personalCareDesc": "Cortes de cabello, cosméticos, gimnasio, bienestar",
-    "rentalIncomeDesc": "Ingresos por alquiler de propiedades"
+    "rentalIncomeDesc": "Ingresos por alquiler de propiedades",
+    "categoryHasExpensesCannotDelete": "No se puede eliminar la categoría",
+    "categoryHasExpensesMessage": "Esta categoría contiene {count} transacciones de gastos y no se puede eliminar. Por favor, elimina o reasigna estas transacciones primero.",
+    "subcategoryReactivationBlocked": "No se puede reactivar la subcategoría",
+    "subcategoryReactivationMessage": "Para reactivar esta subcategoría, por favor activa primero la categoría padre '{parentName}'. Esto te permitirá reactivar esta categoría.",
+    "onlyTopLevelActivation": "Solo se permite activación de nivel superior",
+    "onlyTopLevelActivationMessage": "Las subcategorías solo pueden reactivarse activando su categoría padre principal. Por favor activa '{rootCategoryName}' en su lugar."
   },
   "analytics": {
     "title": "Análisis",

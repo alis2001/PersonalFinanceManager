@@ -10,6 +10,7 @@
     "edit": "تعديل",
     "add": "إضافة",
     "confirm": "تأكيد",
+    "select": "اختيار",
     "yes": "نعم",
     "no": "لا",
     "required": "مطلوب",
@@ -150,7 +151,13 @@
     "groceries": "البقالة",
     "gas": "البنزين",
     "insurance": "التأمين",
-    "other": "أخرى"
+    "other": "أخرى",
+    "categoryHasExpensesCannotDelete": "لا يمكن حذف الفئة",
+    "categoryHasExpensesMessage": "تحتوي هذه الفئة على {count} معاملة مصروفات ولا يمكن حذفها. يرجى إزالة أو إعادة تعيين هذه المعاملات أولاً.",
+    "subcategoryReactivationBlocked": "لا يمكن إعادة تنشيط الفئة الفرعية",
+    "subcategoryReactivationMessage": "لإعادة تنشيط هذه الفئة الفرعية، يرجى تنشيط الفئة الأساسية '{parentName}' أولاً. سيمكنك هذا من إعادة تنشيط هذه الفئة.",
+    "onlyTopLevelActivation": "مسموح بالتنشيط من المستوى الأعلى فقط",
+    "onlyTopLevelActivationMessage": "يمكن إعادة تنشيط الفئات الفرعية فقط عن طريق تنشيط فئتها الأساسية الرئيسية. يرجى تنشيط '{rootCategoryName}' بدلاً من ذلك."
   },
   "analytics": {
     "title": "التحليلات",
