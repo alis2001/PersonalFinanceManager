@@ -217,7 +217,7 @@ class CategoryService {
         queryParams.append('parentId', params.parentId);
       }
 
-      const endpoint = `/categories${queryParams.toString() ? `?${queryParams}` : ''}`;
+      const endpoint = `${queryParams.toString() ? `?${queryParams}` : ''}`;
       const response = await this.makeRequest(endpoint, {
         method: 'GET',
       });
@@ -281,7 +281,7 @@ class CategoryService {
 
   async getCategoryById(id: string): Promise<CategoryResponse> {
     try {
-      const response = await this.makeRequest(`/categories/${id}`, {
+      const response = await this.makeRequest(`/${id}`, {
         method: 'GET',
       });
 
@@ -298,7 +298,7 @@ class CategoryService {
 
   async createCategory(categoryData: CreateCategoryData): Promise<CategoryResponse> {
     try {
-      const response = await this.makeRequest('/categories', {
+      const response = await this.makeRequest('', {
         method: 'POST',
         body: JSON.stringify(categoryData),
       });
@@ -316,7 +316,7 @@ class CategoryService {
 
   async updateCategory(id: string, categoryData: UpdateCategoryData): Promise<CategoryResponse> {
     try {
-      const response = await this.makeRequest(`/categories/${id}`, {
+      const response = await this.makeRequest(`/${id}`, {
         method: 'PUT',
         body: JSON.stringify(categoryData),
       });
@@ -334,7 +334,7 @@ class CategoryService {
 
   async deleteCategory(id: string, deleteChildren: boolean = false): Promise<CategoryResponse> {
     try {
-      const endpoint = `/categories/${id}${deleteChildren ? '?deleteChildren=true' : ''}`;
+      const endpoint = `/${id}${deleteChildren ? '?deleteChildren=true' : ''}`;
       const response = await this.makeRequest(endpoint, {
         method: 'DELETE',
       });
@@ -352,7 +352,7 @@ class CategoryService {
 
   async moveCategory(id: string, newParentId?: string): Promise<CategoryResponse> {
     try {
-      const response = await this.makeRequest(`/categories/${id}/move`, {
+      const response = await this.makeRequest(`/${id}/move`, {
         method: 'PUT',
         body: JSON.stringify({ new_parent_id: newParentId }),
       });
@@ -393,7 +393,7 @@ class CategoryService {
 
   async getCategoryStats(): Promise<CategoryResponse> {
     try {
-      const response = await this.makeRequest('/categories/stats', {
+      const response = await this.makeRequest('/stats', {
         method: 'GET',
       });
 
@@ -417,7 +417,7 @@ class CategoryService {
     error?: string;
   }> {
     try {
-      const response = await this.makeRequest(`/categories/${id}/usage`, {
+      const response = await this.makeRequest(`/${id}/usage`, {
         method: 'GET',
       });
 
@@ -440,7 +440,7 @@ class CategoryService {
 
   async updateCategoryWithCascade(id: string, categoryData: UpdateCategoryData, cascadeToChildren: boolean = false): Promise<CategoryResponse> {
     try {
-      const endpoint = `/categories/${id}${cascadeToChildren ? '?cascade=true' : ''}`;
+      const endpoint = `/${id}${cascadeToChildren ? '?cascade=true' : ''}`;
       console.log(`🔄 CATEGORY SERVICE CASCADE: Calling endpoint ${endpoint} with data:`, categoryData);
       
       const response = await this.makeRequest(endpoint, {
