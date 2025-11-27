@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useMode } from '../contexts/ModeContext';
 import authService from '../services/authService';
-import expenseService from '../services/expenseService';
+import transactionService, { Transaction } from '../services/transactionService';
 import categoryService from '../services/categoryService';
 import currencyService from '../services/currencyService';
-import type { Expense } from '../services/expenseService';
 import type { Category } from '../services/categoryService';
 import AddExpense from './AddExpense';
 import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
 import ManageCategories from './ManageCategories';
+import ModeSwitcher from './ModeSwitcher';
 // import ReceiptUpload from './ReceiptUpload'; // COMMENTED OUT - Not fully implemented
 import LanguageSwitcher from './LanguageSwitcher';
 import { useTranslation } from '../hooks/useTranslation';
@@ -24,7 +25,7 @@ interface User {
   defaultCurrency: string;
 }
 
-interface ExpenseStats {
+interface TransactionStats {
   period: string;
   total: number;
   transactionCount: number;
@@ -38,6 +39,7 @@ interface ExpenseStats {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { mode, isExpenseMode, isIncomeMode, getModeColor } = useMode();
   const { t, currentLanguage } = useTranslation();
   const [categories, setCategories] = useState<Category[]>([]);
 
@@ -108,16 +110,16 @@ const Dashboard: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [weeklyStats, setWeeklyStats] = useState<ExpenseStats | null>(null);
-  const [monthlyStats, setMonthlyStats] = useState<ExpenseStats | null>(null);
-  const [yearlyStats, setYearlyStats] = useState<ExpenseStats | null>(null);
-  const [recentExpenses, setRecentExpenses] = useState<Expense[]>([]);
-  const [recentExpensesLoading, setRecentExpensesLoading] = useState(false);
-  const [showAddExpense, setShowAddExpense] = useState(false);
-  const [showEditExpense, setShowEditExpense] = useState(false);
+  const [weeklyStats, setWeeklyStats] = useState<TransactionStats | null>(null);
+  const [monthlyStats, setMonthlyStats] = useState<TransactionStats | null>(null);
+  const [yearlyStats, setYearlyStats] = useState<TransactionStats | null>(null);
+  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
+  const [recentTransactionsLoading, setRecentTransactionsLoading] = useState(false);
+  const [showAddTransaction, setShowAddTransaction] = useState(false);
+  const [showEditTransaction, setShowEditTransaction] = useState(false);
   const [showManageCategories, setShowManageCategories] = useState(false);
   // const [showReceiptUpload, setShowReceiptUpload] = useState(false); // COMMENTED OUT - Not fully implemented
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
     loadUserProfile();
@@ -125,11 +127,11 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      loadExpenseStats();
-      loadRecentExpenses();
+      loadTransactionStats();
+      loadRecentTransactions();
       loadCategories();
     }
-  }, [user]);
+  }, [user, mode]); // Reload when mode changes
 
   const loadCategories = async () => {
     try {
@@ -157,14 +159,14 @@ const Dashboard: React.FC = () => {
     setLoading(false);
   };
 
-  const loadExpenseStats = async () => {
+  const loadTransactionStats = async () => {
     setStatsLoading(true);
     
     try {
       const [weeklyResult, monthlyResult, yearlyResult] = await Promise.all([
-        expenseService.getExpenseStats('weekly'),
-        expenseService.getExpenseStats('monthly'),
-        expenseService.getExpenseStats('yearly')
+        transactionService.getStats(mode, 'weekly'),
+        transactionService.getStats(mode, 'monthly'),
+        transactionService.getStats(mode, 'yearly')
       ]);
 
       if (weeklyResult.success && weeklyResult.stats) {
@@ -179,31 +181,31 @@ const Dashboard: React.FC = () => {
         setYearlyStats(yearlyResult.stats);
       }
     } catch (error) {
-      console.error('Failed to load expense stats:', error);
+      console.error(`Failed to load ${mode} stats:`, error);
     }
     
     setStatsLoading(false);
   };
 
-  const loadRecentExpenses = async () => {
-    setRecentExpensesLoading(true);
+  const loadRecentTransactions = async () => {
+    setRecentTransactionsLoading(true);
     
     try {
-      const result = await expenseService.getExpenses({
+      const result = await transactionService.getTransactions(mode, {
         page: 1,
         limit: 10,
         sortBy: 'created_at',
         sortOrder: 'desc'
       });
 
-      if (result.success && result.expenses) {
-        setRecentExpenses(result.expenses);
+      if (result.success && result.transactions) {
+        setRecentTransactions(result.transactions);
       }
     } catch (error) {
-      console.error('Failed to load recent expenses:', error);
+      console.error(`Failed to load recent ${mode} transactions:`, error);
     }
     
-    setRecentExpensesLoading(false);
+    setRecentTransactionsLoading(false);
   };
 
   const handleLogout = async () => {
@@ -211,13 +213,13 @@ const Dashboard: React.FC = () => {
     navigate('/login');
   };
 
-  const handleAddExpense = () => {
-    setShowAddExpense(true);
+  const handleAddTransaction = () => {
+    setShowAddTransaction(true);
   };
 
-  const handleAddExpenseSuccess = () => {
-    loadExpenseStats();
-    loadRecentExpenses();
+  const handleAddTransactionSuccess = () => {
+    loadTransactionStats();
+    loadRecentTransactions();
   };
 
   // COMMENTED OUT - Receipt processing not fully implemented
@@ -226,18 +228,18 @@ const Dashboard: React.FC = () => {
   // };
 
   // const handleReceiptUploadSuccess = () => {
-  //   loadExpenseStats();
-  //   loadRecentExpenses();
+  //   loadTransactionStats();
+  //   loadRecentTransactions();
   // };
 
-  const handleEditExpense = (expense: Expense) => {
-    setSelectedExpense(expense);
-    setShowEditExpense(true);
+  const handleEditTransaction = (transaction: Transaction) => {
+    setSelectedTransaction(transaction);
+    setShowEditTransaction(true);
   };
 
-  const handleEditExpenseSuccess = () => {
-    loadExpenseStats();
-    loadRecentExpenses();
+  const handleEditTransactionSuccess = () => {
+    loadTransactionStats();
+    loadRecentTransactions();
   };
 
   const handleViewAnalytics = () => {
@@ -254,8 +256,9 @@ const Dashboard: React.FC = () => {
   };
 
   const handleManageCategoriesSuccess = () => {
-    loadExpenseStats();
-    loadRecentExpenses();
+    loadTransactionStats();
+    loadRecentTransactions();
+    loadCategories();
   };
 
   const formatCurrency = (amount: number): string => {
@@ -278,12 +281,15 @@ const Dashboard: React.FC = () => {
           <div className="logo">
             <h1>Rapilot</h1>
           </div>
-                  <div className="user-menu">
+                  <div className="header-actions">
+                    <ModeSwitcher />
                     <LanguageSwitcher compact={true} />
-                    <span className="welcome">{t('dashboard.welcome', { name: user?.firstName || '' })}</span>
-                    <button className="btn-logout" onClick={handleLogout}>
-                      {t('common.logout')}
-                    </button>
+                    <div className="user-menu">
+                      <span className="welcome">{t('dashboard.welcome', { name: user?.firstName || '' })}</span>
+                      <button className="btn-logout" onClick={handleLogout}>
+                        {t('common.logout')}
+                      </button>
+                    </div>
                   </div>
         </div>
       </header>
@@ -294,7 +300,7 @@ const Dashboard: React.FC = () => {
             <div className={getStatCardClass(statsLoading)}>
               <div className="stat-icon">📅</div>
               <div className="stat-info">
-                <h3>{t('dashboard.weeklyExpenses')}</h3>
+                <h3>{isExpenseMode ? t('dashboard.weeklyExpenses') : t('dashboard.weeklyIncome')}</h3>
                 <p className="stat-value">
                   {statsLoading ? '...' : formatCurrency(weeklyStats?.total || 0)}
                 </p>
@@ -305,7 +311,7 @@ const Dashboard: React.FC = () => {
             <div className={getStatCardClass(statsLoading)}>
               <div className="stat-icon">📊</div>
               <div className="stat-info">
-                <h3>{t('dashboard.monthlyExpenses')}</h3>
+                <h3>{isExpenseMode ? t('dashboard.monthlyExpenses') : t('dashboard.monthlyIncome')}</h3>
                 <p className="stat-value">
                   {statsLoading ? '...' : formatCurrency(monthlyStats?.total || 0)}
                 </p>
@@ -316,7 +322,7 @@ const Dashboard: React.FC = () => {
             <div className={getStatCardClass(statsLoading)}>
               <div className="stat-icon">📈</div>
               <div className="stat-info">
-                <h3>{t('dashboard.yearlyExpenses')}</h3>
+                <h3>{isExpenseMode ? t('dashboard.yearlyExpenses') : t('dashboard.yearlyIncome')}</h3>
                 <p className="stat-value">
                   {statsLoading ? '...' : formatCurrency(yearlyStats?.total || 0)}
                 </p>
@@ -328,15 +334,24 @@ const Dashboard: React.FC = () => {
           {/* Top Categories Section */}
           {monthlyStats?.topCategories && monthlyStats.topCategories.length > 0 && (
             <div className="top-categories-section">
-              <h2>{t('dashboard.topCategoriesThisMonth')}</h2>
+              <h2>
+                {isExpenseMode 
+                  ? t('dashboard.topExpenseCategoriesThisMonth') 
+                  : t('dashboard.topIncomeCategoriesThisMonth')
+                }
+              </h2>
               <div className="category-grid">
                 {aggregateByRootCategories(monthlyStats.topCategories).map((category, index) => (
                   <div key={index} className="category-item">
                     <div className="category-info">
-                      <span className="category-icon">{category.icon}</span>
+                      <span className="category-icon">
+                        {category.icon}
+                      </span>
                       <div>
                         <h4>{getTranslatedCategoryName(category.name, t)}</h4>
-                        <p className="category-amount">{formatCurrency(category.amount)}</p>
+                        <p className="category-amount">
+                          {formatCurrency(category.amount)}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -348,8 +363,11 @@ const Dashboard: React.FC = () => {
           <div className="quick-actions">
             <h2>{t('dashboard.quickActions')}</h2>
             <div className="action-buttons">
-                <button className="btn-action primary" onClick={handleAddExpense}>
-                {t('dashboard.addExpense')}
+                <button 
+                  className="btn-action primary"
+                  onClick={handleAddTransaction}
+                >
+                  {isExpenseMode ? t('dashboard.addExpense') : t('dashboard.addIncome')}
                 </button>
                 {/* COMMENTED OUT - Receipt processing not fully implemented */}
                 {/* <button className="btn-action purple" onClick={handleReceiptUpload}>
@@ -372,23 +390,27 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="recent-activity">
-            <h2>{t('dashboard.recentExpenses')}</h2>
+            <h2>
+              {isExpenseMode ? t('dashboard.recentExpenses') : t('dashboard.recentIncome')}
+            </h2>
             <RecentExpensesTable
-              expenses={recentExpenses}
-              loading={recentExpensesLoading}
-              onExpenseClick={handleEditExpense}
-              onRetry={loadRecentExpenses}
+              transactions={recentTransactions}
+              loading={recentTransactionsLoading}
+              onTransactionClick={handleEditTransaction}
+              onRetry={loadRecentTransactions}
               userCurrency={user?.defaultCurrency}
+              mode={mode}
             />
           </div>
         </div>
       </main>
 
       <AddExpense 
-        isOpen={showAddExpense}
-        onClose={() => setShowAddExpense(false)}
-        onExpenseAdded={handleAddExpenseSuccess}
+        isOpen={showAddTransaction}
+        onClose={() => setShowAddTransaction(false)}
+        onExpenseAdded={handleAddTransactionSuccess}
         userCurrency={user?.defaultCurrency}
+        mode={mode}
       />
 
       {/* COMMENTED OUT - Receipt processing not fully implemented */}
@@ -398,16 +420,17 @@ const Dashboard: React.FC = () => {
         onReceiptProcessed={handleReceiptUploadSuccess}
       /> */}
 
-      {selectedExpense && (
+      {selectedTransaction && (
         <EditExpense 
-          isOpen={showEditExpense}
-          expense={selectedExpense}
+          isOpen={showEditTransaction}
+          expense={selectedTransaction}
           onClose={() => {
-            setShowEditExpense(false);
-            setSelectedExpense(null);
+            setShowEditTransaction(false);
+            setSelectedTransaction(null);
           }}
-          onExpenseUpdated={handleEditExpenseSuccess}
+          onExpenseUpdated={handleEditTransactionSuccess}
           userCurrency={user?.defaultCurrency}
+          mode={mode}
         />
       )}
 

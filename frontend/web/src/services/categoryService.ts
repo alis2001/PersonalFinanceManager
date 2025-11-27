@@ -155,7 +155,31 @@ class CategoryService {
   }
 
   async getIncomeCategories(): Promise<CategoryResponse> {
-    return this.getCategories({ type: 'income', active: true });
+    try {
+      const result = await this.getCategories({ type: 'income', active: true });
+      
+      if (result.success && result.categories && result.categories.length === 0) {
+        await this.createDefaultIncomeCategories();
+        return this.getCategories({ type: 'income', active: true });
+      }
+      
+      return result;
+    } catch (error: any) {
+      console.error('Get income categories error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  private async createDefaultIncomeCategories(): Promise<void> {
+    const defaultIncomeCategories = [
+      { name: 'Work', description: 'Salary, wages, and work-related income', color: '#22c55e', icon: '💼', type: 'income' as const }
+    ];
+
+    const promises = defaultIncomeCategories.map(category => 
+      this.createCategory({ ...category, is_active: true })
+    );
+
+    await Promise.allSettled(promises);
   }
 
   async getCategory(id: string): Promise<CategoryResponse> {

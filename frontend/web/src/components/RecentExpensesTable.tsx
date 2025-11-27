@@ -1,31 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import type { Expense } from '../services/expenseService';
-import expenseService from '../services/expenseService';
+import type { Transaction } from '../services/transactionService';
+import transactionService from '../services/transactionService';
 import categoryService from '../services/categoryService';
 import currencyService from '../services/currencyService';
 import dateConversionService from '../services/dateConversionService';
 import { useTranslation } from '../hooks/useTranslation';
 import { getTranslatedCategoryName, getHierarchicalCategoryName } from '../utils/categoryUtils';
 import type { Category } from '../services/categoryService';
+import type { TransactionMode } from '../contexts/ModeContext';
 import '../styles/RecentExpensesTable.css';
 
 interface RecentExpensesTableProps {
-  expenses: Expense[];
+  transactions: Transaction[];
   loading: boolean;
-  onExpenseClick: (expense: Expense) => void;
+  onTransactionClick: (transaction: Transaction) => void;
   onRetry?: () => void;
   userCurrency?: string;
+  mode: TransactionMode;
+  
+  // Legacy props for backward compatibility (deprecated)
+  expenses?: Transaction[];
+  onExpenseClick?: (transaction: Transaction) => void;
 }
 
 const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
-  expenses,
+  transactions,
   loading,
-  onExpenseClick,
+  onTransactionClick,
   onRetry,
-  userCurrency = 'USD'
+  userCurrency = 'USD',
+  mode,
+  // Legacy props (deprecated)
+  expenses,
+  onExpenseClick
 }) => {
   const { t, currentLanguage } = useTranslation();
   const [categories, setCategories] = useState<Category[]>([]);
+  
+  // Support legacy props
+  const actualTransactions = transactions || expenses || [];
+  const actualOnClick = onTransactionClick || onExpenseClick || (() => {});
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -73,13 +87,23 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
     );
   }
 
-  if (expenses.length === 0) {
+  if (actualTransactions.length === 0) {
     return (
       <div className="expenses-table-container">
         <div className="table-empty">
           <div className="empty-icon">📊</div>
-          <h3>{t('expenses.noExpensesYet')}</h3>
-          <p>{t('expenses.recentExpensesDescription')}</p>
+          <h3>
+            {mode === 'expense' 
+              ? t('expenses.noExpensesYet') 
+              : t('income.noIncomeYet')
+            }
+          </h3>
+          <p>
+            {mode === 'expense'
+              ? t('expenses.recentExpensesDescription')
+              : t('income.recentIncomeDescription')
+            }
+          </p>
           {onRetry && (
             <button 
               className="btn-retry"
@@ -104,35 +128,41 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
               <th className="category-column">{t('expenses.category')}</th>
               <th className="amount-column">{t('expenses.amount')}</th>
               <th className="description-column">{t('expenses.description')}</th>
-              <th className="location-column">{t('expenses.location')}</th>
+              <th className="location-column">
+                {t('expenses.location')}
+              </th>
               <th className="notes-column">{t('expenses.notes')}</th>
               <th className="actions-column">{t('expenses.actions')}</th>
             </tr>
           </thead>
           <tbody>
-            {expenses.map((expense) => (
+            {actualTransactions.map((transaction) => {
+              // Both expense and income now use 'location' field
+              const locationValue = (transaction as any).location || '';
+              
+              return (
               <tr 
-                key={expense.id} 
+                key={transaction.id} 
                 className="expense-row"
-                onClick={() => onExpenseClick(expense)}
+                onClick={() => actualOnClick(transaction)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    onExpenseClick(expense);
+                    actualOnClick(transaction);
                   }
                 }}
               >
                 <td className="date-cell">
                   <span className="date-text">
-                    {formatDate(expense.userDate || expense.transactionDate)}
+                    {formatDate(transaction.userDate || transaction.transactionDate)}
                   </span>
                 </td>
                 
                 <td className="time-cell">
                   <span className="time-text">
-                    {formatTime(expense.userTime || expense.transactionDate)}
+                    {formatTime(transaction.userTime || transaction.transactionDate)}
                   </span>
                 </td>
                 
@@ -141,21 +171,21 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
                     <div 
                       className="category-icon-small"
                       style={{ 
-                        backgroundColor: expense.category.color + '20', 
-                        color: expense.category.color 
+                        backgroundColor: transaction.category.color + '20', 
+                        color: transaction.category.color 
                       }}
                     >
-                      {expense.category.icon}
+                      {transaction.category.icon}
                     </div>
                     <span 
                       className="category-name"
                       title={(() => {
                         // Find the full category information from the categories list
-                        const fullCategory = categories.find(cat => cat.name === expense.category.name);
+                        const fullCategory = categories.find(cat => cat.name === transaction.category.name);
                         if (fullCategory && fullCategory.parent_id) {
                           return getHierarchicalCategoryName(fullCategory, categories, t);
                         }
-                        return getTranslatedCategoryName(expense.category.name, t);
+                        return getTranslatedCategoryName(transaction.category.name, t);
                       })()}
                       onMouseEnter={(e) => {
                         const tooltip = e.target as HTMLElement;
@@ -197,13 +227,13 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
                     >
                       {(() => {
                         // Find the full category information from the categories list
-                        const fullCategory = categories.find(cat => cat.name === expense.category.name);
+                        const fullCategory = categories.find(cat => cat.name === transaction.category.name);
                         if (fullCategory && fullCategory.parent_id) {
                           const fullName = getHierarchicalCategoryName(fullCategory, categories, t);
                           // Truncate if too long, show with ellipsis
                           return fullName.length > 25 ? fullName.substring(0, 22) + '...' : fullName;
                         }
-                        const translatedName = getTranslatedCategoryName(expense.category.name, t);
+                        const translatedName = getTranslatedCategoryName(transaction.category.name, t);
                         return translatedName.length > 25 ? translatedName.substring(0, 22) + '...' : translatedName;
                       })()}
                     </span>
@@ -212,25 +242,25 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
                 
                 <td className="amount-cell">
                   <span className="amount-text">
-                    {formatCurrency(expense.amount)}
+                    {formatCurrency(transaction.amount)}
                   </span>
                 </td>
                 
                 <td className="description-cell">
                   <span className="description-text">
-                    {truncateText(expense.description, 30) || '—'}
+                    {truncateText(transaction.description, 30) || '—'}
                   </span>
                 </td>
                 
                 <td className="location-cell">
                   <span className="location-text">
-                    {truncateText(expense.location, 25) || '—'}
+                    {truncateText(locationValue, 25) || '—'}
                   </span>
                 </td>
                 
                 <td className="notes-cell">
                   <span className="notes-text">
-                    {truncateText(expense.notes, 30) || '—'}
+                    {truncateText(transaction.notes, 30) || '—'}
                   </span>
                 </td>
                 
@@ -239,27 +269,31 @@ const RecentExpensesTable: React.FC<RecentExpensesTableProps> = ({
                     className="edit-button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onExpenseClick(expense);
+                      actualOnClick(transaction);
                     }}
-                    title={t('expenses.editExpenseTitle')}
+                    title={mode === 'expense' ? t('expenses.editExpenseTitle') : t('income.editIncomeTitle')}
                   >
                     ✏️
                   </button>
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>
       
-      {expenses.length === 10 && (
+      {actualTransactions.length === 10 && (
         <div className="table-footer">
           <p className="showing-text">{t('expenses.showingLast10')}</p>
           <button 
             className="view-all-button"
-            onClick={() => console.log('View all expenses')}
+            onClick={() => console.log(`View all ${mode}s`)}
           >
-            {t('expenses.viewAllExpenses')}
+            {mode === 'expense' 
+              ? t('expenses.viewAllExpenses') 
+              : t('income.viewAllIncome')
+            }
           </button>
         </div>
       )}

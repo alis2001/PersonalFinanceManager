@@ -1,12 +1,13 @@
 // frontend/web/src/components/AllTransactions.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import expenseService from '../services/expenseService';
+import { useMode } from '../contexts/ModeContext';
+import authService from '../services/authService';
+import transactionService, { Transaction } from '../services/transactionService';
 import categoryService from '../services/categoryService';
 import dateConversionService from '../services/dateConversionService';
 import { useTranslation } from '../hooks/useTranslation';
 import { getTranslatedCategoryName, getHierarchicalCategoryName } from '../utils/categoryUtils';
-import type { Expense } from '../services/expenseService';
 import type { Category } from '../services/categoryService';
 import RecentExpensesTable from './RecentExpensesTable';
 import EditExpense from './EditExpense';
@@ -16,6 +17,7 @@ import '../styles/AllTransactions.css';
 
 const AllTransactions: React.FC = () => {
   const navigate = useNavigate();
+  const { mode, isExpenseMode } = useMode();
   const { t, currentLanguage } = useTranslation();
 
   // Function to get hierarchical category name
@@ -26,11 +28,12 @@ const AllTransactions: React.FC = () => {
     }
     return getTranslatedCategoryName(categoryName, t);
   };
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [showEditExpense, setShowEditExpense] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [showEditTransaction, setShowEditTransaction] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 50,
@@ -47,6 +50,18 @@ const AllTransactions: React.FC = () => {
   });
 
   useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const userData = await authService.getProfile();
+        setUser(userData);
+      } catch (error) {
+        console.error('Failed to load user:', error);
+      }
+    };
+    loadUser();
+  }, []);
+
+  useEffect(() => {
     loadCategories();
     
     // Set default date range to current month
@@ -59,11 +74,11 @@ const AllTransactions: React.FC = () => {
       dateFrom: formatDateForInput(firstDay),
       dateTo: formatDateForInput(lastDay)
     }));
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
-    loadExpenses();
-  }, [filters, pagination.page]);
+    loadTransactions();
+  }, [filters, pagination.page, mode]);
 
   const formatDateForInput = (date: Date): string => {
     return date.toISOString().split('T')[0];
@@ -71,7 +86,10 @@ const AllTransactions: React.FC = () => {
 
   const loadCategories = async () => {
     try {
-      const result = await categoryService.getExpenseCategories();
+      const result = isExpenseMode
+        ? await categoryService.getExpenseCategories()
+        : await categoryService.getIncomeCategories();
+      
       if (result.success && result.categories) {
         setCategories(result.categories);
       }
@@ -80,7 +98,7 @@ const AllTransactions: React.FC = () => {
     }
   };
 
-  const loadExpenses = async () => {
+  const loadTransactions = async () => {
     setLoading(true);
     
     try {
@@ -94,7 +112,7 @@ const AllTransactions: React.FC = () => {
         }
       }
 
-      const result = await expenseService.getExpenses({
+      const result = await transactionService.getTransactions(mode, {
         page: pagination.page,
         limit: pagination.limit,
         dateFrom: filters.dateFrom || undefined,
@@ -106,26 +124,26 @@ const AllTransactions: React.FC = () => {
       });
 
       if (result.success) {
-        let filteredExpenses = result.expenses || [];
+        let filteredTransactions = result.transactions || [];
         
         // If we have category IDs for hierarchical filtering, filter on frontend
         if (categoryIds.length > 0) {
-          filteredExpenses = filteredExpenses.filter(expense => 
-            categoryIds.includes(expense.categoryId)
+          filteredTransactions = filteredTransactions.filter(transaction => 
+            categoryIds.includes(transaction.categoryId)
           );
         }
         
-        setExpenses(filteredExpenses);
+        setTransactions(filteredTransactions);
         if (result.pagination) {
           setPagination(prev => ({
             ...prev,
-            total: filteredExpenses.length, // Update total based on filtered results
-            pages: Math.ceil(filteredExpenses.length / pagination.limit)
+            total: filteredTransactions.length, // Update total based on filtered results
+            pages: Math.ceil(filteredTransactions.length / pagination.limit)
           }));
         }
       }
     } catch (error) {
-      console.error('Failed to load expenses:', error);
+      console.error(`Failed to load ${mode} transactions:`, error);
     }
     
     setLoading(false);
@@ -162,13 +180,13 @@ const AllTransactions: React.FC = () => {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
-  const handleExpenseClick = (expense: Expense) => {
-    setSelectedExpense(expense);
-    setShowEditExpense(true);
+  const handleTransactionClick = (transaction: Transaction) => {
+    setSelectedTransaction(transaction);
+    setShowEditTransaction(true);
   };
 
-  const handleEditExpenseSuccess = () => {
-    loadExpenses();
+  const handleEditTransactionSuccess = () => {
+    loadTransactions();
   };
 
   const handlePageChange = (newPage: number) => {
@@ -264,7 +282,7 @@ const AllTransactions: React.FC = () => {
           {/* Results Summary */}
           <div className="results-summary">
             <p>
-              {t('transactions.showingResults', { showing: expenses.length, total: pagination.total })}
+              {t('transactions.showingResults', { showing: transactions.length, total: pagination.total })}
               {filters.dateFrom && filters.dateTo && (
                 <span> {t('transactions.dateRange', { 
                   from: dateConversionService.formatDateShort(filters.dateFrom, currentLanguage), 
@@ -277,10 +295,12 @@ const AllTransactions: React.FC = () => {
           {/* Transactions Table - REUSING EXACT SAME COMPONENT */}
           <div className="transactions-table-section">
             <RecentExpensesTable
-              expenses={expenses}
+              transactions={transactions}
               loading={loading}
-              onExpenseClick={handleExpenseClick}
-              onRetry={loadExpenses}
+              onTransactionClick={handleTransactionClick}
+              onRetry={loadTransactions}
+              mode={mode}
+              userCurrency={user?.defaultCurrency}
             />
           </div>
 
@@ -312,16 +332,17 @@ const AllTransactions: React.FC = () => {
         </div>
       </main>
 
-      {/* Edit Expense Modal - REUSING EXISTING COMPONENT */}
-      {selectedExpense && (
+      {/* Edit Transaction Modal - REUSING EXISTING COMPONENT */}
+      {selectedTransaction && (
         <EditExpense 
-          isOpen={showEditExpense}
-          expense={selectedExpense}
+          isOpen={showEditTransaction}
+          expense={selectedTransaction}
           onClose={() => {
-            setShowEditExpense(false);
-            setSelectedExpense(null);
+            setShowEditTransaction(false);
+            setSelectedTransaction(null);
           }}
-          onExpenseUpdated={handleEditExpenseSuccess}
+          onExpenseUpdated={handleEditTransactionSuccess}
+          mode={mode}
         />
       )}
     </div>

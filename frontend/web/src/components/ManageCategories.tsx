@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useMode } from '../contexts/ModeContext';
 import categoryService from '../services/categoryService';
 import { useTranslation } from '../hooks/useTranslation';
 import type { Category } from '../services/categoryService';
@@ -21,15 +22,6 @@ interface CategoryFormData {
   parent_id?: string;
 }
 
-const defaultFormData: CategoryFormData = {
-  name: '',
-  description: '',
-  color: '#4A90E2',
-  icon: '💰',
-  type: 'expense',
-  is_active: true,
-  parent_id: undefined
-};
 
 const predefinedIcons = [
   '🍽️', '🚗', '🛍️', '🎬', '📄', '❤️', '📚', '✈️', '🏠', '✨', 
@@ -58,6 +50,7 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
   onCategoriesUpdated 
 }) => {
   const { t } = useTranslation();
+  const { mode, isExpenseMode } = useMode();
   const [categories, setCategories] = useState<Category[]>([]);
 
 
@@ -97,6 +90,7 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
       'Other Income': t('categories.otherIncomeDesc'),
       'Personal Care': t('categories.personalCareDesc'),
       'Rental Income': t('categories.rentalIncomeDesc'),
+      'Work': t('categories.workDesc'),
     };
     return descriptionMap[categoryName] || '';
   };
@@ -105,7 +99,15 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
   const [success, setSuccess] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [formData, setFormData] = useState<CategoryFormData>(defaultFormData);
+  const [formData, setFormData] = useState<CategoryFormData>({
+    name: '',
+    description: '',
+    color: '#4A90E2',
+    icon: '💰',
+    type: 'expense',
+    is_active: true,
+    parent_id: undefined
+  });
   const [formLoading, setFormLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -124,12 +126,24 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
       loadCategories();
       resetMessages();
     }
-  }, [isOpen]);
+  }, [isOpen, mode]);
+
+  // Update formData type when mode changes
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      type: mode
+    }));
+  }, [mode]);
 
   const loadCategories = async () => {
     setLoading(true);
     try {
-      const result = await categoryService.getCategories({ active: undefined });
+      // Load categories based on current mode
+      const result = await categoryService.getCategories({ 
+        type: mode, // Filter by current mode (expense or income)
+        active: undefined 
+      });
       if (result.success && result.categories) {
         setCategories(result.categories);
         
@@ -288,8 +302,18 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
     setDragOverCategory(null);
   };
 
+  const getDefaultFormData = (): CategoryFormData => ({
+    name: '',
+    description: '',
+    color: '#4A90E2',
+    icon: '💰',
+    type: mode, // Use current mode
+    is_active: true,
+    parent_id: undefined
+  });
+
   const resetForm = () => {
-    setFormData(defaultFormData);
+    setFormData(getDefaultFormData());
     setEditingCategory(null);
     setShowForm(false);
     setExpandedCategories(new Set());
@@ -518,7 +542,7 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
     // Proceed with adding subcategory
     setEditingCategory(null);
     setFormData({
-      ...defaultFormData,
+      ...getDefaultFormData(),
       parent_id: parentCategory.id
     });
     setShowForm(true);
@@ -756,7 +780,12 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
                 <div className="list-header-buttons">
                   <button 
                     className="btn-add-category"
-                    onClick={() => setShowForm(true)}
+                    onClick={() => {
+                      setFormData(getDefaultFormData());
+                      setEditingCategory(null);
+                      setShowForm(true);
+                      resetMessages();
+                    }}
                   >
                     <span>+</span> {t('categories.addCategory')}
                   </button>
@@ -778,7 +807,12 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
                   <p>{t('categories.noCategoriesFound')}</p>
                   <button 
                     className="btn-primary"
-                    onClick={() => setShowForm(true)}
+                    onClick={() => {
+                      setFormData(getDefaultFormData());
+                      setEditingCategory(null);
+                      setShowForm(true);
+                      resetMessages();
+                    }}
                   >
                     {t('categories.createFirstCategory')}
                   </button>
@@ -843,12 +877,16 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
                     value={formData.type}
                     onChange={handleInputChange}
                     required
-                    disabled={formLoading}
+                    disabled={true}
+                    style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
                   >
                 <option value="expense">{t('categories.types.expense')}</option>
                 <option value="income">{t('categories.types.income')}</option>
                 <option value="both">{t('categories.types.both')}</option>
                   </select>
+                  <small style={{ color: '#666', fontSize: '0.85em', marginTop: '4px', display: 'block' }}>
+                    {isExpenseMode ? t('categories.typeSetToExpense') : t('categories.typeSetToIncome')}
+                  </small>
                 </div>
 
                 <div className="form-group">

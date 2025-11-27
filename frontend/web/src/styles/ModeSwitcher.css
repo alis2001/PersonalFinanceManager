@@ -1,0 +1,208 @@
+/* Mode Switcher - Beautiful Toggle Component */
+.mode-switcher {
+  display: inline-flex;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 14px;
+  padding: 5px;
+  gap: 6px;
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mode-switcher.compact {
+  padding: 4px;
+  gap: 4px;
+}
+
+.mode-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  min-width: 120px;
+}
+
+.mode-switcher.compact .mode-button {
+  padding: 8px 16px;
+  min-width: 50px;
+}
+
+.mode-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.4) 100%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  border-radius: 10px;
+}
+
+.mode-button:hover::before {
+  opacity: 1;
+}
+
+.mode-button:hover {
+  color: #334155;
+  transform: translateY(-1px);
+}
+
+.mode-button:active {
+  transform: translateY(0);
+}
+
+/* Active state - Different for expense and income */
+.mode-button.active {
+  background: white;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.03);
+  transform: translateY(0);
+}
+
+.mode-button.active.expense {
+  color: #ef4444;
+  background: linear-gradient(135deg, #ffffff 0%, #fef2f2 100%);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.mode-button.active.expense .mode-icon {
+  animation: expenseBounce 0.5s ease;
+}
+
+.mode-button.active.income {
+  color: #22c55e;
+  background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+  border: 1px solid rgba(34, 197, 94, 0.15);
+}
+
+.mode-button.active.income .mode-icon {
+  animation: incomeBounce 0.5s ease;
+}
+
+.mode-icon {
+  font-size: 20px;
+  line-height: 1;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mode-switcher.compact .mode-icon {
+  font-size: 18px;
+}
+
+.mode-button:hover .mode-icon {
+  transform: scale(1.1);
+}
+
+.mode-button.active .mode-icon {
+  transform: scale(1.15);
+}
+
+.mode-label {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  user-select: none;
+}
+
+/* Animations */
+@keyframes expenseBounce {
+  0%, 100% {
+    transform: scale(1.15);
+  }
+  50% {
+    transform: scale(1.3) rotate(-5deg);
+  }
+}
+
+@keyframes incomeBounce {
+  0%, 100% {
+    transform: scale(1.15);
+  }
+  50% {
+    transform: scale(1.3) rotate(5deg);
+  }
+}
+
+/* Focus styles for accessibility */
+.mode-button:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* RTL Support */
+[dir="rtl"] .mode-button {
+  flex-direction: row-reverse;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .mode-switcher {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .mode-button {
+    flex: 1;
+    min-width: auto;
+    padding: 10px 16px;
+  }
+
+  .mode-switcher.compact {
+    width: auto;
+  }
+
+  .mode-switcher.compact .mode-button {
+    flex: initial;
+  }
+}
+
+/* Dark mode support (future enhancement) */
+@media (prefers-color-scheme: dark) {
+  .mode-switcher {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .mode-button {
+    color: #94a3b8;
+  }
+
+  .mode-button:hover {
+    color: #cbd5e1;
+  }
+
+  .mode-button.active {
+    background: #1e293b;
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.3),
+      0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .mode-button.active.expense {
+    background: linear-gradient(135deg, #1e293b 0%, #1f1917 100%);
+    border-color: rgba(239, 68, 68, 0.25);
+  }
+
+  .mode-button.active.income {
+    background: linear-gradient(135deg, #1e293b 0%, #14291a 100%);
+    border-color: rgba(34, 197, 94, 0.25);
+  }
+}
+

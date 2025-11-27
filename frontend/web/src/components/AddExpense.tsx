@@ -1,10 +1,11 @@
 // frontend/web/src/components/AddExpense.tsx
 import React, { useState, useEffect } from 'react';
-import expenseService from '../services/expenseService';
+import transactionService from '../services/transactionService';
 import categoryService from '../services/categoryService';
 import currencyService from '../services/currencyService';
 import { useTranslation } from '../hooks/useTranslation';
 import type { Category } from '../services/categoryService';
+import type { TransactionMode } from '../contexts/ModeContext';
 import ConditionalDatePicker from './ConditionalDatePicker';
 import CategoryTreeSelector from './CategoryTreeSelector';
 import { getLeafCategories } from '../utils/categoryUtils';
@@ -26,6 +27,7 @@ interface AddExpenseProps {
   title?: string;
   fromReceipt?: boolean;
   userCurrency?: string;
+  mode?: TransactionMode;
 }
 
 const AddExpense: React.FC<AddExpenseProps> = ({ 
@@ -35,9 +37,12 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   prefilledData, 
   title, 
   fromReceipt = false,
-  userCurrency = 'USD'
+  userCurrency = 'USD',
+  mode = 'expense'
 }) => {
   const { t } = useTranslation();
+  const isExpenseMode = mode === 'expense';
+  const isIncomeMode = mode === 'income';
 
   // Function to translate category names
   const getTranslatedCategoryName = (categoryName: string): string => {
@@ -78,7 +83,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     categoryId: '',
     amount: '',
     description: '',
-    transactionDate: expenseService.formatDateTimeForInput(new Date()),
+    transactionDate: transactionService.formatDateTimeForInput(new Date()),
     location: '',
     notes: ''
   });
@@ -97,7 +102,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
         categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
         amount: prefilledData.amount ? prefilledData.amount.toString() : '',
         description: prefilledData.description || '',
-        transactionDate: prefilledData.transactionDate || expenseService.formatDateTimeForInput(new Date()),
+        transactionDate: prefilledData.transactionDate || transactionService.formatDateTimeForInput(new Date()),
         location: prefilledData.location || '',
         notes: prefilledData.notes || ''
       });
@@ -107,7 +112,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
         categoryId: categories.length > 0 ? categories[0].id : '',
         amount: '',
         description: '',
-        transactionDate: expenseService.formatDateTimeForInput(new Date()),
+        transactionDate: transactionService.formatDateTimeForInput(new Date()),
         location: '',
         notes: ''
       });
@@ -117,7 +122,10 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   const loadCategories = async () => {
     setCategoriesLoading(true);
     try {
-      const result = await categoryService.getExpenseCategories();
+      const result = isExpenseMode 
+        ? await categoryService.getExpenseCategories()
+        : await categoryService.getIncomeCategories();
+      
       if (result.success && result.categories) {
         const categoryList = result.categories;
         setCategories(categoryList);
@@ -173,6 +181,11 @@ const AddExpense: React.FC<AddExpenseProps> = ({
       return t('expenses.pleaseSelectDateTime');
     }
     
+    // For income, description is REQUIRED
+    if (isIncomeMode && !formData.description.trim()) {
+      return t('income.descriptionRequired');
+    }
+    
     return null;
   };
 
@@ -198,20 +211,22 @@ const AddExpense: React.FC<AddExpenseProps> = ({
       const userTime = `${timePart}:00`;  // HH:MM:SS (add seconds)
       
       // Now create Date object for UTC storage
-      const parsedDate = expenseService.parseDateTimeFromInput(formData.transactionDate);
+      const parsedDate = transactionService.parseDateTimeFromInput(formData.transactionDate);
       
-      const expenseData = {
+      const transactionData: any = {
         categoryId: formData.categoryId,
         amount: parseFloat(formData.amount),
-        description: formData.description.trim() || undefined,
+        description: formData.description.trim() || (isIncomeMode ? 'Income' : undefined),
         transactionDate: parsedDate.toISOString(),  // UTC for ordering
         userDate: userDate,  // Local date as user entered
         userTime: userTime,  // Local time as user entered
-        location: formData.location.trim() || undefined,
         notes: formData.notes.trim() || undefined
       };
+      
+      // Add location field (for both modes)
+      transactionData.location = formData.location.trim() || undefined;
 
-      const result = await expenseService.createExpense(expenseData);
+      const result = await transactionService.createTransaction(mode, transactionData);
 
       if (result.success) {
         // Reset form based on mode
@@ -221,7 +236,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
             categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
             amount: prefilledData.amount ? prefilledData.amount.toString() : '',
             description: prefilledData.description || '',
-            transactionDate: prefilledData.transactionDate || expenseService.formatDateTimeForInput(new Date()),
+            transactionDate: prefilledData.transactionDate || transactionService.formatDateTimeForInput(new Date()),
             location: prefilledData.location || '',
             notes: prefilledData.notes || ''
           });
@@ -231,7 +246,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
             categoryId: categories.length > 0 ? categories[0].id : '',
             amount: '',
             description: '',
-            transactionDate: expenseService.formatDateTimeForInput(new Date()),
+            transactionDate: transactionService.formatDateTimeForInput(new Date()),
             location: '',
             notes: ''
           });
@@ -242,10 +257,10 @@ const AddExpense: React.FC<AddExpenseProps> = ({
           onClose();
         }
       } else {
-        setError(result.error || t('expenses.failedToCreateExpense'));
+        setError(result.error || (isExpenseMode ? t('expenses.failedToCreateExpense') : t('income.failedToCreateIncome')));
       }
     } catch (err) {
-      setError(t('expenses.failedToCreateExpenseTryAgain'));
+      setError(isExpenseMode ? t('expenses.failedToCreateExpenseTryAgain') : t('income.failedToCreateIncomeTryAgain'));
     }
 
     setLoading(false);
@@ -259,7 +274,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
         categoryId: prefilledData.categoryId || (categories.length > 0 ? categories[0].id : ''),
         amount: prefilledData.amount ? prefilledData.amount.toString() : '',
         description: prefilledData.description || '',
-        transactionDate: prefilledData.transactionDate || expenseService.formatDateTimeForInput(new Date()),
+        transactionDate: prefilledData.transactionDate || transactionService.formatDateTimeForInput(new Date()),
         location: prefilledData.location || '',
         notes: prefilledData.notes || ''
       });
@@ -269,7 +284,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
         categoryId: categories.length > 0 ? categories[0].id : '',
         amount: '',
         description: '',
-        transactionDate: expenseService.formatDateTimeForInput(new Date()),
+        transactionDate: transactionService.formatDateTimeForInput(new Date()),
         location: '',
         notes: ''
       });
@@ -282,7 +297,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     const now = new Date();
     setFormData(prev => ({ 
       ...prev, 
-      transactionDate: expenseService.formatDateTimeForInput(now) 
+      transactionDate: transactionService.formatDateTimeForInput(now) 
     }));
   };
 
@@ -292,7 +307,10 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     <div className="add-expense-overlay" onClick={handleCancel}>
       <div className="add-expense-modal" onClick={(e) => e.stopPropagation()}>
         <div className="add-expense-header">
-          <h2>{title || t('expenses.addNewExpense')}{fromReceipt && <span className="receipt-badge"> 📄 {t('expenses.fromReceipt')}</span>}</h2>
+          <h2>
+            {title || (isExpenseMode ? t('expenses.addNewExpense') : t('income.addNewIncome'))}
+            {fromReceipt && <span className="receipt-badge"> 📄 {t('expenses.fromReceipt')}</span>}
+          </h2>
           <button className="close-button" onClick={handleCancel}>
             ×
           </button>
@@ -361,21 +379,25 @@ const AddExpense: React.FC<AddExpenseProps> = ({
 
           {/* Description Input */}
           <div className="form-group">
-            <label htmlFor="description">{t('expenses.description')}</label>
+            <label htmlFor="description">
+              {t('expenses.description')}
+              {isIncomeMode && <span className="required">*</span>}
+            </label>
             <input
               type="text"
               id="description"
               name="description"
               value={formData.description}
               onChange={handleInputChange}
-              placeholder={t('expenses.whatDidYouSpendOn')}
+              placeholder={isExpenseMode ? t('expenses.whatDidYouSpendOn') : t('income.whatIsThisIncomeFor')}
               disabled={loading}
               className="description-input"
               maxLength={500}
+              required={isIncomeMode}
             />
           </div>
 
-          {/* Location Input (Optional) */}
+          {/* Location Input (for both modes) */}
           <div className="form-group">
             <label htmlFor="location">{t('expenses.location')}</label>
             <input
@@ -384,7 +406,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({
               name="location"
               value={formData.location}
               onChange={handleInputChange}
-              placeholder={t('expenses.whereDidYouMakePurchase')}
+              placeholder={isExpenseMode ? t('expenses.whereDidYouMakePurchase') : t('expenses.location')}
               disabled={loading}
               className="location-input"
               maxLength={255}
@@ -422,7 +444,10 @@ const AddExpense: React.FC<AddExpenseProps> = ({
               className="btn-submit"
               disabled={loading || categoriesLoading}
             >
-              {loading ? t('expenses.adding') : t('expenses.addExpense')}
+              {loading 
+                ? (isExpenseMode ? t('expenses.adding') : t('income.adding'))
+                : (isExpenseMode ? t('expenses.addExpense') : t('income.addIncome'))
+              }
             </button>
           </div>
         </form>

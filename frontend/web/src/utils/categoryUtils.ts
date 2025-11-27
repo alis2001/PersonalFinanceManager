@@ -25,6 +25,7 @@ const categoryMap: { [key: string]: string } = {
   'Other Income': 'categories.otherIncome',
   'Personal Care': 'categories.personalCare',
   'Rental Income': 'categories.rentalIncome',
+  'Work': 'categories.work',
 };
 
 // Get translated category name

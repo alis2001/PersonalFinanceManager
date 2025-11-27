@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ModeProvider } from './contexts/ModeContext';
 import Welcome from './components/Welcome';
 import Login from './components/Login';
 import Register from './components/Register';
@@ -37,51 +38,53 @@ function App() {
   }, []);
 
   return (
-    <Router>
-      <div className="app">
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Welcome />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
-          
-          {/* Protected Routes */}
-          <Route 
-            path="/dashboard" 
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } 
-          />
-          
-          <Route 
-            path="/analytics" 
-            element={
-              <ProtectedRoute>
-                <Analytics />
-              </ProtectedRoute>
-            } 
-          />
+    <ModeProvider>
+      <Router>
+        <div className="app">
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/" element={<Welcome />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            
+            {/* Protected Routes */}
+            <Route 
+              path="/dashboard" 
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } 
+            />
+            
+            <Route 
+              path="/analytics" 
+              element={
+                <ProtectedRoute>
+                  <Analytics />
+                </ProtectedRoute>
+              } 
+            />
 
-          {/* NEW ROUTE: All Transactions */}
-          <Route 
-            path="/transactions" 
-            element={
-              <ProtectedRoute>
-                <AllTransactions />
-              </ProtectedRoute>
-            } 
-          />
+            {/* NEW ROUTE: All Transactions */}
+            <Route 
+              path="/transactions" 
+              element={
+                <ProtectedRoute>
+                  <AllTransactions />
+                </ProtectedRoute>
+              } 
+            />
 
-          {/* NEW ROUTE: Category Management */}
-          
-          {/* Redirect unknown routes to welcome */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </div>
-    </Router>
+            {/* NEW ROUTE: Category Management */}
+            
+            {/* Redirect unknown routes to welcome */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </Router>
+    </ModeProvider>
   );
 }
 

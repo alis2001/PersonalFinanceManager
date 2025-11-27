@@ -1,24 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import expenseService from '../services/expenseService';
+import transactionService, { Transaction } from '../services/transactionService';
 import categoryService from '../services/categoryService';
 import currencyService from '../services/currencyService';
 import { useTranslation } from '../hooks/useTranslation';
 import type { Category } from '../services/categoryService';
-import type { Expense } from '../services/expenseService';
+import type { TransactionMode } from '../contexts/ModeContext';
 import ConditionalDatePicker from './ConditionalDatePicker';
 import CategoryTreeSelector from './CategoryTreeSelector';
 import '../styles/EditExpense.css';
 
 interface EditExpenseProps {
   isOpen: boolean;
-  expense: Expense;
+  expense: Transaction;
   onClose: () => void;
   onExpenseUpdated: () => void;
   userCurrency?: string;
+  mode?: TransactionMode;
 }
 
-const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onExpenseUpdated, userCurrency = 'USD' }) => {
+const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onExpenseUpdated, userCurrency = 'USD', mode = 'expense' }) => {
   const { t, currentLanguage } = useTranslation();
+  const isExpenseMode = mode === 'expense';
+  const isIncomeMode = mode === 'income';
 
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -47,7 +50,10 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
   const loadCategories = async () => {
     setCategoriesLoading(true);
     try {
-      const result = await categoryService.getExpenseCategories();
+      const result = isExpenseMode
+        ? await categoryService.getExpenseCategories()
+        : await categoryService.getIncomeCategories();
+        
       if (result.success && result.categories) {
         setCategories(result.categories);
       } else {
@@ -60,16 +66,19 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
   };
 
   const populateForm = () => {
-    // Convert expense data to form format
+    // Convert transaction data to form format
     const transactionDate = new Date(expense.transactionDate);
-    const formattedDate = expenseService.formatDateTimeForInput(transactionDate);
+    const formattedDate = transactionService.formatDateTimeForInput(transactionDate);
+    
+    // Type checking for income-specific fields
+    const incomeData = expense as any;
 
     setFormData({
       categoryId: expense.categoryId,
       amount: expense.amount.toString(),
       description: expense.description || '',
       transactionDate: formattedDate,
-      location: expense.location || '',
+      location: (expense as any).location || '',
       notes: expense.notes || ''
     });
   };
@@ -135,29 +144,31 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
       const userTime = `${timePart}:00`;  // HH:MM:SS (add seconds)
       
       // Now create Date object for UTC storage
-      const parsedDate = expenseService.parseDateTimeFromInput(formData.transactionDate);
+      const parsedDate = transactionService.parseDateTimeFromInput(formData.transactionDate);
       
-      const updateData = {
+      const updateData: any = {
         categoryId: formData.categoryId,
         amount: parseFloat(formData.amount),
-        description: formData.description.trim() || undefined,
+        description: formData.description.trim() || (isIncomeMode ? 'Income' : undefined),
         transactionDate: parsedDate.toISOString(),
         userDate: userDate,
         userTime: userTime,
-        location: formData.location.trim() || undefined,
         notes: formData.notes.trim() || undefined
       };
+      
+      // Add location field (for both modes)
+      updateData.location = formData.location.trim() || undefined;
 
-      const result = await expenseService.updateExpense(expense.id, updateData);
+      const result = await transactionService.updateTransaction(mode, expense.id, updateData);
 
       if (result.success) {
         onExpenseUpdated();
         onClose();
       } else {
-        setError(result.error || t('expenses.failedToUpdateExpense'));
+        setError(result.error || (isExpenseMode ? t('expenses.failedToUpdateExpense') : t('income.failedToUpdateIncome')));
       }
     } catch (err) {
-      setError(t('expenses.failedToUpdateExpenseTryAgain'));
+      setError(isExpenseMode ? t('expenses.failedToUpdateExpenseTryAgain') : t('income.failedToUpdateIncomeTryAgain'));
     }
 
     setLoading(false);
@@ -167,7 +178,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
     setLoading(true);
 
     try {
-      const result = await expenseService.deleteExpense(expense.id);
+      const result = await transactionService.deleteTransaction(mode, expense.id);
 
       if (result.success) {
         onExpenseUpdated();
@@ -176,7 +187,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
         setError(result.error || t('expenses.failedToDeleteExpense'));
       }
     } catch (err) {
-      setError(t('expenses.failedToDeleteExpenseTryAgain'));
+      setError(isExpenseMode ? t('expenses.failedToDeleteExpenseTryAgain') : t('income.failedToDeleteIncomeTryAgain'));
     }
 
     setLoading(false);
@@ -193,7 +204,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
     const now = new Date();
     setFormData(prev => ({ 
       ...prev, 
-      transactionDate: expenseService.formatDateTimeForInput(now) 
+      transactionDate: transactionService.formatDateTimeForInput(now) 
     }));
   };
 
@@ -203,7 +214,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
     <div className="edit-expense-overlay" onClick={handleCancel}>
       <div className="edit-expense-modal" onClick={(e) => e.stopPropagation()}>
         <div className="edit-expense-header">
-          <h2>{t('expenses.editExpense')}</h2>
+          <h2>{isExpenseMode ? t('expenses.editExpense') : t('income.editIncome')}</h2>
           <button className="close-button" onClick={handleCancel}>
             ×
           </button>
@@ -269,23 +280,27 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
             </div>
           </div>
 
-          {/* Description Input (Optional) */}
+          {/* Description Input */}
           <div className="form-group">
-            <label htmlFor="description">{t('expenses.description')}</label>
+            <label htmlFor="description">
+              {t('expenses.description')}
+              {isIncomeMode && <span className="required">*</span>}
+            </label>
             <input
               type="text"
               id="description"
               name="description"
               value={formData.description}
               onChange={handleInputChange}
-              placeholder={t('expenses.whatDidYouSpendOn')}
+              placeholder={isExpenseMode ? t('expenses.whatDidYouSpendOn') : t('income.whatIsThisIncomeFor')}
               disabled={loading}
               className="description-input"
               maxLength={500}
+              required={isIncomeMode}
             />
           </div>
 
-          {/* Location Input (Optional) */}
+          {/* Location Input (for both modes) */}
           <div className="form-group">
             <label htmlFor="location">{t('expenses.location')}</label>
             <input
@@ -294,7 +309,7 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
               name="location"
               value={formData.location}
               onChange={handleInputChange}
-              placeholder={t('expenses.whereDidYouMakePurchase')}
+              placeholder={isExpenseMode ? t('expenses.whereDidYouMakePurchase') : t('expenses.location')}
               disabled={loading}
               className="location-input"
               maxLength={255}
@@ -343,7 +358,10 @@ const EditExpense: React.FC<EditExpenseProps> = ({ isOpen, expense, onClose, onE
                 className="btn-submit"
                 disabled={loading || categoriesLoading}
               >
-                {loading ? t('expenses.updating') : t('expenses.updateExpense')}
+                {loading 
+                  ? (isExpenseMode ? t('expenses.updating') : t('income.updating'))
+                  : (isExpenseMode ? t('expenses.updateExpense') : t('income.updateIncome'))
+                }
               </button>
             </div>
           </div>

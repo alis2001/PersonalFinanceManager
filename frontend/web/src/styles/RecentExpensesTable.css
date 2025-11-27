@@ -78,6 +78,7 @@
   border-bottom: none;
 }
 
+
 /* Table Cells */
 .expenses-table td {
   padding: 16px 12px;
@@ -151,6 +152,7 @@
   font-weight: 600;
   font-size: 0.95rem;
 }
+
 
 /* Text Cells */
 .description-text, .location-text, .notes-text {
