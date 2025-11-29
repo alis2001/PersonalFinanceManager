@@ -193,6 +193,7 @@
     "parentCategoryHelp": "اختر فئة رئيسية لإنشاء فئة فرعية",
     "addSubcategory": "إضافة فئة فرعية",
     "deleteWithSubcategories": "حذف '{{categoryName}}' وجميع {{subcategoryCount}} الفئات الفرعية؟ لا يمكن التراجع عن هذا الإجراء.",
+    "cannotDeleteParentCategory": "لا يمكن حذف '{{categoryName}}' لأنها تحتوي على {{subcategoryCount}} فئات فرعية. يرجى حذف أو نقل الفئات الفرعية أولاً.",
     "cannotActivateSubcategoryInactiveParent": "لا يمكن تفعيل الفئة الفرعية بينما الفئة الرئيسية غير مفعلة. يرجى تفعيل الفئة الرئيسية أولاً.",
     "hasSubcategories": "له فئات فرعية",
     "selectLeafCategory": "اختر فئة نهائية (فئات بدون فئات فرعية)",

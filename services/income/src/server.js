@@ -6,6 +6,7 @@ const winston = require('winston');
 const Joi = require('joi');
 const axios = require('axios');
 const moment = require('moment-jalaali');
+const cron = require('node-cron');
 require('dotenv').config();
 
 const app = express();
@@ -56,6 +57,9 @@ const incomeSchema = Joi.object({
   userTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/).required(),  // HH:MM:SS format
   // SIMPLIFIED FIELDS (matching frontend):
   location: Joi.string().max(255).optional().allow(''),  // Changed from 'source' to 'location' to match expenses
+  isRecurring: Joi.boolean().optional().default(false),
+  frequency: Joi.string().valid('one_time', 'daily', 'weekly', 'bi_weekly', 'semi_monthly', 'monthly', 'bi_monthly', 'quarterly', 'semi_annually', 'yearly').optional().default('one_time'),
+  nextExpectedDate: Joi.date().optional().allow(null),
   tags: Joi.array().items(Joi.string().max(50)).max(10).optional(),
   notes: Joi.string().max(1000).optional().allow('')
 });
@@ -68,6 +72,9 @@ const incomeUpdateSchema = Joi.object({
   userDate: Joi.date().optional(),
   userTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/).optional(),
   location: Joi.string().max(255).optional().allow(''),  // Changed from 'source' to 'location'
+  isRecurring: Joi.boolean().optional(),
+  frequency: Joi.string().valid('one_time', 'daily', 'weekly', 'bi_weekly', 'semi_monthly', 'monthly', 'bi_monthly', 'quarterly', 'semi_annually', 'yearly').optional(),
+  nextExpectedDate: Joi.date().optional().allow(null),
   tags: Joi.array().items(Joi.string().max(50)).max(10).optional(),
   notes: Joi.string().max(1000).optional().allow('')
 }).min(1); // Require at least one field to update
@@ -399,6 +406,9 @@ app.get('/income', authenticateToken, async (req, res) => {
         userDate: row.user_date,
         userTime: row.user_time,
         location: row.source,  // Return as 'location' to frontend
+        isRecurring: row.is_recurring,
+        frequency: row.frequency,
+        nextExpectedDate: row.next_expected_date,
         tags: row.tags,
         notes: row.notes,
         createdAt: row.created_at,
@@ -452,6 +462,9 @@ app.get('/income/:id', authenticateToken, async (req, res) => {
         userDate: row.user_date,
         userTime: row.user_time,
         location: row.source,  // Return as 'location' to frontend
+        isRecurring: row.is_recurring,
+        frequency: row.frequency,
+        nextExpectedDate: row.next_expected_date,
         tags: row.tags,
         notes: row.notes,
         createdAt: row.created_at,
@@ -501,13 +514,36 @@ app.post('/income', authenticateToken, async (req, res) => {
       });
     }
     
-    // Create income (use defaults for frequency, is_recurring, next_expected_date)
+    // Handle recurring fields
+    const isRecurring = req.body.isRecurring || false;
+    const frequency = req.body.frequency || 'one_time';
+    
+    // Calculate initial next_expected_date if recurring  
+    let nextExpectedDate = null;
+    if (isRecurring && frequency !== 'one_time') {
+      // Use helper function (defined later in the file)
+      const date = new Date(userDate);
+      switch (frequency) {
+        case 'daily': date.setDate(date.getDate() + 1); break;
+        case 'weekly': date.setDate(date.getDate() + 7); break;
+        case 'bi_weekly': date.setDate(date.getDate() + 14); break;
+        case 'semi_monthly': date.setDate(date.getDate() + 15); break;
+        case 'monthly': date.setMonth(date.getMonth() + 1); break;
+        case 'bi_monthly': date.setMonth(date.getMonth() + 2); break;
+        case 'quarterly': date.setMonth(date.getMonth() + 3); break;
+        case 'semi_annually': date.setMonth(date.getMonth() + 6); break;
+        case 'yearly': date.setFullYear(date.getFullYear() + 1); break;
+      }
+      nextExpectedDate = date.toISOString().split('T')[0];
+    }
+    
+    // Create income
     // Store 'location' in 'source' column for now (DB column name)
     const result = await db.query(
-      `INSERT INTO income (user_id, category_id, amount, description, transaction_date, user_date, user_time, frequency, is_recurring, next_expected_date, source, tags, notes) 
+      `INSERT INTO income (user_id, category_id, amount, description, transaction_date, user_date, user_time, source, is_recurring, frequency, next_expected_date, tags, notes) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
        RETURNING *`,
-      [req.user.userId, categoryId, amount, description, transactionDate, userDate, userTime, 'one_time', false, null, location, tags, notes]
+      [req.user.userId, categoryId, amount, description, transactionDate, userDate, userTime, location, isRecurring, frequency, nextExpectedDate, tags, notes]
     );
     
     // Get income with category info
@@ -598,6 +634,9 @@ app.put('/income/:id', authenticateToken, async (req, res) => {
       'description': 'description',
       'amount': 'amount',
       'location': 'source',  // Frontend sends 'location', DB column is 'source'
+      'isRecurring': 'is_recurring',
+      'frequency': 'frequency',
+      'nextExpectedDate': 'next_expected_date',
       'tags': 'tags',
       'notes': 'notes'
     };
@@ -706,6 +745,122 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
+// ========================================
+// RECURRING INCOME SCHEDULER
+// ========================================
+
+// Helper function to calculate next expected date based on frequency
+const calculateNextExpectedDate = (currentDate, frequency) => {
+  const date = new Date(currentDate);
+  
+  switch (frequency) {
+    case 'daily':
+      date.setDate(date.getDate() + 1);
+      break;
+    case 'weekly':
+      date.setDate(date.getDate() + 7);
+      break;
+    case 'bi_weekly':
+      date.setDate(date.getDate() + 14);
+      break;
+    case 'semi_monthly':
+      date.setDate(date.getDate() + 15);
+      break;
+    case 'monthly':
+      date.setMonth(date.getMonth() + 1);
+      break;
+    case 'bi_monthly':
+      date.setMonth(date.getMonth() + 2);
+      break;
+    case 'quarterly':
+      date.setMonth(date.getMonth() + 3);
+      break;
+    case 'semi_annually':
+      date.setMonth(date.getMonth() + 6);
+      break;
+    case 'yearly':
+      date.setFullYear(date.getFullYear() + 1);
+      break;
+    default:
+      return null;
+  }
+  
+  return date.toISOString().split('T')[0]; // Return YYYY-MM-DD format
+};
+
+// Process recurring income - create new instances for due recurring income
+const processRecurringIncome = async () => {
+  try {
+    logger.info('🔄 Processing recurring income...');
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Find all recurring income that are due (next_expected_date <= today)
+    const dueIncome = await db.query(
+      `SELECT * FROM income 
+       WHERE is_recurring = true 
+       AND next_expected_date IS NOT NULL 
+       AND next_expected_date <= $1`,
+      [today]
+    );
+    
+    logger.info(`Found ${dueIncome.rows.length} recurring income due for processing`);
+    
+    for (const income of dueIncome.rows) {
+      try {
+        // Create a new income instance
+        const newIncome = await db.query(
+          `INSERT INTO income (user_id, category_id, amount, description, transaction_date, user_date, user_time, source, is_recurring, frequency, next_expected_date, tags, notes) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+           RETURNING *`,
+          [
+            income.user_id,
+            income.category_id,
+            income.amount,
+            income.description,
+            new Date().toISOString(), // Current timestamp
+            today, // Today's date
+            new Date().toTimeString().split(' ')[0], // Current time HH:MM:SS
+            income.source,
+            false, // New instance is not recurring (only the template is)
+            income.frequency,
+            null, // New instance doesn't need next_expected_date
+            income.tags,
+            income.notes
+          ]
+        );
+        
+        // Update the original recurring income's next_expected_date
+        const nextDate = calculateNextExpectedDate(income.next_expected_date, income.frequency);
+        await db.query(
+          'UPDATE income SET next_expected_date = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [nextDate, income.id]
+        );
+        
+        logger.info(`✅ Created recurring income for user ${income.user_id}, next due: ${nextDate}`);
+      } catch (error) {
+        logger.error(`❌ Failed to process recurring income ${income.id}:`, error);
+      }
+    }
+    
+    logger.info('✅ Recurring income processing completed');
+  } catch (error) {
+    logger.error('❌ Error in processRecurringIncome:', error);
+  }
+};
+
+// Schedule recurring transaction processor to run daily at 00:01 AM
+cron.schedule('1 0 * * *', () => {
+  logger.info('⏰ Running daily recurring income processor');
+  processRecurringIncome();
+});
+
+// Also run on startup to catch any missed recurring income
+setTimeout(() => {
+  logger.info('🚀 Running initial recurring income check on startup');
+  processRecurringIncome();
+}, 10000); // Wait 10 seconds after startup for DB to be ready
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
@@ -724,4 +879,5 @@ app.listen(port, '0.0.0.0', () => {
   logger.info(`Income Service listening on port ${port}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
+  logger.info('📅 Recurring income scheduler initialized - runs daily at 00:01 AM');
 });

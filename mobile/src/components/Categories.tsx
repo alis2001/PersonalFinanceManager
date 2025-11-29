@@ -303,7 +303,11 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
     
     if (!editingCategory) {
       console.log('Categories: Creating new category - all active categories available');
-      return flatCategories.filter(cat => cat.is_active);
+      // 🚫 CRITICAL FIX: Exclude categories with expenses/income when creating new category too
+      return flatCategories.filter(cat => 
+        cat.is_active &&
+        !categoryExpenseStatus[cat.id] // Exclude categories with expenses/income
+      );
     }
     
     console.log('Categories: Editing category:', {
@@ -313,10 +317,12 @@ const Categories: React.FC<CategoriesProps> = ({ activeRoute = 'Categories', onN
       level: editingCategory.level
     });
     
+    // 🚫 CRITICAL FIX: Also exclude categories that have expenses/income (they must remain leaf categories)
     const availableParents = flatCategories.filter(cat => 
       cat.is_active && 
       cat.id !== editingCategory.id && 
-      !isDescendantOf(cat, editingCategory, flatCategories) // Prevent circular references
+      !isDescendantOf(cat, editingCategory, flatCategories) && // Prevent circular references
+      !categoryExpenseStatus[cat.id] // 🚫 CRITICAL: Exclude categories with expenses/income
     );
     
     console.log('Categories: Available parent categories:', availableParents.map(c => ({

@@ -255,6 +255,7 @@
     "parentCategoryHelp": "Selecciona una categoría principal para crear una subcategoría",
     "addSubcategory": "Agregar Subcategoría",
     "deleteWithSubcategories": "¿Eliminar '{{categoryName}}' y todas las {{subcategoryCount}} subcategorías? Esta acción no se puede deshacer.",
+    "cannotDeleteParentCategory": "No se puede eliminar '{{categoryName}}' porque tiene {{subcategoryCount}} subcategorías. Por favor, elimine o mueva las subcategorías primero.",
     "cannotActivateSubcategoryInactiveParent": "No se puede activar la subcategoría mientras la categoría principal está inactiva. Por favor, active primero la categoría principal.",
     "hasSubcategories": "Tiene subcategorías",
     "selectLeafCategory": "Selecciona una categoría hoja (categorías sin subcategorías)",

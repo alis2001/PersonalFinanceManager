@@ -288,6 +288,7 @@
     "parentCategoryHelp": "Sélectionnez une catégorie parent pour créer une sous-catégorie",
     "addSubcategory": "Ajouter Sous-catégorie",
     "deleteWithSubcategories": "Supprimer '{{categoryName}}' et toutes les {{subcategoryCount}} sous-catégories ? Cette action ne peut pas être annulée.",
+    "cannotDeleteParentCategory": "Impossible de supprimer '{{categoryName}}' car elle contient {{subcategoryCount}} sous-catégories. Veuillez d'abord supprimer ou déplacer les sous-catégories.",
     "cannotActivateSubcategoryInactiveParent": "Impossible d'activer la sous-catégorie tant que la catégorie parent est inactive. Veuillez d'abord activer la catégorie parent.",
     "hasSubcategories": "A des sous-catégories",
     "selectLeafCategory": "Sélectionnez une catégorie feuille (catégories sans sous-catégories)",

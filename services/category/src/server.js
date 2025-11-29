@@ -352,6 +352,36 @@ app.post('/categories', authenticateToken, async (req, res) => {
       return res.status(409).json({ error: 'Category with this name already exists under the same parent' });
     }
     
+    // 🚫 CRITICAL VALIDATION: Check if parent category has expenses/income (cannot add children to leaf categories)
+    if (parent_id) {
+      const parentCategoryCheck = await db.query(
+        'SELECT id, name FROM categories WHERE id = $1 AND user_id = $2',
+        [parent_id, req.user.userId]
+      );
+      
+      if (parentCategoryCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Parent category not found' });
+      }
+      
+      // Check if parent category has any expenses or income
+      const parentUsageCheck = await db.query(
+        'SELECT COUNT(*) as usage_count FROM (SELECT category_id FROM expenses WHERE category_id = $1 UNION ALL SELECT category_id FROM income WHERE category_id = $1) as usage',
+        [parent_id]
+      );
+      
+      const parentUsageCount = parseInt(parentUsageCheck.rows[0].usage_count);
+      
+      if (parentUsageCount > 0) {
+        logger.warn(`🚫 BLOCKED: User ${req.user.userId} tried to add subcategory "${name}" to category "${parentCategoryCheck.rows[0].name}" (${parent_id}) which has ${parentUsageCount} transactions`);
+        return res.status(400).json({ 
+          error: 'Cannot add subcategory to category with transactions',
+          message: `Cannot add subcategories to "${parentCategoryCheck.rows[0].name}" because it has ${parentUsageCount} existing transaction(s). Categories with transactions must remain as leaf categories. Please remove all transactions first if you want to create subcategories.`,
+          categoryName: parentCategoryCheck.rows[0].name,
+          transactionCount: parentUsageCount
+        });
+      }
+    }
+    
     // Calculate hierarchical fields
     const path = await calculateCategoryPath(parent_id, name);
     const pathIds = await calculateCategoryPathIds(parent_id);
@@ -426,7 +456,7 @@ app.put('/categories/:id', authenticateToken, async (req, res) => {
       // Check if new parent exists and belongs to user
       if (value.parent_id) {
         const parentCheck = await db.query(
-          'SELECT id, path_ids FROM categories WHERE id = $1 AND user_id = $2',
+          'SELECT id, name, path_ids FROM categories WHERE id = $1 AND user_id = $2',
           [value.parent_id, req.user.userId]
         );
         
@@ -438,6 +468,24 @@ app.put('/categories/:id', authenticateToken, async (req, res) => {
         const parentPathIds = parentCheck.rows[0].path_ids;
         if (parentPathIds.includes(id)) {
           return res.status(400).json({ error: 'Cannot set parent to a descendant category' });
+        }
+        
+        // 🚫 CRITICAL VALIDATION: Check if new parent category has expenses/income
+        const parentUsageCheck = await db.query(
+          'SELECT COUNT(*) as usage_count FROM (SELECT category_id FROM expenses WHERE category_id = $1 UNION ALL SELECT category_id FROM income WHERE category_id = $1) as usage',
+          [value.parent_id]
+        );
+        
+        const parentUsageCount = parseInt(parentUsageCheck.rows[0].usage_count);
+        
+        if (parentUsageCount > 0) {
+          logger.warn(`🚫 BLOCKED: User ${req.user.userId} tried to move category "${currentCategory.name}" (${id}) under "${parentCheck.rows[0].name}" (${value.parent_id}) which has ${parentUsageCount} transactions`);
+          return res.status(400).json({ 
+            error: 'Cannot move category under a category with transactions',
+            message: `Cannot move this category under "${parentCheck.rows[0].name}" because it has ${parentUsageCount} existing transaction(s). Categories with transactions must remain as leaf categories.`,
+            parentCategoryName: parentCheck.rows[0].name,
+            transactionCount: parentUsageCount
+          });
         }
       }
     }
@@ -635,7 +683,7 @@ app.put('/categories/:id/move', authenticateToken, async (req, res) => {
     // Check if new parent exists and belongs to user (if provided)
     if (new_parent_id) {
       const parentCheck = await db.query(
-        'SELECT id, path_ids FROM categories WHERE id = $1 AND user_id = $2',
+        'SELECT id, name, path_ids FROM categories WHERE id = $1 AND user_id = $2',
         [new_parent_id, req.user.userId]
       );
       
@@ -647,6 +695,24 @@ app.put('/categories/:id/move', authenticateToken, async (req, res) => {
       const parentPathIds = parentCheck.rows[0].path_ids;
       if (parentPathIds.includes(id)) {
         return res.status(400).json({ error: 'Cannot move category to a descendant' });
+      }
+      
+      // 🚫 CRITICAL VALIDATION: Check if new parent category has expenses/income
+      const parentUsageCheck = await db.query(
+        'SELECT COUNT(*) as usage_count FROM (SELECT category_id FROM expenses WHERE category_id = $1 UNION ALL SELECT category_id FROM income WHERE category_id = $1) as usage',
+        [new_parent_id]
+      );
+      
+      const parentUsageCount = parseInt(parentUsageCheck.rows[0].usage_count);
+      
+      if (parentUsageCount > 0) {
+        logger.warn(`🚫 BLOCKED: User ${req.user.userId} tried to move category "${category.name}" (${id}) under "${parentCheck.rows[0].name}" (${new_parent_id}) which has ${parentUsageCount} transactions`);
+        return res.status(400).json({ 
+          error: 'Cannot move category under a category with transactions',
+          message: `Cannot move this category under "${parentCheck.rows[0].name}" because it has ${parentUsageCount} existing transaction(s). Categories with transactions must remain as leaf categories.`,
+          parentCategoryName: parentCheck.rows[0].name,
+          transactionCount: parentUsageCount
+        });
       }
     }
     

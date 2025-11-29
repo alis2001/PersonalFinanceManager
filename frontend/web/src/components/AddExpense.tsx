@@ -85,6 +85,8 @@ const AddExpense: React.FC<AddExpenseProps> = ({
     description: '',
     transactionDate: transactionService.formatDateTimeForInput(new Date()),
     location: '',
+    isRecurring: false,
+    frequency: 'monthly',
     notes: ''
   });
 
@@ -104,6 +106,8 @@ const AddExpense: React.FC<AddExpenseProps> = ({
         description: prefilledData.description || '',
         transactionDate: prefilledData.transactionDate || transactionService.formatDateTimeForInput(new Date()),
         location: prefilledData.location || '',
+        isRecurring: false,
+        frequency: 'monthly',
         notes: prefilledData.notes || ''
       });
     } else if (isOpen && !prefilledData) {
@@ -114,6 +118,8 @@ const AddExpense: React.FC<AddExpenseProps> = ({
         description: '',
         transactionDate: transactionService.formatDateTimeForInput(new Date()),
         location: '',
+        isRecurring: false,
+        frequency: 'monthly',
         notes: ''
       });
     }
@@ -143,8 +149,13 @@ const AddExpense: React.FC<AddExpenseProps> = ({
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
+    
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
     
     // Clear error when user starts typing
     if (error) setError('');
@@ -226,6 +237,12 @@ const AddExpense: React.FC<AddExpenseProps> = ({
       // Add location field (for both modes)
       transactionData.location = formData.location.trim() || undefined;
 
+      // Add recurring fields (for both modes)
+      transactionData.isRecurring = formData.isRecurring;
+      if (formData.isRecurring) {
+        transactionData.frequency = formData.frequency;
+      }
+
       const result = await transactionService.createTransaction(mode, transactionData);
 
       if (result.success) {
@@ -238,6 +255,8 @@ const AddExpense: React.FC<AddExpenseProps> = ({
             description: prefilledData.description || '',
             transactionDate: prefilledData.transactionDate || transactionService.formatDateTimeForInput(new Date()),
             location: prefilledData.location || '',
+            isRecurring: false,
+            frequency: 'monthly',
             notes: prefilledData.notes || ''
           });
         } else {
@@ -248,6 +267,8 @@ const AddExpense: React.FC<AddExpenseProps> = ({
             description: '',
             transactionDate: transactionService.formatDateTimeForInput(new Date()),
             location: '',
+            isRecurring: false,
+            frequency: 'monthly',
             notes: ''
           });
         }
@@ -276,6 +297,8 @@ const AddExpense: React.FC<AddExpenseProps> = ({
         description: prefilledData.description || '',
         transactionDate: prefilledData.transactionDate || transactionService.formatDateTimeForInput(new Date()),
         location: prefilledData.location || '',
+        isRecurring: false,
+        frequency: 'monthly',
         notes: prefilledData.notes || ''
       });
     } else {
@@ -286,6 +309,8 @@ const AddExpense: React.FC<AddExpenseProps> = ({
         description: '',
         transactionDate: transactionService.formatDateTimeForInput(new Date()),
         location: '',
+        isRecurring: false,
+        frequency: 'monthly',
         notes: ''
       });
     }
@@ -412,6 +437,49 @@ const AddExpense: React.FC<AddExpenseProps> = ({
               maxLength={255}
             />
           </div>
+
+          {/* Recurring Checkbox */}
+          <div className="form-group checkbox-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                name="isRecurring"
+                checked={formData.isRecurring}
+                onChange={handleInputChange}
+                disabled={loading}
+              />
+              <span className="checkmark"></span>
+              {isExpenseMode ? t('expenses.isRecurring') : t('income.isRecurring')}
+            </label>
+          </div>
+
+          {/* Frequency Dropdown (only shown when recurring is checked) */}
+          {formData.isRecurring && (
+            <div className="form-group">
+              <label htmlFor="frequency">
+                {isExpenseMode ? t('expenses.frequency') : t('income.frequency')} *
+              </label>
+              <select
+                id="frequency"
+                name="frequency"
+                value={formData.frequency}
+                onChange={handleInputChange}
+                required={formData.isRecurring}
+                disabled={loading}
+              >
+                <option value="daily">{t('income.daily')}</option>
+                <option value="weekly">{t('income.weekly')}</option>
+                <option value="bi_weekly">{t('income.biweekly')}</option>
+                <option value="semi_monthly">{t('income.semiMonthly')}</option>
+                <option value="monthly">{t('income.monthly')}</option>
+                <option value="bi_monthly">{t('income.biMonthly')}</option>
+                <option value="quarterly">{t('income.quarterly')}</option>
+                <option value="semi_annually">{t('income.semiAnnually')}</option>
+                <option value="yearly">{t('income.yearly')}</option>
+              </select>
+              <small className="form-help">{t('income.frequencyHelp')}</small>
+            </div>
+          )}
 
           {/* Notes Input (Optional) */}
           <div className="form-group">

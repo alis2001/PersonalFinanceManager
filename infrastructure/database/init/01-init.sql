@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TYPE user_status AS ENUM ('active', 'inactive', 'suspended', 'pending_verification');
 CREATE TYPE transaction_type AS ENUM ('income', 'expense');
 CREATE TYPE category_type AS ENUM ('income', 'expense', 'both');
-CREATE TYPE income_frequency AS ENUM ('one_time', 'monthly', 'quarterly', 'yearly');
+CREATE TYPE transaction_frequency AS ENUM ('one_time', 'daily', 'weekly', 'bi_weekly', 'semi_monthly', 'monthly', 'bi_monthly', 'quarterly', 'semi_annually', 'yearly');
 CREATE TYPE account_type AS ENUM ('personal', 'business');
 CREATE TYPE verification_type AS ENUM ('email_verification', 'password_reset', 'login_verification');
 
@@ -115,6 +115,9 @@ CREATE TABLE expenses (
     user_date DATE NOT NULL,
     user_time TIME NOT NULL,
     location VARCHAR(255),
+    is_recurring BOOLEAN DEFAULT FALSE,
+    frequency transaction_frequency DEFAULT 'one_time',
+    next_expected_date DATE,
     tags TEXT[],
     receipt_url VARCHAR(500),
     notes TEXT,
@@ -130,13 +133,13 @@ CREATE TABLE income (
     category_id UUID NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
     amount DECIMAL(15,2) NOT NULL CHECK (amount > 0),
     description TEXT NOT NULL,
-    frequency income_frequency NOT NULL DEFAULT 'monthly',
     transaction_date TIMESTAMP WITH TIME ZONE NOT NULL,
     user_date DATE NOT NULL,
     user_time TIME NOT NULL,
-    next_expected_date DATE,
-    is_recurring BOOLEAN DEFAULT FALSE,
     source VARCHAR(255),
+    is_recurring BOOLEAN DEFAULT FALSE,
+    frequency transaction_frequency DEFAULT 'one_time',
+    next_expected_date DATE,
     tags TEXT[],
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -245,6 +248,10 @@ CREATE INDEX idx_income_transaction_date ON income(transaction_date);
 CREATE INDEX idx_income_user_local_date ON income(user_id, user_date DESC, user_time DESC);
 CREATE INDEX idx_income_frequency ON income(frequency);
 CREATE INDEX idx_income_is_recurring ON income(is_recurring);
+
+CREATE INDEX idx_expenses_is_recurring ON expenses(is_recurring);
+CREATE INDEX idx_expenses_frequency ON expenses(frequency);
+CREATE INDEX idx_expenses_next_expected_date ON expenses(next_expected_date) WHERE next_expected_date IS NOT NULL;
 
 CREATE INDEX idx_sessions_user_id ON user_sessions(user_id);
 CREATE INDEX idx_sessions_token ON user_sessions(session_token);

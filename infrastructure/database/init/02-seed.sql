@@ -56,9 +56,9 @@ INSERT INTO expenses (user_id, category_id, amount, description, transaction_dat
 ('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Personal Care' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 35.00, 'Haircut', CURRENT_DATE - INTERVAL '14 days', (CURRENT_DATE - INTERVAL '14 days')::DATE, '13:00:00', 'Hair Salon');
 
 -- Sample income for demo user (FIXED UUID) with user_date and user_time
-INSERT INTO income (user_id, category_id, amount, description, frequency, transaction_date, user_date, user_time, is_recurring, source) VALUES
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Salary' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 4500.00, 'Monthly salary', 'monthly', CURRENT_DATE - INTERVAL '5 days', (CURRENT_DATE - INTERVAL '5 days')::DATE, '09:00:00', TRUE, 'Tech Company Inc.'),
-('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Freelance' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 850.00, 'Website development project', 'one_time', CURRENT_DATE - INTERVAL '8 days', (CURRENT_DATE - INTERVAL '8 days')::DATE, '14:30:00', FALSE, 'Client ABC'),
+INSERT INTO income (user_id, category_id, amount, description, transaction_date, user_date, user_time, source, is_recurring, frequency) VALUES
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Salary' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 4500.00, 'Monthly salary', CURRENT_DATE - INTERVAL '5 days', (CURRENT_DATE - INTERVAL '5 days')::DATE, '09:00:00', 'Tech Company Inc.', TRUE, 'monthly'),
+('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Freelance' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 850.00, 'Website development project', CURRENT_DATE - INTERVAL '8 days', (CURRENT_DATE - INTERVAL '8 days')::DATE, '14:30:00', 'Client ABC', FALSE, 'one_time'),
 ('00000000-0000-0000-0000-000000000001'::uuid, (SELECT id FROM categories WHERE name = 'Investment Returns' AND user_id = '00000000-0000-0000-0000-000000000001'::uuid), 125.30, 'Stock dividends', 'quarterly', CURRENT_DATE - INTERVAL '15 days', (CURRENT_DATE - INTERVAL '15 days')::DATE, '10:15:00', TRUE, 'Investment Portfolio');
 
 -- Sample budgets (FIXED UUID)

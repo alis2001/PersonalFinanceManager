@@ -6,6 +6,7 @@ const winston = require('winston');
 const Joi = require('joi');
 const axios = require('axios');
 const moment = require('moment-jalaali');
+const cron = require('node-cron');
 require('dotenv').config();
 
 const app = express();
@@ -57,6 +58,9 @@ const expenseSchema = Joi.object({
   userDate: Joi.date().optional(),  // User's local date (timezone-independent)
   userTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/).optional(),  // HH:MM:SS format
   location: Joi.string().max(255).optional().allow(''),
+  isRecurring: Joi.boolean().optional().default(false),
+  frequency: Joi.string().valid('one_time', 'daily', 'weekly', 'bi_weekly', 'semi_monthly', 'monthly', 'bi_monthly', 'quarterly', 'semi_annually', 'yearly').optional().default('one_time'),
+  nextExpectedDate: Joi.date().optional().allow(null),
   tags: Joi.array().items(Joi.string().max(50)).max(10).optional(),
   notes: Joi.string().max(1000).optional().allow('')
 });
@@ -66,7 +70,10 @@ const expenseUpdateSchema = expenseSchema.keys({
   amount: Joi.number().positive().max(10000000000).optional(), // 10 billion - supports all currencies
   transactionDate: Joi.date().optional(),
   userDate: Joi.date().optional(),
-  userTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/).optional()
+  userTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/).optional(),
+  isRecurring: Joi.boolean().optional(),
+  frequency: Joi.string().valid('one_time', 'daily', 'weekly', 'bi_weekly', 'semi_monthly', 'monthly', 'bi_monthly', 'quarterly', 'semi_annually', 'yearly').optional(),
+  nextExpectedDate: Joi.date().optional().allow(null)
 });
 
 // Auth middleware
@@ -395,6 +402,9 @@ app.get('/expenses', authenticateToken, async (req, res) => {
         userDate: row.user_date,
         userTime: row.user_time,
         location: row.location,
+        isRecurring: row.is_recurring,
+        frequency: row.frequency,
+        nextExpectedDate: row.next_expected_date,
         tags: row.tags,
         notes: row.notes,
         createdAt: row.created_at,
@@ -448,6 +458,9 @@ app.get('/expenses/:id', authenticateToken, async (req, res) => {
         userDate: row.user_date,
         userTime: row.user_time,
         location: row.location,
+        isRecurring: row.is_recurring,
+        frequency: row.frequency,
+        nextExpectedDate: row.next_expected_date,
         tags: row.tags,
         notes: row.notes,
         createdAt: row.created_at,
@@ -507,12 +520,22 @@ app.post('/expenses', authenticateToken, async (req, res) => {
     const finalUserDate = userDate;
     const finalUserTime = userTime;
     
+    // Handle recurring fields
+    const isRecurring = req.body.isRecurring || false;
+    const frequency = req.body.frequency || 'one_time';
+    
+    // Calculate initial next_expected_date if recurring
+    let nextExpectedDate = null;
+    if (isRecurring && frequency !== 'one_time') {
+      nextExpectedDate = calculateNextExpectedDate(finalUserDate, frequency);
+    }
+    
     // Create expense
     const result = await db.query(
-      `INSERT INTO expenses (user_id, category_id, amount, description, transaction_date, user_date, user_time, location, tags, notes) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+      `INSERT INTO expenses (user_id, category_id, amount, description, transaction_date, user_date, user_time, location, is_recurring, frequency, next_expected_date, tags, notes) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
        RETURNING *`,
-      [req.user.userId, categoryId, amount, description, transactionDate, finalUserDate, finalUserTime, location, tags, notes]
+      [req.user.userId, categoryId, amount, description, transactionDate, finalUserDate, finalUserTime, location, isRecurring, frequency, nextExpectedDate, tags, notes]
     );
     
     // Get expense with category info
@@ -601,6 +624,9 @@ app.put('/expenses/:id', authenticateToken, async (req, res) => {
       'description': 'description',
       'amount': 'amount',
       'location': 'location',
+      'isRecurring': 'is_recurring',
+      'frequency': 'frequency',
+      'nextExpectedDate': 'next_expected_date',
       'tags': 'tags',
       'notes': 'notes'
     };
@@ -707,6 +733,123 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
+// ========================================
+// RECURRING TRANSACTIONS SCHEDULER
+// ========================================
+
+// Helper function to calculate next expected date based on frequency
+const calculateNextExpectedDate = (currentDate, frequency) => {
+  const date = new Date(currentDate);
+  
+  switch (frequency) {
+    case 'daily':
+      date.setDate(date.getDate() + 1);
+      break;
+    case 'weekly':
+      date.setDate(date.getDate() + 7);
+      break;
+    case 'bi_weekly':
+      date.setDate(date.getDate() + 14);
+      break;
+    case 'semi_monthly':
+      date.setDate(date.getDate() + 15);
+      break;
+    case 'monthly':
+      date.setMonth(date.getMonth() + 1);
+      break;
+    case 'bi_monthly':
+      date.setMonth(date.getMonth() + 2);
+      break;
+    case 'quarterly':
+      date.setMonth(date.getMonth() + 3);
+      break;
+    case 'semi_annually':
+      date.setMonth(date.getMonth() + 6);
+      break;
+    case 'yearly':
+      date.setFullYear(date.getFullYear() + 1);
+      break;
+    default:
+      return null;
+  }
+  
+  return date.toISOString().split('T')[0]; // Return YYYY-MM-DD format
+};
+
+// Process recurring expenses - create new instances for due recurring expenses
+const processRecurringExpenses = async () => {
+  try {
+    logger.info('🔄 Processing recurring expenses...');
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Find all recurring expenses that are due (next_expected_date <= today)
+    const dueExpenses = await db.query(
+      `SELECT * FROM expenses 
+       WHERE is_recurring = true 
+       AND next_expected_date IS NOT NULL 
+       AND next_expected_date <= $1`,
+      [today]
+    );
+    
+    logger.info(`Found ${dueExpenses.rows.length} recurring expenses due for processing`);
+    
+    for (const expense of dueExpenses.rows) {
+      try {
+        // Create a new expense instance
+        const newExpense = await db.query(
+          `INSERT INTO expenses (user_id, category_id, amount, description, transaction_date, user_date, user_time, location, is_recurring, frequency, next_expected_date, tags, notes, receipt_url) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
+           RETURNING *`,
+          [
+            expense.user_id,
+            expense.category_id,
+            expense.amount,
+            expense.description,
+            new Date().toISOString(), // Current timestamp
+            today, // Today's date
+            new Date().toTimeString().split(' ')[0], // Current time HH:MM:SS
+            expense.location,
+            false, // New instance is not recurring (only the template is)
+            expense.frequency,
+            null, // New instance doesn't need next_expected_date
+            expense.tags,
+            expense.notes,
+            null // No receipt for auto-created expenses
+          ]
+        );
+        
+        // Update the original recurring expense's next_expected_date
+        const nextDate = calculateNextExpectedDate(expense.next_expected_date, expense.frequency);
+        await db.query(
+          'UPDATE expenses SET next_expected_date = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [nextDate, expense.id]
+        );
+        
+        logger.info(`✅ Created recurring expense for user ${expense.user_id}, next due: ${nextDate}`);
+      } catch (error) {
+        logger.error(`❌ Failed to process recurring expense ${expense.id}:`, error);
+      }
+    }
+    
+    logger.info('✅ Recurring expenses processing completed');
+  } catch (error) {
+    logger.error('❌ Error in processRecurringExpenses:', error);
+  }
+};
+
+// Schedule recurring transaction processor to run daily at 00:01 AM
+cron.schedule('1 0 * * *', () => {
+  logger.info('⏰ Running daily recurring expense processor');
+  processRecurringExpenses();
+});
+
+// Also run on startup to catch any missed recurring expenses
+setTimeout(() => {
+  logger.info('🚀 Running initial recurring expense check on startup');
+  processRecurringExpenses();
+}, 10000); // Wait 10 seconds after startup for DB to be ready
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
@@ -725,4 +868,5 @@ app.listen(port, '0.0.0.0', () => {
   logger.info(`Expense Service listening on port ${port}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
+  logger.info('📅 Recurring expense scheduler initialized - runs daily at 00:01 AM');
 });

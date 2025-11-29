@@ -132,7 +132,9 @@
     "failedToCreateExpenseTryAgain": "Failed to create expense. Please try again.",
     "failedToUpdateExpenseTryAgain": "Failed to update expense. Please try again.",
     "failedToDeleteExpenseTryAgain": "Failed to delete expense. Please try again.",
-    "fromReceipt": "From Receipt"
+    "fromReceipt": "From Receipt",
+    "isRecurring": "Recurring Expense",
+    "frequency": "Frequency"
   },
   "income": {
     "title": "Income",
@@ -191,11 +193,16 @@
     "failedToUpdateIncomeTryAgain": "Failed to update income. Please try again.",
     "failedToDeleteIncomeTryAgain": "Failed to delete income. Please try again.",
     "oneTime": "One Time",
+    "daily": "Daily",
     "weekly": "Weekly",
-    "biweekly": "Biweekly",
+    "biweekly": "Every 2 Weeks",
+    "semiMonthly": "Twice a Month",
     "monthly": "Monthly",
-    "quarterly": "Quarterly",
-    "yearly": "Yearly"
+    "biMonthly": "Every 2 Months",
+    "quarterly": "Quarterly (Every 3 Months)",
+    "semiAnnually": "Semi-Annually (Every 6 Months)",
+    "yearly": "Yearly",
+    "frequencyHelp": "Select how often this transaction repeats"
   },
   "categories": {
     "title": "Categories",
@@ -296,6 +303,7 @@
     "parentCategoryHelp": "Select a parent category to create a subcategory. Leave empty for a root category.",
     "addSubcategory": "Add Subcategory",
     "deleteWithSubcategories": "Delete '{{categoryName}}' and all {{subcategoryCount}} subcategories? This action cannot be undone.",
+    "cannotDeleteParentCategory": "Cannot delete '{{categoryName}}' because it has {{subcategoryCount}} subcategories. Please delete or move the subcategories first.",
     "cannotActivateSubcategoryInactiveParent": "Cannot activate subcategory while parent category is inactive. Please activate the parent category first.",
     "hasSubcategories": "Has subcategories",
     "selectLeafCategory": "Select a leaf category (categories without subcategories)",

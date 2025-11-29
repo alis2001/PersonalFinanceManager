@@ -132,7 +132,9 @@
     "failedToDeleteExpenseTryAgain": "خطا در حذف هزینه. لطفاً دوباره تلاش کنید.",
     "deleteWarning": "این عمل قابل بازگشت نیست.",
     "loadingCategories": "در حال بارگذاری دسته‌بندی‌ها...",
-    "fromReceipt": "از رسید"
+    "fromReceipt": "از رسید",
+    "isRecurring": "هزینه تکرار شونده",
+    "frequency": "دوره تکرار"
   },
   "income": {
     "title": "درآمد",
@@ -191,11 +193,16 @@
     "failedToUpdateIncomeTryAgain": "خطا در به‌روزرسانی درآمد. لطفاً دوباره تلاش کنید.",
     "failedToDeleteIncomeTryAgain": "خطا در حذف درآمد. لطفاً دوباره تلاش کنید.",
     "oneTime": "یکبار",
+    "daily": "روزانه",
     "weekly": "هفتگی",
-    "biweekly": "دو هفته یکبار",
+    "biweekly": "هر ۲ هفته",
+    "semiMonthly": "دو بار در ماه",
     "monthly": "ماهانه",
-    "quarterly": "سه ماهه",
-    "yearly": "سالانه"
+    "biMonthly": "هر ۲ ماه",
+    "quarterly": "فصلی (هر ۳ ماه)",
+    "semiAnnually": "نیم‌سالانه (هر ۶ ماه)",
+    "yearly": "سالانه",
+    "frequencyHelp": "انتخاب کنید این تراکنش چند وقت یکبار تکرار می‌شود"
   },
   "categories": {
     "title": "دسته‌بندی‌ها",
@@ -295,6 +302,7 @@
     "parentCategoryHelp": "یک دسته‌بندی والد انتخاب کنید تا زیردسته ایجاد کنید",
     "addSubcategory": "افزودن زیردسته",
     "deleteWithSubcategories": "حذف '{{categoryName}}' و همه {{subcategoryCount}} زیردسته‌ها؟ این عمل قابل بازگشت نیست.",
+    "cannotDeleteParentCategory": "نمی‌توان '{{categoryName}}' را حذف کرد چون {{subcategoryCount}} زیردسته دارد. لطفاً ابتدا زیردسته‌ها را حذف یا منتقل کنید.",
     "cannotActivateSubcategoryInactiveParent": "نمی‌توان زیردسته را فعال کرد در حالی که دسته‌بندی والد غیرفعال است. لطفاً ابتدا دسته‌بندی والد را فعال کنید.",
     "hasSubcategories": "دارای زیردسته",
     "selectLeafCategory": "یک دسته‌بندی برگ انتخاب کنید (دسته‌بندی‌های بدون زیردسته)",

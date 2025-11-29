@@ -255,6 +255,7 @@
     "parentCategoryHelp": "Wählen Sie eine übergeordnete Kategorie aus, um eine Unterkategorie zu erstellen",
     "addSubcategory": "Unterkategorie hinzufügen",
     "deleteWithSubcategories": "'{{categoryName}}' und alle {{subcategoryCount}} Unterkategorien löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "cannotDeleteParentCategory": "'{{categoryName}}' kann nicht gelöscht werden, da sie {{subcategoryCount}} Unterkategorien hat. Bitte löschen oder verschieben Sie zuerst die Unterkategorien.",
     "cannotActivateSubcategoryInactiveParent": "Unterkategorie kann nicht aktiviert werden, während die übergeordnete Kategorie inaktiv ist. Bitte aktivieren Sie zuerst die übergeordnete Kategorie.",
     "hasSubcategories": "Hat Unterkategorien",
     "selectLeafCategory": "Wählen Sie eine Blattkategorie (Kategorien ohne Unterkategorien)",

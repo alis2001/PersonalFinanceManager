@@ -220,6 +220,7 @@
   border: 2px solid #e9ecef;
   border-radius: 12px;
   padding: 20px;
+  padding-right: 50px; /* Space for context menu button */
   transition: all 0.2s ease;
   position: relative;
 }
@@ -231,8 +232,18 @@
 }
 
 .category-card.inactive {
-  opacity: 0.6;
-  background: #f8f9fa;
+  opacity: 0.7;
+  background: #f5f5f5;
+  border-color: #d1d5db;
+}
+
+.category-card.inactive .category-icon {
+  filter: grayscale(0.4);
+  opacity: 0.7;
+}
+
+.category-card.inactive .category-info h4 {
+  color: #6b7280;
 }
 
 .category-header {
@@ -322,6 +333,7 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .category-actions button {
@@ -334,6 +346,53 @@
   border: 1px solid;
   flex: 1;
   min-width: 70px;
+}
+
+/* Context Menu Button - Single organized button */
+.btn-context-menu {
+  background: transparent;
+  color: #333;
+  border: none !important;
+  outline: none !important;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 1.8rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  box-shadow: none !important;
+  letter-spacing: -2px;
+}
+
+.btn-context-menu:hover:not(:disabled) {
+  background: rgba(26, 26, 26, 0.08);
+  color: #000;
+  transform: translateY(-50%) scale(1.2);
+}
+
+.btn-context-menu:active {
+  transform: translateY(-50%) scale(1.1);
+  background: rgba(26, 26, 26, 0.12);
+}
+
+.btn-context-menu:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.btn-context-menu:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .btn-edit {
@@ -748,13 +807,32 @@
   padding: 20px;
   max-height: 600px;
   overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .categories-tree .root-categories {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
   margin-bottom: 20px;
+}
+
+@media (min-width: 1200px) {
+  .categories-tree .root-categories {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .categories-tree .root-categories {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .categories-tree .root-categories {
+    grid-template-columns: 1fr;
+  }
 }
 
 .category-tree-item {
@@ -763,6 +841,7 @@
 
 .category-tree-item .category-card {
   padding: 12px;
+  padding-right: 44px; /* Space for context menu button in tree view */
   min-height: auto;
   border-radius: 8px;
 }
@@ -857,13 +936,13 @@
   background: none;
   border: none;
   color: #6c757d;
-  font-size: 10px;
+  font-size: 11px;
   cursor: pointer;
-  padding: 2px;
-  border-radius: 3px;
+  padding: 4px;
+  border-radius: 4px;
   transition: all 0.2s ease;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -871,18 +950,39 @@
 
 .tree-expand-btn:hover {
   background: #e9ecef;
-  color: #495057;
+  color: #1a1a1a;
+  transform: scale(1.15);
+}
+
+.tree-expand-btn:active {
+  transform: scale(1.05);
 }
 
 .tree-spacer {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
 }
 
 .category-children {
+  margin-left: 24px;
+  border-left: 2px solid #e5e7eb;
+  padding-left: 12px;
+  margin-top: 8px;
+  transition: all 0.3s ease;
+}
+
+/* Deep nesting support - reduce spacing for levels beyond 3 */
+.category-children .category-children {
   margin-left: 20px;
-  border-left: 2px solid #f1f3f4;
-  padding-left: 16px;
+}
+
+.category-children .category-children .category-children {
+  margin-left: 16px;
+}
+
+.category-children .category-children .category-children .category-children {
+  margin-left: 12px;
+  border-left-width: 1px;
 }
 
 .level-badge {
@@ -975,6 +1075,7 @@
   border: 2px solid #e9ecef;
   border-radius: 12px;
   padding: 16px;
+  padding-right: 50px; /* Space for context menu button */
   margin-bottom: 12px;
   transition: all 0.2s ease;
   position: relative;
@@ -1018,6 +1119,21 @@
   transform: none;
   box-shadow: none;
   border-color: #dc3545;
+}
+
+.category-tree-node.inactive {
+  opacity: 0.7;
+  background: #f5f5f5;
+  border-color: #d1d5db;
+}
+
+.category-tree-node.inactive .category-icon {
+  filter: grayscale(0.4);
+  opacity: 0.7;
+}
+
+.category-tree-node.inactive .category-info h4 {
+  color: #6b7280;
 }
 
 .merge-hint {

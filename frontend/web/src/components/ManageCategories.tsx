@@ -4,6 +4,7 @@ import categoryService from '../services/categoryService';
 import { useTranslation } from '../hooks/useTranslation';
 import type { Category } from '../services/categoryService';
 import { getTranslatedCategoryName, getHierarchicalCategoryName, isLeafCategory } from '../utils/categoryUtils';
+import CategoryContextMenu from './CategoryContextMenu';
 import '../styles/ManageCategories.css';
 
 interface ManageCategoriesProps {
@@ -120,6 +121,10 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
   const [mergePreview, setMergePreview] = useState<MergePreview | null>(null);
   const [showConfirmMerge, setShowConfirmMerge] = useState(false);
   const [mergeLoading, setMergeLoading] = useState(false);
+
+  // Context menu state
+  const [contextMenuVisible, setContextMenuVisible] = useState(false);
+  const [contextMenuCategory, setContextMenuCategory] = useState<Category | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -364,13 +369,15 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
   };
 
   // Get all categories that can be parents (excluding the current category being edited and its descendants)
+  // 🚫 CRITICAL FIX: Also exclude categories that have expenses/income (they must remain leaf categories)
   const getAvailableParents = () => {
     return categories.filter(cat => 
       cat.is_active && 
       (!editingCategory || (
         cat.id !== editingCategory.id && 
         !editingCategory.path_ids.includes(cat.id) // Prevent setting parent to descendant
-      ))
+      )) &&
+      !categoryExpenseStatus[cat.id] // 🚫 CRITICAL: Exclude categories with expenses/income
     );
   };
 
@@ -381,8 +388,7 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
     return (
       <div key={category.id} className="category-tree-item">
         <div 
-          className="category-card"
-          style={{ marginLeft: level === 0 ? '0px' : `${level * 16}px` }}
+          className={`category-card ${!category.is_active ? 'inactive' : ''}`}
         >
           <div className="category-header">
             <div className="category-tree-controls">
@@ -415,41 +421,16 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
             </div>
           </div>
           
-          {category.description && (
-            <p className="category-description">{category.description}</p>
-          )}
-          
           <div className="category-actions">
-            {/* Only show "Add Subcategory" button if category doesn't have expenses (like mobile version) */}
-            {!categoryExpenseStatus[category.id] && (
-              <button 
-                className="btn-add-subcategory"
-                onClick={() => handleAddSubcategory(category)}
-                disabled={formLoading}
-              >
-                + {t('categories.addSubcategory')}
-              </button>
-            )}
+            {/* Context Menu Button - All actions organized in one beautiful menu */}
             <button 
-              className="btn-edit"
-              onClick={() => handleEdit(category)}
+              className="btn-context-menu"
+              onClick={() => handleContextMenu(category)}
               disabled={formLoading}
+              aria-label="Category options"
+              title={t('common.options') || 'Options'}
             >
-              {t('common.edit')}
-            </button>
-            <button 
-              className="btn-deactivate"
-              onClick={() => handleToggleActive(category)}
-              disabled={formLoading}
-            >
-              {category.is_active ? t('categories.deactivate') : t('categories.activate')}
-            </button>
-            <button 
-              className={`btn-delete ${deleteConfirm === category.id ? 'confirm' : ''}`}
-              onClick={() => handleDelete(category.id)}
-              disabled={formLoading}
-            >
-              {deleteConfirm === category.id ? t('categories.confirmDelete') : t('common.delete')}
+              ⋮
             </button>
           </div>
         </div>
@@ -550,40 +531,35 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
   };
 
   const handleDelete = async (categoryId: string) => {
-    if (deleteConfirm !== categoryId) {
-      setDeleteConfirm(categoryId);
-      return;
-    }
-
     try {
       // Check if category has children
       const category = categories.find(cat => cat.id === categoryId);
       const hasChildren = categories.some(cat => cat.parent_id === categoryId);
       
       if (hasChildren) {
-        // Show confirmation for cascading delete
-        const confirmMessage = t('categories.deleteWithSubcategories', { 
+        // Show error - cannot delete parent categories
+        const subcategoryCount = categories.filter(cat => cat.parent_id === categoryId).length;
+        setError(t('categories.cannotDeleteParentCategory', { 
           categoryName: getTranslatedCategoryName(category?.name || '', t),
-          subcategoryCount: categories.filter(cat => cat.parent_id === categoryId).length
-        });
-        
-        if (!window.confirm(confirmMessage)) {
-          setDeleteConfirm(null);
-          return;
-        }
+          subcategoryCount: subcategoryCount
+        }));
+        handleCloseContextMenu();
+        return;
       }
 
       const result = await categoryService.deleteCategory(categoryId);
       if (result.success) {
         setSuccess(t('categories.categoryDeleted'));
-        setDeleteConfirm(null);
         await loadCategories();
         onCategoriesUpdated();
+        handleCloseContextMenu();
       } else {
         setError(result.error || t('categories.failedToDeleteCategory'));
+        handleCloseContextMenu();
       }
     } catch (err) {
       setError(t('categories.failedToDeleteCategory'));
+      handleCloseContextMenu();
     }
   };
 
@@ -643,6 +619,28 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
     }
   };
 
+  // Context menu handlers
+  const handleContextMenu = async (category: Category) => {
+    setContextMenuCategory(category);
+    setContextMenuVisible(true);
+    
+    // Check if category has expenses for context menu (if not already loaded)
+    if (categoryExpenseStatus[category.id] === undefined) {
+      const usage = await categoryService.checkCategoryUsage(category.id);
+      if (usage.success) {
+        setCategoryExpenseStatus(prev => ({
+          ...prev,
+          [category.id]: usage.hasExpenses === true
+        }));
+      }
+    }
+  };
+
+  const handleCloseContextMenu = () => {
+    setContextMenuVisible(false);
+    setContextMenuCategory(null);
+  };
+
   const handleClose = () => {
     resetForm();
     resetMessages();
@@ -660,7 +658,7 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
     return (
       <div key={category.id} className="category-tree-item">
         <div 
-          className={`category-tree-node ${isDraggedOver ? 'drag-over' : ''} ${isDragging ? 'dragging' : ''}`}
+          className={`category-tree-node ${isDraggedOver ? 'drag-over' : ''} ${isDragging ? 'dragging' : ''} ${!category.is_active ? 'inactive' : ''}`}
           draggable={!hasChildren} // Only leaf categories can be dragged
           onDragStart={(e) => handleDragStart(e, category)}
           onDragOver={(e) => handleDragOver(e, category)}
@@ -1032,6 +1030,19 @@ const ManageCategories: React.FC<ManageCategoriesProps> = ({
           </div>
         </div>
       )}
+
+      {/* Category Context Menu */}
+      <CategoryContextMenu
+        visible={contextMenuVisible}
+        category={contextMenuCategory}
+        onClose={handleCloseContextMenu}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onToggleActive={handleToggleActive}
+        onAddSubcategory={handleAddSubcategory}
+        hasExpenses={contextMenuCategory ? categoryExpenseStatus[contextMenuCategory.id] : false}
+        t={t}
+      />
     </div>
   );
 };
